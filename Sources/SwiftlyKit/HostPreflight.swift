@@ -21,6 +21,7 @@ extension HostPreflight {
     
     /// Validates the host before returning the canonical active SDK directory.
     func check() async throws -> URL {
+        
         try Task.checkCancellation()
         
         guard hostFacts.isAppleSilicon else { throw SwiftlyKitError.unsupportedHost }
@@ -35,6 +36,7 @@ extension HostPreflight {
             if Task.isCancelled { throw CancellationError() }
             throw SwiftlyKitError.developerToolsUnavailable
         }
+        
         try Task.checkCancellation()
         
         let canonicalSDKURL = sdkURL.resolvingSymlinksInPath().standardizedFileURL
@@ -47,6 +49,7 @@ extension HostPreflight {
 extension HostPreflight {
     
     static func liveSDKProbe() async throws -> URL {
+        
         try Task.checkCancellation()
         
         do {
@@ -64,16 +67,13 @@ extension HostPreflight {
                 output: .string(limit: 4 * 1024),
                 error: .string(limit: 4 * 1024)
             )
+            
             try Task.checkCancellation()
             
-            guard result.terminationStatus.isSuccess else {
-                throw SwiftlyKitError.developerToolsUnavailable
-            }
+            guard result.terminationStatus.isSuccess else { throw SwiftlyKitError.developerToolsUnavailable }
             
             let path = result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard path.hasPrefix("/") else {
-                throw SwiftlyKitError.developerToolsUnavailable
-            }
+            guard path.hasPrefix("/") else { throw SwiftlyKitError.developerToolsUnavailable }
             
             try Task.checkCancellation()
             return URL(filePath: path)
@@ -89,12 +89,12 @@ extension HostPreflight {
     }
     
     private static func isUsableSDK(at url: URL) -> Bool {
+        
         guard url.isFileURL, url.path.hasPrefix("/") else { return false }
         
         var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              isDirectory.boolValue
-        else { return false }
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return false }
+        guard isDirectory.boolValue else { return false }
         
         return FileManager.default.isReadableFile(atPath: url.path)
     }

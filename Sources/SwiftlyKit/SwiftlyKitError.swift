@@ -1,12 +1,12 @@
 import Foundation
 
 /// Errors reported by SwiftlyKit.
-public enum SwiftlyKitError {
+public enum SwiftlyKitError: Error, Equatable, Sendable {
+    
     case unsupportedHost
     case developerToolsUnavailable
+    
 }
-
-extension SwiftlyKitError: Error, Equatable, Sendable {}
 
 extension SwiftlyKitError: LocalizedError {
     
