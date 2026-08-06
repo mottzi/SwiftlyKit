@@ -13,9 +13,18 @@ let package = Package(
             targets: ["SwiftlyKit"]
         )
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/swiftlang/swift-subprocess.git",
+            exact: "1.0.0"
+        )
+    ],
     targets: [
         .target(
-            name: "SwiftlyKit"
+            name: "SwiftlyKit",
+            dependencies: [
+                .product(name: "Subprocess", package: "swift-subprocess")
+            ]
         ),
         .testTarget(
             name: "SwiftlyKitTests",
