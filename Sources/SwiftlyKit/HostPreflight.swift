@@ -53,17 +53,11 @@ extension HostPreflight {
         try Task.checkCancellation()
         
         do {
-            var platformOptions = PlatformOptions()
-            platformOptions.createSession = true
-            platformOptions.teardownSequence = [
-                .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(1))
-            ]
-            
             let result = try await Subprocess.run(
                 .path("/usr/bin/xcrun"),
                 arguments: ["--sdk", "macosx", "--show-sdk-path"],
                 environment: .inherit,
-                platformOptions: platformOptions,
+                platformOptions: .swiftlyKitProcess,
                 output: .string(limit: 4 * 1024),
                 error: .string(limit: 4 * 1024)
             )
