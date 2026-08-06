@@ -21,7 +21,8 @@ local Swift package root.
 
 For 0.1.0, SwiftlyKit:
 
-- runs on Apple-silicon macOS 13 or later;
+- runs on Apple-silicon macOS 13 or later with an active developer directory
+  providing a usable macOS SDK;
 - supports unsandboxed macOS applications and command-line tools;
 - accepts a local package root containing `Package.swift`;
 - targets statically linked Linux Musl executables for ARM64 or x86-64;
@@ -79,10 +80,15 @@ teardown. The process implementation is not public API.
 - Architecture: Apple silicon only.
 - Operating system: macOS 13 or later.
 - App Sandbox: unsupported.
-- Xcode and Apple Command Line Tools: not SwiftlyKit prerequisites.
+- Full Xcode: optional.
+- macOS SDK: required from either the selected Xcode installation or Apple's
+  standalone Command Line Tools.
 
 SwiftlyKit must return `unsupportedHost` before mutation on an Intel Mac or an
-unsupported macOS release.
+unsupported macOS release. It must return `developerToolsUnavailable` before
+mutation when `/usr/bin/xcrun --sdk macosx --show-sdk-path` does not identify a
+usable SDK. SwiftlyKit does not invoke `xcode-select --install`; installing or
+selecting Apple developer tools remains the consumer's responsibility.
 
 A package can still have its own host-tool requirements. For example, a package
 plugin or C++ host tool can require Apple developer components. SwiftlyKit does
@@ -291,16 +297,17 @@ dependencies, or change Swiftly selection.
 
 Assessment performs these functions:
 
-1. Validate and canonicalize the package root.
-2. Read the `swift-tools-version` declaration from `Package.swift` without
+1. Validate the supported host and active macOS SDK.
+2. Validate and canonicalize the package root.
+3. Read the `swift-tools-version` declaration from `Package.swift` without
    evaluating the manifest.
-3. Read a `.swift-version` preference when present.
-4. Detect a usable Swiftly 1.0 or later installation from official locations and
+4. Read a `.swift-version` preference when present.
+5. Detect a usable Swiftly 1.0 or later installation from official locations and
    inherited Swiftly location variables.
-5. Read the official Swift.org stable release catalog.
-6. Inspect installed stable Swiftly toolchains.
-7. Inspect matching installed Static Linux SDKs when possible.
-8. Resolve the selection to an exact stable Swift release and SDK pair.
+6. Read the official Swift.org stable release catalog.
+7. Inspect installed stable Swiftly toolchains.
+8. Inspect matching installed Static Linux SDKs when possible.
+9. Resolve the selection to an exact stable Swift release and SDK pair.
 
 ### Automatic selection order
 
@@ -332,9 +339,11 @@ If Swiftly is present but older than 1.0, assessment fails with
 `prepare(_:)` is the only operation that may install Swiftly, a toolchain, or an
 SDK.
 
-Before mutation, preparation must verify that `Package.swift` and
-`.swift-version` still match the assessment. A mismatch fails with
-`staleAssessment`; SwiftlyKit must not silently select different components.
+Before mutation, preparation must revalidate the supported host and active
+macOS SDK, then verify that `Package.swift` and `.swift-version` still match the
+assessment. Missing developer tools fail with `developerToolsUnavailable`; an
+input mismatch fails with `staleAssessment`. SwiftlyKit must not silently select
+different components.
 
 If all components are ready, `prepare(_:)` returns the exact
 `LocalBuildEnvironment` without mutation.
@@ -547,6 +556,7 @@ It covers at least:
 
 - invalid package root;
 - unsupported host;
+- unavailable macOS developer tools;
 - unsupported or malformed tools version;
 - incompatible Swiftly;
 - Swiftly installation failure;
@@ -599,6 +609,7 @@ The release does not include:
 - automatic dependency resolution during build;
 - arbitrary SwiftPM, compiler, or linker arguments;
 - automatic Swiftly upgrades;
+- Apple developer-tool installation or selection;
 - shell-profile or default-toolchain changes;
 - private toolchain or SDK installations;
 - toolchain or SDK deletion;
@@ -616,37 +627,39 @@ SwiftlyKit 0.1.0 is functionally ready when automated tests and controlled
 acceptance fixtures prove all of the following:
 
 1. Assessment of the same unchanged package root is repeatable and read-only.
-2. Automatic selection follows the specified precedence and resolves an exact
+2. A missing usable macOS SDK fails with `developerToolsUnavailable` before any
+   mutation or installer invocation.
+3. Automatic selection follows the specified precedence and resolves an exact
    stable toolchain and matching SDK.
-3. Exact selection rejects incompatible releases, snapshots, and SDK mismatches.
-4. A missing Swiftly installation produces an explicit preparation requirement.
-5. Authorized preparation installs official Swiftly without modifying shell
+4. Exact selection rejects incompatible releases, snapshots, and SDK mismatches.
+5. A missing Swiftly installation produces an explicit preparation requirement.
+6. Authorized preparation installs official Swiftly without modifying shell
    profiles or selecting a default toolchain.
-6. Preparation installs and uses only the selected exact toolchain and matching
+7. Preparation installs and uses only the selected exact toolchain and matching
    checksummed SDK.
-7. An existing compatible Local build environment is reused without mutation.
-8. An existing Swiftly release older than 1.0 is rejected without replacement.
-9. A changed `Package.swift` or `.swift-version` makes an assessment stale before
+8. An existing compatible Local build environment is reused without mutation.
+9. An existing Swiftly release older than 1.0 is rejected without replacement.
+10. A changed `Package.swift` or `.swift-version` makes an assessment stale before
    preparation.
-10. Product discovery returns the executable products from the exact prepared
+11. Product discovery returns the executable products from the exact prepared
     toolchain.
-11. A dependency-free package builds without `Package.resolved`.
-12. A package requiring resolution fails with `dependencyResolutionRequired`;
+12. A dependency-free package builds without `Package.resolved`.
+13. A package requiring resolution fails with `dependencyResolutionRequired`;
     explicit resolution followed by build succeeds.
-13. ARM64 and x86-64 fixtures produce verified static ELF64 executables of the
+14. ARM64 and x86-64 fixtures produce verified static ELF64 executables of the
     requested architecture.
-14. The unstripped executable is returned by default in debug and release builds.
-15. Explicit stripping uses the exact toolchain and returns a reverified
+15. The unstripped executable is returned by default in debug and release builds.
+16. Explicit stripping uses the exact toolchain and returns a reverified
     executable; strip failure fails the operation.
-16. A caller-selected output is published atomically, and an existing output is
+17. A caller-selected output is published atomically, and an existing output is
     never replaced.
-17. Products requiring runtime resource bundles are rejected.
-18. Cancellation terminates the full subprocess tree and throws
+18. Products requiring runtime resource bundles are rejected.
+19. Cancellation terminates the full subprocess tree and throws
     `CancellationError`.
-19. Mutating operations on one `SwiftlyKit` instance are serialized.
-20. Events stream without persisted logs, and errors contain only bounded,
+20. Mutating operations on one `SwiftlyKit` instance are serialized.
+21. Events stream without persisted logs, and errors contain only bounded,
     redacted process context.
-21. SwiftlyKit creates no database, ownership journal, retained Build record, or
+22. SwiftlyKit creates no database, ownership journal, retained Build record, or
     Artifact bundle.
 
 ## Upstream references
