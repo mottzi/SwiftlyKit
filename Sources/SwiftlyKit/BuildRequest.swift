@@ -2,15 +2,14 @@ import Foundation
 
 /// An executable product discovered from a Swift package.
 public struct ExecutableProduct: Sendable, Hashable {
+    
     public let name: String
 
-    init(name: String) {
-        self.name = name
-    }
 }
 
 /// Describes one executable build.
 public struct BuildRequest: Sendable {
+    
     public let product: ExecutableProduct
     public let packageRoot: URL
     public let target: BuildTarget
@@ -39,4 +38,5 @@ public struct BuildRequest: Sendable {
         self.strip = strip
         self.environment = environment
     }
+    
 }
