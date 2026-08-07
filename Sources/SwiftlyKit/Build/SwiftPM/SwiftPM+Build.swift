@@ -9,7 +9,7 @@ extension SwiftPM {
     ) async throws -> URL {
         
         try validateEnvironment(environment)
-        let runtimeEnvironment = environment.swiftPMEnvironment
+        let runtimeEnvironment = SwiftPMEnvironment(environment)
         await onEvent?(.progress(OperationProgress(
             operation: .building,
             detail: "Building \(request.product.name)."

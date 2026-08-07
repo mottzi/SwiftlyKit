@@ -29,7 +29,7 @@ struct SwiftPMTests {
                 {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
                  "targets":[{"name":"Tool","type":"executable","dependencies":[],"resources":[]}]}
                 """
-            let runner = RecordingSwiftPMRunner(results: [
+            let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
                 .init(succeeded: true, standardOutput: "built", standardError: ""),
                 .init(succeeded: true, standardOutput: directory.path + "\n", standardError: "")
@@ -80,7 +80,7 @@ struct SwiftPMTests {
                 {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
                  "targets":[{"name":"Tool","type":"executable","dependencies":[],"resources":[]}]}
                 """
-            let runner = RecordingSwiftPMRunner(results: [
+            let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
                 .init(succeeded: false, standardOutput: "", standardError: "automatic resolution is disabled")
             ])
@@ -105,7 +105,7 @@ struct SwiftPMTests {
                 """
             let resources = directory.appending(path: "Dependency_Assets.resources")
             try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
-            let runner = RecordingSwiftPMRunner(results: [
+            let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
                 .init(succeeded: true, standardOutput: "built", standardError: ""),
                 .init(succeeded: true, standardOutput: directory.path + "\n", standardError: "")
@@ -119,18 +119,6 @@ struct SwiftPMTests {
                 ).build(request, using: environment)
             }
         }
-    }
-}
-
-private actor RecordingSwiftPMRunner: SubprocessRunning {
-    private var results: [SubprocessResult]
-    private(set) var commands: [SubprocessCommand] = []
-
-    init(results: [SubprocessResult]) { self.results = results }
-
-    func run(_ command: SubprocessCommand, onOutput: SubprocessOutputHandler?) async throws -> SubprocessResult {
-        commands.append(command)
-        return results.removeFirst()
     }
 }
 

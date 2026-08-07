@@ -8,7 +8,7 @@ extension SwiftPM {
         try validateEnvironment(environment)
         return try await packageDescription(
             in: environment.packageRoot,
-            using: environment.swiftPMEnvironment
+            using: SwiftPMEnvironment(environment)
         ).products
     }
     

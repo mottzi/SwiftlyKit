@@ -190,7 +190,7 @@ information for a consumer to explain and authorize preparation:
 - whether the selected toolchain is available;
 - whether the selected SDK is available;
 - the exact components that `prepare(_:)` will install;
-- whether preparation is required.
+- whether installation is required.
 
 The assessment does not contain a generic diagnostics collection or a
 speculative download-size estimate.
@@ -246,10 +246,11 @@ let target: BuildTarget = .linux(.arm64)
 
 let assessment = try await kit.assess(packageRoot, for: target)
 
-if assessment.requiresPreparation {
+if assessment.requiresInstallation {
     // The consumer presents the exact required changes and gets authorization.
 }
 
+// Preparation is always required to obtain the capability used by later calls.
 let environment = try await kit.prepare(assessment) { event in
     // Optional UI or command-line reporting.
 }

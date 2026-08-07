@@ -124,7 +124,6 @@ private func selectionRelease(
     let identifier = "swift-\(version)-RELEASE_static-linux-0.1.0"
     return OfficialStableRelease(
         version: parsedVersion,
-        toolchainName: version,
         staticLinuxSDK: OfficialStaticLinuxSDK(
             version: "0.1.0",
             identifier: identifier,

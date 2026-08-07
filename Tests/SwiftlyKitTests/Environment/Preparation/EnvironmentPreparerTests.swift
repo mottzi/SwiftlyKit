@@ -6,17 +6,19 @@ import Testing
 struct EnvironmentPreparerTests {
     
     private let version = SwiftVersion(major: 6, minor: 2, patch: 1)
-    private let sdk = StaticLinuxSDKInstallation(
+    private let sdk = OfficialStaticLinuxSDK(
+        version: "0.0.1",
         identifier: "swift-6.2.1-RELEASE_static-linux-0.0.1",
         downloadURL: URL(string: "https://download.swift.org/swift-6.2.1/sdk.tar.gz")!,
-        checksum: String(repeating: "a", count: 64)
+        checksum: String(repeating: "a", count: 64),
+        supportedArchitectures: [.arm64]
     )
     
     @Test("A ready environment performs no download or mutation command")
     func readyIsNoOp() async throws {
         
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
-        let commands = PreparationCommandRecorder(results: [])
+        let commands = RecordingSubprocessRunner(results: [])
         let validations = Counter()
         let preparer = EnvironmentPreparer(
             runner: commands,
@@ -39,7 +41,7 @@ struct EnvironmentPreparerTests {
     func installsMissingComponents() async throws {
         
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
-        let commands = PreparationCommandRecorder(results: [
+        let commands = RecordingSubprocessRunner(results: [
             SubprocessResult(succeeded: true, standardOutput: "", standardError: ""),
             SubprocessResult(succeeded: true, standardOutput: "", standardError: "")
         ])
@@ -78,7 +80,7 @@ struct EnvironmentPreparerTests {
                 version: "1.0.0"
             )
             let detection = DetectionSequence(values: [nil, installed])
-            let commands = PreparationCommandRecorder(results: [
+            let commands = RecordingSubprocessRunner(results: [
                 SubprocessResult(
                     succeeded: true,
                     standardOutput: "Developer ID Installer: Swift Open Source; trusted by the Apple notary service",
@@ -117,24 +119,21 @@ struct EnvironmentPreparerTests {
     }
     
     private func assessment(requires components: [PreparationComponent]) -> EnvironmentAssessment {
-        EnvironmentAssessment(
+        let requirements = PackageRequirements(
             packageRoot: URL(filePath: "/tmp/package"),
             toolsVersion: SwiftVersion(major: 6, minor: 0, patch: 0),
-            swiftVersion: version,
-            staticLinuxSDK: StaticLinuxSDK(identifier: sdk.identifier, version: "0.0.1"),
-            isSwiftlyAvailable: !components.contains(.swiftly),
-            isToolchainAvailable: !components.contains(.toolchain),
-            isStaticLinuxSDKAvailable: !components.contains(.staticLinuxSDK),
+            swiftVersion: nil,
+            swiftVersionFileURL: nil
+        )
+        return EnvironmentAssessment(
+            packageInputs: PackageInputSnapshot(
+                requirements: requirements,
+                manifest: Data(),
+                swiftVersionFile: nil
+            ),
+            release: OfficialStableRelease(version: version, staticLinuxSDK: sdk),
             requiredComponents: components,
-            target: .linux(.arm64),
-            swiftVersionPreference: nil,
-            swiftVersionFileURL: nil,
-            swiftlyExecutableURL: nil,
-            sdkDownloadURL: sdk.downloadURL,
-            sdkChecksum: sdk.checksum,
-            sdkBundleURL: nil,
-            manifestContents: Data(),
-            swiftVersionFileContents: nil
+            target: .linux(.arm64)
         )
     }
     
@@ -149,31 +148,6 @@ struct EnvironmentPreparerTests {
                 identifier: sdk.identifier
             )] : []
         )
-    }
-    
-}
-
-private actor PreparationCommandRecorder: SubprocessRunning {
-    
-    private var pendingResults: [SubprocessResult]
-    private(set) var commands: [SubprocessCommand] = []
-    
-    init(results: [SubprocessResult]) {
-        pendingResults = results
-    }
-    
-    func run(
-        _ command: SubprocessCommand,
-        onOutput: SubprocessOutputHandler?
-    ) async throws -> SubprocessResult {
-        commands.append(command)
-        guard !pendingResults.isEmpty else { throw PreparationTestFailure.missingFixture }
-        let result = pendingResults.removeFirst()
-        if let onOutput {
-            if !result.standardOutput.isEmpty { await onOutput(.standardOutput, result.standardOutput) }
-            if !result.standardError.isEmpty { await onOutput(.standardError, result.standardError) }
-        }
-        return result
     }
     
 }

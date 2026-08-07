@@ -9,7 +9,7 @@ struct InstalledEnvironmentInspectorTests {
     func completeInventoryReadsRegistryOnce() async throws {
         
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
-        let recorder = CommandRecorder(results: [
+        let recorder = RecordingSubprocessRunner(results: [
             SubprocessResult(
                 succeeded: true,
                 standardOutput: """
@@ -51,7 +51,7 @@ struct InstalledEnvironmentInspectorTests {
     func exactInspection() async throws {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
-        let recorder = CommandRecorder(results: [
+        let recorder = RecordingSubprocessRunner(results: [
             SubprocessResult(
                 succeeded: true,
                 standardOutput: """
@@ -88,7 +88,7 @@ struct InstalledEnvironmentInspectorTests {
     @Test("Does not ask SwiftPM for SDKs when the exact toolchain is absent")
     func absentToolchainSkipsSDKProbe() async throws {
 
-        let recorder = CommandRecorder(results: [
+        let recorder = RecordingSubprocessRunner(results: [
             SubprocessResult(succeeded: true, standardOutput: #"{"toolchains":[]}"#, standardError: "")
         ])
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
@@ -109,7 +109,7 @@ struct InstalledEnvironmentInspectorTests {
     @Test("Registry entries without an executable toolchain are unavailable")
     func staleRegistryEntry() async throws {
         
-        let recorder = CommandRecorder(results: [
+        let recorder = RecordingSubprocessRunner(results: [
             SubprocessResult(
                 succeeded: true,
                 standardOutput: #"{"toolchains":[{"version":{"name":"6.2.1","type":"stable"}}]}"#,
@@ -128,33 +128,5 @@ struct InstalledEnvironmentInspectorTests {
         #expect(state.sdks.isEmpty)
         #expect(await recorder.commands.count == 1)
     }
-
-}
-
-actor CommandRecorder: SubprocessRunning {
-
-    private var pendingResults: [SubprocessResult]
-    private(set) var commands: [SubprocessCommand] = []
-
-    init(results: [SubprocessResult]) {
-        pendingResults = results
-    }
-
-    func run(
-        _ command: SubprocessCommand,
-        onOutput: SubprocessOutputHandler?
-    ) async throws -> SubprocessResult {
-
-        commands.append(command)
-        guard !pendingResults.isEmpty else { throw TestFailure.unexpectedCommand }
-        return pendingResults.removeFirst()
-
-    }
-
-}
-
-private enum TestFailure: Error {
-
-    case unexpectedCommand
 
 }

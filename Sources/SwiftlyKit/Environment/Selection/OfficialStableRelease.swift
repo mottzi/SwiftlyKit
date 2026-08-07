@@ -3,7 +3,6 @@ import Foundation
 /// One official stable Swift toolchain and its matching Static Linux SDK.
 struct OfficialStableRelease: Hashable, Sendable {
     let version: SwiftVersion
-    let toolchainName: String
     let staticLinuxSDK: OfficialStaticLinuxSDK
 }
 

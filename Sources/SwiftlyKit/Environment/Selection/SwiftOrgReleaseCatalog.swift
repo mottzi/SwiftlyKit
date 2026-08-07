@@ -111,7 +111,7 @@ extension SwiftOrgReleaseCatalog {
             checksum: checksum,
             supportedArchitectures: architectures
         )
-        return OfficialStableRelease(version: version, toolchainName: name, staticLinuxSDK: sdk)
+        return OfficialStableRelease(version: version, staticLinuxSDK: sdk)
     }
 
     private static func normalizedChecksum(_ checksum: String?) -> String? {

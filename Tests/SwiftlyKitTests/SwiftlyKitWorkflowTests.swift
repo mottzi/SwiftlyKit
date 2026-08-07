@@ -13,24 +13,21 @@ struct SwiftlyKitWorkflowTests {
             let originalManifest = Data("// swift-tools-version: 6.0\n".utf8)
             try originalManifest.write(to: manifestURL)
             let version = SwiftVersion(major: 6, minor: 2, patch: 1)
+            let requirements = try PackageRequirements.load(at: packageRoot)
             let assessment = EnvironmentAssessment(
-                packageRoot: packageRoot,
-                toolsVersion: SwiftVersion(major: 6, minor: 0, patch: 0),
-                swiftVersion: version,
-                staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
-                isSwiftlyAvailable: true,
-                isToolchainAvailable: true,
-                isStaticLinuxSDKAvailable: true,
+                packageInputs: try PackageInputSnapshot.capture(requirements),
+                release: OfficialStableRelease(
+                    version: version,
+                    staticLinuxSDK: OfficialStaticLinuxSDK(
+                        version: "1.0.0",
+                        identifier: "sdk",
+                        downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
+                        checksum: String(repeating: "a", count: 64),
+                        supportedArchitectures: [.arm64]
+                    )
+                ),
                 requiredComponents: [],
-                target: .linux(.arm64),
-                swiftVersionPreference: nil,
-                swiftVersionFileURL: nil,
-                swiftlyExecutableURL: packageRoot.appending(path: "swiftly"),
-                sdkDownloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
-                sdkChecksum: String(repeating: "a", count: 64),
-                sdkBundleURL: packageRoot.appending(path: "sdk.artifactbundle"),
-                manifestContents: originalManifest,
-                swiftVersionFileContents: nil
+                target: .linux(.arm64)
             )
             let kit = SwiftlyKit(
                 assessor: EnvironmentAssessor(),
@@ -71,7 +68,6 @@ struct SwiftlyKitWorkflowTests {
             )
             let release = OfficialStableRelease(
                 version: version,
-                toolchainName: "6.2.1",
                 staticLinuxSDK: OfficialStaticLinuxSDK(
                     version: "0.0.1",
                     identifier: sdkIdentifier,
@@ -80,7 +76,7 @@ struct SwiftlyKitWorkflowTests {
                     supportedArchitectures: [.arm64]
                 )
             )
-            let runner = WorkflowRunner(results: [SubprocessResult(
+            let runner = RecordingSubprocessRunner(results: [SubprocessResult(
                 succeeded: true,
                 standardOutput: """
                     {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
@@ -114,34 +110,15 @@ struct SwiftlyKitWorkflowTests {
             let environment = try await kit.prepare(assessment)
             let products = try await kit.executableProducts(using: environment)
             
-            #expect(!assessment.requiresPreparation)
+            #expect(!assessment.requiresInstallation)
+            #expect(assessment.isSwiftlyAvailable)
+            #expect(assessment.isToolchainAvailable)
+            #expect(assessment.isStaticLinuxSDKAvailable)
             #expect(environment.swiftVersion == version)
             #expect(products.map(\.name) == ["Tool"])
         }
     }
     
-}
-
-private actor WorkflowRunner: SubprocessRunning {
-    
-    private var results: [SubprocessResult]
-    
-    init(results: [SubprocessResult]) {
-        self.results = results
-    }
-    
-    func run(
-        _ command: SubprocessCommand,
-        onOutput: SubprocessOutputHandler?
-    ) async throws -> SubprocessResult {
-        guard !results.isEmpty else { throw WorkflowTestError.unexpectedCommand(command) }
-        return results.removeFirst()
-    }
-    
-}
-
-private enum WorkflowTestError: Error {
-    case unexpectedCommand(SubprocessCommand)
 }
 
 private func withWorkflowTemporaryDirectory<T>(

@@ -34,7 +34,6 @@ struct SwiftOrgReleaseCatalogTests {
         let releases = try SwiftOrgReleaseCatalog.parse(data)
 
         #expect(releases.map(\.version) == [swiftVersion("6.3.3"), swiftVersion("6.3")])
-        #expect(releases[1].toolchainName == "6.3")
         #expect(releases[1].staticLinuxSDK.identifier == "swift-6.3-RELEASE_static-linux-0.1.0")
         #expect(releases[1].staticLinuxSDK.downloadURL.absoluteString ==
             "https://download.swift.org/swift-6.3-release/static-sdk/swift-6.3-RELEASE/swift-6.3-RELEASE_static-linux-0.1.0.artifactbundle.tar.gz")

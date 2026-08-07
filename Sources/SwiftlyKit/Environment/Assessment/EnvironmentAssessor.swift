@@ -82,26 +82,10 @@ extension EnvironmentAssessor {
         if !sdkAvailable { requiredComponents.append(.staticLinuxSDK) }
         
         return EnvironmentAssessment(
-            packageRoot: requirements.packageRoot,
-            toolsVersion: requirements.toolsVersion,
-            swiftVersion: release.version,
-            staticLinuxSDK: StaticLinuxSDK(
-                identifier: release.staticLinuxSDK.identifier,
-                version: release.staticLinuxSDK.version
-            ),
-            isSwiftlyAvailable: swiftly != nil,
-            isToolchainAvailable: toolchainAvailable,
-            isStaticLinuxSDKAvailable: sdkAvailable,
+            packageInputs: snapshot,
+            release: release,
             requiredComponents: requiredComponents,
-            target: target,
-            swiftVersionPreference: requirements.swiftVersion,
-            swiftVersionFileURL: requirements.swiftVersionFileURL,
-            swiftlyExecutableURL: swiftly?.executableURL,
-            sdkDownloadURL: release.staticLinuxSDK.downloadURL,
-            sdkChecksum: release.staticLinuxSDK.checksum,
-            sdkBundleURL: sdkAvailable ? sdkBundleURL : nil,
-            manifestContents: snapshot.manifest,
-            swiftVersionFileContents: snapshot.swiftVersionFile
+            target: target
         )
     }
     
@@ -141,16 +125,6 @@ extension EnvironmentAssessor {
             throw CancellationError()
         } catch {
             throw SwiftlyKitError.incompatibleSwiftly
-        }
-    }
-    
-}
-
-extension BuildTarget {
-    
-    var architecture: LinuxArchitecture {
-        switch self {
-            case .linux(let architecture): architecture
         }
     }
     

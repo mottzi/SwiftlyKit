@@ -21,6 +21,7 @@ let packageRoot = URL(filePath: "/path/to/package")
 let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))
 
 // Explicitly authorizes only the installations described by the assessment.
+// This call is still required when assessment.requiresInstallation is false.
 let environment = try await kit.prepare(assessment) { event in
     // Update a UI or write command output.
 }
@@ -45,6 +46,11 @@ do {
 - Returned executables are verified static ELF64 files for the requested architecture.
 - Mutating operations on one `SwiftlyKit` value are serialized and cancellable.
 - Process, network, filesystem, and test seams remain internal.
+
+Build-specific environment values are passed through, except SwiftlyKit protects
+the home and Swiftly installation variables needed to preserve the prepared
+toolchain. An explicit output destination is published atomically and is never
+allowed to replace an existing item.
 
 SwiftlyKit 0.1.0 requires Apple-silicon macOS 13 or later, Swiftly 1.0 or later
 (installed automatically only with authorization), and an active macOS SDK from
