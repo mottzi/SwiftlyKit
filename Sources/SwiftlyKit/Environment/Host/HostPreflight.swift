@@ -1,5 +1,4 @@
 import Foundation
-import Subprocess
 
 /// Read-only validation of the host and its active macOS SDK.
 struct HostPreflight: Sendable {
@@ -9,7 +8,9 @@ struct HostPreflight: Sendable {
     
     init(
         hostFacts: HostFacts = .live,
-        sdkProbe: @escaping @Sendable () async throws -> URL = HostPreflight.liveSDKProbe
+        sdkProbe: @escaping @Sendable () async throws -> URL = {
+            try await HostPreflight.liveSDKProbe()
+        }
     ) {
         self.hostFacts = hostFacts
         self.sdkProbe = sdkProbe
@@ -48,23 +49,21 @@ extension HostPreflight {
 
 extension HostPreflight {
     
-    static func liveSDKProbe() async throws -> URL {
+    static func liveSDKProbe(
+        runner: any SubprocessRunning = LiveSubprocessRunner()
+    ) async throws -> URL {
         
         try Task.checkCancellation()
         
         do {
-            let result = try await Subprocess.run(
-                .path("/usr/bin/xcrun"),
-                arguments: ["--sdk", "macosx", "--show-sdk-path"],
-                environment: .inherit,
-                platformOptions: .swiftlyKitProcess,
-                output: .string(limit: 4 * 1024),
-                error: .string(limit: 4 * 1024)
-            )
+            let result = try await runner.run(SubprocessCommand(
+                executableURL: URL(filePath: "/usr/bin/xcrun"),
+                arguments: ["--sdk", "macosx", "--show-sdk-path"]
+            ))
             
             try Task.checkCancellation()
             
-            guard result.terminationStatus.isSuccess else { throw SwiftlyKitError.developerToolsUnavailable }
+            guard result.succeeded else { throw SwiftlyKitError.developerToolsUnavailable }
             
             let path = result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
             guard path.hasPrefix("/") else { throw SwiftlyKitError.developerToolsUnavailable }

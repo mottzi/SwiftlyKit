@@ -3,7 +3,6 @@ public enum SwiftlyKitEvent: Sendable {
     
     case progress(OperationProgress)
     case output(CommandOutput)
-    case warning(SwiftlyKitWarning)
     
 }
 

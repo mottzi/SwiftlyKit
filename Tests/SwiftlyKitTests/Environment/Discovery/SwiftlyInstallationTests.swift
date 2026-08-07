@@ -179,7 +179,7 @@ struct SwiftlyInstallationTests {
             let installation = try await SwiftlyInstallation.detect(
                 environment: ["SWIFTLY_BIN_DIR": temporaryDirectory.path],
                 homeDirectory: temporaryDirectory.appending(path: "home"),
-                versionProbe: SwiftlyInstallation.liveVersionProbe
+                versionProbe: { try await SwiftlyInstallation.liveVersionProbe(at: $0) }
             )
             
             #expect(installation?.executableURL == executable.standardizedFileURL)

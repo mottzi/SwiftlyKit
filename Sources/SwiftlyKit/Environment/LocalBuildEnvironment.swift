@@ -6,25 +6,25 @@ public struct LocalBuildEnvironment: Sendable {
     public let swiftVersion: SwiftVersion
     public let staticLinuxSDK: StaticLinuxSDK
     
+    let packageRoot: URL
     let swiftlyExecutableURL: URL
     let sdkBundleURL: URL
     let target: BuildTarget
-    let toolsVersion: SwiftVersion
     
     init(
         swiftVersion: SwiftVersion,
         staticLinuxSDK: StaticLinuxSDK,
+        packageRoot: URL,
         swiftlyExecutableURL: URL,
         sdkBundleURL: URL,
-        target: BuildTarget,
-        toolsVersion: SwiftVersion
+        target: BuildTarget
     ) {
         self.swiftVersion = swiftVersion
         self.staticLinuxSDK = staticLinuxSDK
+        self.packageRoot = packageRoot
         self.swiftlyExecutableURL = swiftlyExecutableURL
         self.sdkBundleURL = sdkBundleURL
         self.target = target
-        self.toolsVersion = toolsVersion
     }
     
 }

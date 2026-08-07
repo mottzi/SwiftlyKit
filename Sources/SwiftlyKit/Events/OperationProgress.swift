@@ -14,18 +14,15 @@ public struct OperationProgress: Sendable {
     public let operation: Operation
     public let component: PreparationComponent?
     public let detail: String
-    public let fractionCompleted: Double?
     
     init(
         operation: Operation,
         component: PreparationComponent? = nil,
-        detail: String,
-        fractionCompleted: Double? = nil
+        detail: String
     ) {
         self.operation = operation
         self.component = component
         self.detail = detail
-        self.fractionCompleted = fractionCompleted
     }
     
 }

@@ -140,12 +140,10 @@ public struct SwiftlyKit: Sendable {
     ) async throws -> LocalBuildEnvironment
 
     public func executableProducts(
-        in packageRoot: URL,
         using environment: LocalBuildEnvironment
     ) async throws -> [ExecutableProduct]
 
     public func resolveDependencies(
-        in packageRoot: URL,
         using environment: LocalBuildEnvironment,
         onEvent: EventHandler? = nil
     ) async throws
@@ -160,7 +158,7 @@ public struct SwiftlyKit: Sendable {
 public typealias EventHandler = @Sendable (SwiftlyKitEvent) async -> Void
 ```
 
-`SwiftlyKit()` is the only public initializer. Production paths and service
+`SwiftlyKit()` is the only public initializer. Production paths and internal
 implementations are not configurable through a global public configuration
 object. Request-specific choices belong to `BuildRequest`.
 
@@ -200,8 +198,10 @@ speculative download-size estimate.
 ### Local build environment
 
 `LocalBuildEnvironment` is an immutable, `Sendable` capability value returned by
-`prepare(_:)`. It binds later operations to one exact Swiftly executable, stable
-Swift release, and matching Static Linux SDK.
+`prepare(_:)`. It binds later operations to the canonical package root, build
+target, exact Swiftly executable, stable Swift release, and matching Static
+Linux SDK. Callers establish those invariants once during assessment instead of
+repeating them in every later operation.
 
 It exposes displayable version and SDK identity information. Internal paths and
 provider objects do not become public API.
@@ -220,8 +220,6 @@ The expressive initializer is:
 public struct BuildRequest: Sendable {
     public init(
         _ product: ExecutableProduct,
-        in packageRoot: URL,
-        for target: BuildTarget,
         configuration: BuildConfiguration = .debug,
         scratchDirectory: URL? = nil,
         output: URL? = nil,
@@ -256,15 +254,10 @@ let environment = try await kit.prepare(assessment) { event in
     // Optional UI or command-line reporting.
 }
 
-let products = try await kit.executableProducts(
-    in: packageRoot,
-    using: environment
-)
+let products = try await kit.executableProducts(using: environment)
 
 let request = BuildRequest(
     products[0],
-    in: packageRoot,
-    for: target,
     configuration: .release
 )
 
@@ -281,7 +274,6 @@ do {
     return try await kit.build(request, using: environment)
 } catch SwiftlyKitError.dependencyResolutionRequired {
     try await kit.resolveDependencies(
-        in: packageRoot,
         using: environment
     )
 
@@ -387,7 +379,7 @@ not manipulate Swiftly's private registry or lock-file formats.
 
 ## Product discovery
 
-`executableProducts(in:using:)` evaluates the manifest with the exact prepared
+`executableProducts(using:)` evaluates the manifest with the exact prepared
 toolchain, using SwiftPM's package description output. It does not install
 components or resolve dependencies.
 
@@ -400,7 +392,7 @@ does not implement its own Swift manifest parser.
 
 ## Dependency resolution
 
-`resolveDependencies(in:using:onEvent:)`:
+`resolveDependencies(using:onEvent:)`:
 
 - uses the exact prepared Swift toolchain;
 - runs SwiftPM's explicit package resolution operation;
@@ -420,8 +412,8 @@ does not resolve automatically.
 
 A build performs these functions:
 
-1. Validate the Build request and confirm that the supplied Local build
-   environment matches the target and current package tools version.
+1. Validate the Build request and revalidate the package and tools bound to the
+   supplied Local build environment.
 2. Create a temporary SDK search directory containing only a link to the exact
    selected Static Linux SDK.
 3. Invoke `swift build` through the exact Swiftly toolchain.
@@ -515,13 +507,12 @@ The optional event handler receives one shared event type:
 public enum SwiftlyKitEvent: Sendable {
     case progress(OperationProgress)
     case output(CommandOutput)
-    case warning(SwiftlyKitWarning)
 }
 ```
 
-`OperationProgress` identifies the current operation, component or activity,
-human-readable detail, and an optional trustworthy fraction. It must not present
-an elapsed-time estimate as measured progress.
+`OperationProgress` identifies the current operation, component or activity and
+human-readable detail. SwiftlyKit does not invent fractional or elapsed-time
+progress when its delegated tools do not report trustworthy measurements.
 
 `CommandOutput` identifies standard output or standard error and contains the
 text chunk produced by the subprocess. SwiftlyKit awaits the event handler, which

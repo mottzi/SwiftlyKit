@@ -1,6 +1,4 @@
 import Foundation
-import Subprocess
-import System
 
 /// A compatible Swiftly executable discovered without changing user state.
 struct SwiftlyInstallation: Equatable, Sendable {
@@ -15,7 +13,9 @@ extension SwiftlyInstallation {
     static func detect(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        versionProbe: @Sendable (URL) async throws -> String = SwiftlyInstallation.liveVersionProbe
+        versionProbe: @Sendable (URL) async throws -> String = {
+            try await SwiftlyInstallation.liveVersionProbe(at: $0)
+        }
     ) async throws -> SwiftlyInstallation? {
         
         try Task.checkCancellation()
@@ -90,22 +90,21 @@ extension SwiftlyInstallation {
 
 extension SwiftlyInstallation {
     
-    static func liveVersionProbe(at executableURL: URL) async throws -> String {
+    static func liveVersionProbe(
+        at executableURL: URL,
+        runner: any SubprocessRunning = LiveSubprocessRunner()
+    ) async throws -> String {
         
         try Task.checkCancellation()
         
         do {
-            let result = try await Subprocess.run(
-                .path(FilePath(executableURL.path)),
-                arguments: ["--version"],
-                environment: .inherit,
-                platformOptions: .swiftlyKitProcess,
-                output: .string(limit: 4 * 1024),
-                error: .string(limit: 4 * 1024)
-            )
+            let result = try await runner.run(SubprocessCommand(
+                executableURL: executableURL,
+                arguments: ["--version"]
+            ))
             
             try Task.checkCancellation()
-            guard result.terminationStatus.isSuccess else { throw SwiftlyKitError.incompatibleSwiftly }
+            guard result.succeeded else { throw SwiftlyKitError.incompatibleSwiftly }
             
             try Task.checkCancellation()
             return result.standardOutput

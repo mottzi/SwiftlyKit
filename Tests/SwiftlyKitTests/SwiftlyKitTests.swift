@@ -47,13 +47,10 @@ struct ValueModelTests {
 
     @Test("Build requests preserve supplied values")
     func buildRequestPreservesValues() {
-        let packageRoot = URL(filePath: "/tmp/example")
         let scratchDirectory = URL(filePath: "/tmp/example/.build")
         let output = URL(filePath: "/tmp/example/server")
         let request = BuildRequest(
             ExecutableProduct(name: "Server"),
-            in: packageRoot,
-            for: .linux(.arm64),
             configuration: .release,
             scratchDirectory: scratchDirectory,
             output: output,
@@ -62,8 +59,6 @@ struct ValueModelTests {
         )
 
         #expect(request.product.name == "Server")
-        #expect(request.packageRoot == packageRoot)
-        #expect(request.target == .linux(.arm64))
         #expect(request.configuration == .release)
         #expect(request.scratchDirectory == scratchDirectory)
         #expect(request.output == output)
@@ -74,9 +69,7 @@ struct ValueModelTests {
     @Test("Build requests provide the documented defaults")
     func buildRequestDefaults() {
         let request = BuildRequest(
-            ExecutableProduct(name: "Server"),
-            in: URL(filePath: "/tmp/example"),
-            for: .linux(.x86_64)
+            ExecutableProduct(name: "Server")
         )
 
         #expect(request.configuration == .debug)

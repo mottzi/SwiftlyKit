@@ -4,8 +4,6 @@ import Foundation
 public struct BuildRequest: Sendable {
     
     public let product: ExecutableProduct
-    public let packageRoot: URL
-    public let target: BuildTarget
     public let configuration: BuildConfiguration
     public let scratchDirectory: URL?
     public let output: URL?
@@ -14,8 +12,6 @@ public struct BuildRequest: Sendable {
 
     public init(
         _ product: ExecutableProduct,
-        in packageRoot: URL,
-        for target: BuildTarget,
         configuration: BuildConfiguration = .debug,
         scratchDirectory: URL? = nil,
         output: URL? = nil,
@@ -23,8 +19,6 @@ public struct BuildRequest: Sendable {
         environment: [String: String] = [:]
     ) {
         self.product = product
-        self.packageRoot = packageRoot
-        self.target = target
         self.configuration = configuration
         self.scratchDirectory = scratchDirectory
         self.output = output
