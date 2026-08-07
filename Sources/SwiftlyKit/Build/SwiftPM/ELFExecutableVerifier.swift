@@ -1,8 +1,8 @@
 import Foundation
 
-struct ELFExecutableVerifier: Sendable {
+enum ELFExecutableVerifier {
     
-    func verify(_ url: URL, architecture: LinuxArchitecture) throws {
+    static func verify(_ url: URL, architecture: LinuxArchitecture) throws {
         
         do {
             try verifyContents(of: url, architecture: architecture)
@@ -13,7 +13,7 @@ struct ELFExecutableVerifier: Sendable {
         }
     }
     
-    private func verifyContents(of url: URL, architecture: LinuxArchitecture) throws {
+    private static func verifyContents(of url: URL, architecture: LinuxArchitecture) throws {
         
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         guard values.isRegularFile == true, values.isSymbolicLink != true,
@@ -49,7 +49,7 @@ struct ELFExecutableVerifier: Sendable {
         guard hasLoadSegment else { throw malformed }
     }
     
-    private func hasNeededEntry(_ reader: Reader, headerOffset: Int) throws -> Bool {
+    private static func hasNeededEntry(_ reader: Reader, headerOffset: Int) throws -> Bool {
         
         let offset = try reader.int(reader.uint64(headerOffset + 8))
         let size = try reader.int(reader.uint64(headerOffset + 32))
@@ -62,11 +62,11 @@ struct ELFExecutableVerifier: Sendable {
         return false
     }
     
-    private var malformed: SwiftPMError {
+    private static var malformed: SwiftPMError {
         .invalidExecutable("The ELF program headers are malformed.")
     }
 
-    private var dynamicallyLinked: SwiftPMError {
+    private static var dynamicallyLinked: SwiftPMError {
         .invalidExecutable("The ELF declares a dynamic interpreter or required library.")
     }
 

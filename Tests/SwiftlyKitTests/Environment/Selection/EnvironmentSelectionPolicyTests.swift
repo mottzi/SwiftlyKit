@@ -27,12 +27,9 @@ struct EnvironmentSelectionPolicyTests {
         )
         let newest = try select(preference: nil, releases: releases)
 
-        #expect(preferred.release.version == selectionVersion("6.3.3"))
-        #expect(preferred.source == .swiftVersionPreference)
-        #expect(installed.release.version == selectionVersion("6.2.4"))
-        #expect(installed.source == .installedPair)
-        #expect(newest.release.version == selectionVersion("6.3.3"))
-        #expect(newest.source == .newestOfficial)
+        #expect(preferred == releases[1])
+        #expect(installed == releases[0])
+        #expect(newest == releases[1])
     }
 
     @Test("Installed toolchain and SDK must form the exact official pair")
@@ -49,8 +46,7 @@ struct EnvironmentSelectionPolicyTests {
             )]
         )
 
-        #expect(selection.release.version == newer.version)
-        #expect(selection.source == .newestOfficial)
+        #expect(selection == newer)
     }
 
     @Test("Exact selection enforces tools version and architecture")
@@ -103,7 +99,7 @@ struct EnvironmentSelectionPolicyTests {
         releases: [OfficialStableRelease],
         toolchains: [InstalledStableToolchain] = [],
         sdks: [InstalledStaticLinuxSDK] = []
-    ) throws -> SelectedEnvironmentRelease {
+    ) throws -> OfficialStableRelease {
         try EnvironmentSelectionPolicy.select(
             toolchain: .automatic,
             toolsVersion: selectionVersion("6.2"),

@@ -249,7 +249,7 @@ extension EnvironmentPreparer {
         onEvent: EventHandler?
     ) async throws -> SubprocessResult {
         do {
-            return try await runner.run(command, onOutput: outputHandler(onEvent))
+            return try await runner.run(command, onOutput: CommandOutput.handler(for: onEvent))
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -270,17 +270,6 @@ extension EnvironmentPreparer {
         )))
     }
     
-    private func outputHandler(_ handler: EventHandler?) -> SubprocessOutputHandler? {
-        guard let handler else { return nil }
-        return { stream, text in
-            let publicStream: CommandOutput.Stream = switch stream {
-                case .standardOutput: .standardOutput
-                case .standardError: .standardError
-            }
-            await handler(.output(CommandOutput(stream: publicStream, text: text)))
-        }
-    }
-
     private static func bounded(_ value: String) -> String {
         String(value.prefix(8 * 1024))
     }

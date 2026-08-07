@@ -56,8 +56,7 @@ struct SwiftlyKitWorkflowTests {
             let sdkIdentifier = "swift-6.2.1-RELEASE_static-linux-0.0.1"
             let sdkBundle = packageRoot.appending(path: "\(sdkIdentifier).artifactbundle")
             let swiftly = SwiftlyInstallation(
-                executableURL: packageRoot.appending(path: "swiftly"),
-                version: "1.0.0"
+                executableURL: packageRoot.appending(path: "swiftly")
             )
             let inventory = InstalledEnvironmentInventory(
                 toolchains: [InstalledStableToolchain(version: version)],

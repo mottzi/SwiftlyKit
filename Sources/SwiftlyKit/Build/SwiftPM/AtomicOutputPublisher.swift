@@ -1,9 +1,9 @@
 import Darwin
 import Foundation
 
-struct AtomicOutputPublisher: Sendable {
+enum AtomicOutputPublisher {
     
-    func publish(_ source: URL, to destination: URL) throws -> URL {
+    static func publish(_ source: URL, to destination: URL) throws -> URL {
         
         guard source.isFileURL, destination.isFileURL else {
             throw SwiftPMError.outputPublicationFailed(destination)

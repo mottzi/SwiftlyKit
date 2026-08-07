@@ -26,7 +26,6 @@ struct SwiftlyInstallationTests {
             )
             
             #expect(installation?.executableURL == configuredExecutable.resolvingSymlinksInPath().standardizedFileURL)
-            #expect(installation?.version == "1.1.3")
         }
     }
     
@@ -48,7 +47,6 @@ struct SwiftlyInstallationTests {
             )
             
             #expect(installation?.executableURL == executable.standardizedFileURL)
-            #expect(installation?.version == "1.0.0")
         }
     }
     
@@ -183,7 +181,6 @@ struct SwiftlyInstallationTests {
             )
             
             #expect(installation?.executableURL == executable.standardizedFileURL)
-            #expect(installation?.version == "1.2.3")
         }
     }
 }

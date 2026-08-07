@@ -2,7 +2,6 @@ import Foundation
 
 enum SwiftPMError: Error, Equatable, Sendable {
     
-    case invalidEnvironment
     case commandFailed(operation: SwiftPMOperation, diagnostic: String)
     case malformedPackageDescription
     case dependencyResolutionRequired
@@ -28,8 +27,6 @@ extension SwiftPMError {
     
     var swiftlyKitError: SwiftlyKitError {
         switch self {
-            case .invalidEnvironment:
-                .staticLinuxSDKUnavailable
             case .commandFailed(let operation, let diagnostic):
                 switch operation {
                     case .build, .locatingBuildOutput: .buildFailed(diagnostic)

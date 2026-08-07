@@ -49,9 +49,9 @@ extension EnvironmentAssessor {
         let swiftly = try await detectSwiftly()
         let releases = try await officialReleases()
         let inventory = try await installedInventory(swiftly)
-        let selected: SelectedEnvironmentRelease
+        let release: OfficialStableRelease
         do {
-            selected = try EnvironmentSelectionPolicy.select(
+            release = try EnvironmentSelectionPolicy.select(
                 toolchain: toolchain,
                 toolsVersion: requirements.toolsVersion,
                 swiftVersionPreference: requirements.swiftVersion,
@@ -68,7 +68,6 @@ extension EnvironmentAssessor {
             throw SwiftlyKitError.compatibleReleaseUnavailable
         }
         
-        let release = selected.release
         let toolchainAvailable = inventory.contains(toolchain: release.version)
         let sdkListed = inventory.contains(
             toolchain: release.version,

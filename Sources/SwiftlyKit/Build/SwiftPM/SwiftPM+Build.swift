@@ -9,15 +9,11 @@ extension SwiftPM {
     ) async throws -> URL {
         
         try validateEnvironment(environment)
-        let runtimeEnvironment = SwiftPMEnvironment(environment)
         await onEvent?(.progress(OperationProgress(
             operation: .building,
             detail: "Building \(request.product.name)."
         )))
-        let description = try await packageDescription(
-            in: environment.packageRoot,
-            using: runtimeEnvironment
-        )
+        let description = try await packageDescription(using: environment)
         guard description.products.contains(request.product) else {
             throw SwiftPMError.executableNotFound(request.product.name)
         }
@@ -25,21 +21,20 @@ extension SwiftPM {
             throw SwiftPMError.unsupportedProductResources(request.product.name)
         }
         
-        return try await withExactSDKSearchDirectory(runtimeEnvironment) { sdkSearchDirectory in
+        return try await withExactSDKSearchDirectory(environment) { sdkSearchDirectory in
             let commonArguments = buildArguments(
                 request,
-                packageRoot: environment.packageRoot,
-                environment: runtimeEnvironment,
+                environment: environment,
                 sdkSearchDirectory: sdkSearchDirectory
             )
             let buildResult = try await runner.run(
                 command(
-                    runtimeEnvironment,
+                    environment,
                     swiftArguments: ["build"] + commonArguments,
                     workingDirectory: environment.packageRoot,
                     additions: request.environment
                 ),
-                onOutput: outputHandler(onEvent)
+                onOutput: CommandOutput.handler(for: onEvent)
             )
             guard buildResult.succeeded else {
                 let diagnostic = boundedDiagnostic(buildResult)
@@ -51,7 +46,7 @@ extension SwiftPM {
             
             let pathResult = try await runner.run(
                 command(
-                    runtimeEnvironment,
+                    environment,
                     swiftArguments: ["build"] + commonArguments + ["--show-bin-path"],
                     workingDirectory: environment.packageRoot,
                     additions: request.environment
@@ -76,7 +71,7 @@ extension SwiftPM {
             guard FileManager.default.fileExists(atPath: executable.path) else {
                 throw SwiftPMError.executableNotFound(request.product.name)
             }
-            try verifier.verify(executable, architecture: runtimeEnvironment.architecture)
+            try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
             
             if request.strip {
                 await onEvent?(.progress(OperationProgress(
@@ -85,10 +80,9 @@ extension SwiftPM {
                 )))
                 try await strip(
                     executable,
-                    in: environment.packageRoot,
                     for: request,
-                    using: runtimeEnvironment,
-                    onOutput: outputHandler(onEvent)
+                    using: environment,
+                    onOutput: CommandOutput.handler(for: onEvent)
                 )
             }
             
@@ -97,7 +91,7 @@ extension SwiftPM {
                     operation: .publishing,
                     detail: "Publishing \(request.product.name)."
                 )))
-                return try publisher.publish(executable, to: output)
+                return try AtomicOutputPublisher.publish(executable, to: output)
             }
             return executable
         }
@@ -105,9 +99,8 @@ extension SwiftPM {
     
     private func strip(
         _ executable: URL,
-        in packageRoot: URL,
         for request: BuildRequest,
-        using environment: SwiftPMEnvironment,
+        using environment: LocalBuildEnvironment,
         onOutput: SubprocessOutputHandler?
     ) async throws {
         
@@ -116,7 +109,7 @@ extension SwiftPM {
                 environment,
                 tool: "llvm-objcopy",
                 toolArguments: ["--strip-all", executable.path],
-                workingDirectory: packageRoot,
+                workingDirectory: environment.packageRoot,
                 additions: request.environment
             ),
             onOutput: onOutput
@@ -127,21 +120,20 @@ extension SwiftPM {
                 diagnostic: boundedDiagnostic(result)
             )
         }
-        try verifier.verify(executable, architecture: environment.architecture)
+        try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
     }
     
     private func buildArguments(
         _ request: BuildRequest,
-        packageRoot: URL,
-        environment: SwiftPMEnvironment,
+        environment: LocalBuildEnvironment,
         sdkSearchDirectory: URL
     ) -> [String] {
         
         var arguments = [
-            "--package-path", packageRoot.path,
+            "--package-path", environment.packageRoot.path,
             "--disable-automatic-resolution",
             "--swift-sdks-path", sdkSearchDirectory.path,
-            "--swift-sdk", environment.sdkID,
+            "--swift-sdk", environment.target.architecture.swiftSDKSelector,
             "--product", request.product.name,
             "--configuration", request.configuration.runtimeName
         ]
@@ -152,7 +144,7 @@ extension SwiftPM {
     }
     
     private func withExactSDKSearchDirectory<T: Sendable>(
-        _ environment: SwiftPMEnvironment,
+        _ environment: LocalBuildEnvironment,
         body: (URL) async throws -> T
     ) async throws -> T {
         
@@ -161,8 +153,8 @@ extension SwiftPM {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createSymbolicLink(
-            at: directory.appending(path: environment.sdkArtifactBundle.lastPathComponent),
-            withDestinationURL: environment.sdkArtifactBundle
+            at: directory.appending(path: environment.sdkBundleURL.lastPathComponent),
+            withDestinationURL: environment.sdkBundleURL
         )
         return try await body(directory)
     }

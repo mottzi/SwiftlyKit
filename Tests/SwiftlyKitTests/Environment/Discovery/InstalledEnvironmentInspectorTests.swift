@@ -8,7 +8,7 @@ struct InstalledEnvironmentInspectorTests {
     @Test("A complete inventory reads the Swiftly registry once")
     func completeInventoryReadsRegistryOnce() async throws {
         
-        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let recorder = RecordingSubprocessRunner(results: [
             SubprocessResult(
                 succeeded: true,
@@ -50,7 +50,7 @@ struct InstalledEnvironmentInspectorTests {
     @Test("Lists stable toolchains and SDKs through the exact selected toolchain")
     func exactInspection() async throws {
 
-        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let recorder = RecordingSubprocessRunner(results: [
             SubprocessResult(
                 succeeded: true,
@@ -91,7 +91,7 @@ struct InstalledEnvironmentInspectorTests {
         let recorder = RecordingSubprocessRunner(results: [
             SubprocessResult(succeeded: true, standardOutput: #"{"toolchains":[]}"#, standardError: "")
         ])
-        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
 
         let state = try await InstalledEnvironmentInspector(
             runner: recorder,
@@ -116,7 +116,7 @@ struct InstalledEnvironmentInspectorTests {
                 standardError: ""
             )
         ])
-        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let state = try await InstalledEnvironmentInspector(
             runner: recorder,
             isToolchainUsable: { _ in false }

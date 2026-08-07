@@ -17,3 +17,18 @@ public struct CommandOutput: Sendable {
     }
     
 }
+
+extension CommandOutput {
+
+    static func handler(for eventHandler: EventHandler?) -> SubprocessOutputHandler? {
+        guard let eventHandler else { return nil }
+        return { output, text in
+            let stream: Stream = switch output {
+                case .standardOutput: .standardOutput
+                case .standardError: .standardError
+            }
+            await eventHandler(.output(CommandOutput(stream: stream, text: text)))
+        }
+    }
+
+}

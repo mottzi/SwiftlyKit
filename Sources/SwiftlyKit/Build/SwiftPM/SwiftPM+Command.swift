@@ -3,7 +3,7 @@ import Foundation
 extension SwiftPM {
     
     func command(
-        _ environment: SwiftPMEnvironment,
+        _ environment: LocalBuildEnvironment,
         swiftArguments: [String],
         workingDirectory: URL,
         additions: [String: String] = [:]
@@ -18,7 +18,7 @@ extension SwiftPM {
     }
     
     func command(
-        _ environment: SwiftPMEnvironment,
+        _ environment: LocalBuildEnvironment,
         tool: String,
         toolArguments: [String],
         workingDirectory: URL,
@@ -33,47 +33,20 @@ extension SwiftPM {
         ] {
             processEnvironment[protectedKey] = inheritedEnvironment[protectedKey]
         }
-        processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftlyExecutable
+        processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftlyExecutableURL
             .deletingLastPathComponent().path
         
         return SubprocessCommand(
-            executableURL: environment.swiftlyExecutable,
-            arguments: ["run", tool] + toolArguments + ["+\(environment.toolchainSelector.trimmingPrefix("+"))"],
+            executableURL: environment.swiftlyExecutableURL,
+            arguments: ["run", tool] + toolArguments + ["+\(environment.swiftVersion)"],
             workingDirectory: workingDirectory,
             environment: processEnvironment
         )
     }
     
-    func validate(_ environment: SwiftPMEnvironment) throws {
-        guard environment.swiftlyExecutable.isFileURL,
-              environment.sdkArtifactBundle.isFileURL,
-              !environment.toolchainSelector.isEmpty,
-              environment.sdkID == environment.architecture.swiftSDKSelector
-        else { throw SwiftPMError.invalidEnvironment }
-    }
-    
     func boundedDiagnostic(_ result: SubprocessResult) -> String {
         String((result.standardError + "\n" + result.standardOutput).suffix(16_384))
             .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    
-    func outputHandler(_ handler: EventHandler?) -> SubprocessOutputHandler? {
-        guard let handler else { return nil }
-        return { stream, text in
-            let publicStream: CommandOutput.Stream = switch stream {
-                case .standardOutput: .standardOutput
-                case .standardError: .standardError
-            }
-            await handler(.output(CommandOutput(stream: publicStream, text: text)))
-        }
-    }
-    
-}
-
-private extension String {
-    
-    func trimmingPrefix(_ prefix: Character) -> Substring {
-        first == prefix ? dropFirst() : self[...]
     }
     
 }

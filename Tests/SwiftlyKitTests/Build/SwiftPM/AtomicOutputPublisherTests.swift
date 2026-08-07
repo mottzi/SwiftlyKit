@@ -10,12 +10,12 @@ struct AtomicOutputPublisherTests {
             let source = directory.appending(path: "source")
             let output = directory.appending(path: "output")
             try Data("first".utf8).write(to: source)
-            #expect(try AtomicOutputPublisher().publish(source, to: output) == output)
+            #expect(try AtomicOutputPublisher.publish(source, to: output) == output)
             #expect(try Data(contentsOf: output) == Data("first".utf8))
 
             try Data("second".utf8).write(to: source)
             #expect(throws: SwiftPMError.outputAlreadyExists(output)) {
-                try AtomicOutputPublisher().publish(source, to: output)
+                try AtomicOutputPublisher.publish(source, to: output)
             }
             #expect(try Data(contentsOf: output) == Data("first".utf8))
         }

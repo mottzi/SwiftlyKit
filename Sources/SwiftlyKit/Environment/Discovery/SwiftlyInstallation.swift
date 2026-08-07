@@ -4,7 +4,6 @@ import Foundation
 struct SwiftlyInstallation: Equatable, Sendable {
     
     let executableURL: URL
-    let version: String
     
 }
 
@@ -33,11 +32,11 @@ extension SwiftlyInstallation {
         }
         
         try Task.checkCancellation()
-        guard let version = compatibleVersion(from: versionOutput) else {
+        guard isCompatibleVersion(versionOutput) else {
             throw SwiftlyKitError.incompatibleSwiftly
         }
         
-        return SwiftlyInstallation(executableURL: executableURL, version: version)
+        return SwiftlyInstallation(executableURL: executableURL)
     }
     
     private static func candidateURLs(
@@ -74,16 +73,16 @@ extension SwiftlyInstallation {
         return FileManager.default.isExecutableFile(atPath: url.path)
     }
     
-    private static func compatibleVersion(from output: String) -> String? {
+    private static func isCompatibleVersion(_ output: String) -> Bool {
         
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         let components = trimmed.split(separator: ".", omittingEmptySubsequences: false)
-        guard components.count == 3 else { return nil }
-        guard components.allSatisfy(\.isASCIIDecimal) else { return nil }
-        guard let major = UInt(components[0]), major >= 1 else { return nil }
-        guard UInt(components[1]) != nil else { return nil }
-        guard UInt(components[2]) != nil else { return nil }
-        return trimmed
+        guard components.count == 3 else { return false }
+        guard components.allSatisfy(\.isASCIIDecimal) else { return false }
+        guard let major = UInt(components[0]), major >= 1 else { return false }
+        guard UInt(components[1]) != nil else { return false }
+        guard UInt(components[2]) != nil else { return false }
+        return true
     }
     
 }

@@ -8,14 +8,13 @@ enum EnvironmentSelectionPolicy {
         releases: [OfficialStableRelease],
         installedToolchains: [InstalledStableToolchain],
         installedSDKs: [InstalledStaticLinuxSDK]
-    ) throws -> SelectedEnvironmentRelease {
+    ) throws -> OfficialStableRelease {
         let releases = canonicalReleases(releases)
 
         switch toolchain {
             case .exact(let version):
                 return try selectExact(
                     version,
-                    source: .exactRequest,
                     toolsVersion: toolsVersion,
                     architecture: architecture,
                     releases: releases
@@ -30,7 +29,6 @@ enum EnvironmentSelectionPolicy {
             }
             return try selectExact(
                 version,
-                source: .swiftVersionPreference,
                 toolsVersion: toolsVersion,
                 architecture: architecture,
                 releases: releases
@@ -50,7 +48,7 @@ enum EnvironmentSelectionPolicy {
                     sdkIdentifier: release.staticLinuxSDK.identifier
                 ))
         }) {
-            return SelectedEnvironmentRelease(release: release, source: .installedPair)
+            return release
         }
 
         guard let release = releases.first(where: {
@@ -61,20 +59,8 @@ enum EnvironmentSelectionPolicy {
                 architecture: architecture
             )
         }
-        return SelectedEnvironmentRelease(release: release, source: .newestOfficial)
+        return release
     }
-}
-
-struct SelectedEnvironmentRelease: Hashable, Sendable {
-    enum Source: Hashable, Sendable {
-        case exactRequest
-        case swiftVersionPreference
-        case installedPair
-        case newestOfficial
-    }
-
-    let release: OfficialStableRelease
-    let source: Source
 }
 
 extension EnvironmentSelectionPolicy {
@@ -93,11 +79,10 @@ extension EnvironmentSelectionPolicy {
 
     private static func selectExact(
         _ version: SwiftVersion,
-        source: SelectedEnvironmentRelease.Source,
         toolsVersion: SwiftVersion,
         architecture: LinuxArchitecture,
         releases: [OfficialStableRelease]
-    ) throws -> SelectedEnvironmentRelease {
+    ) throws -> OfficialStableRelease {
         guard let release = releases.first(where: { $0.version == version }) else {
             throw SelectionError.unavailableRelease(version)
         }
@@ -107,7 +92,7 @@ extension EnvironmentSelectionPolicy {
         guard release.staticLinuxSDK.supports(architecture) else {
             throw SelectionError.unsupportedArchitecture(version: version, architecture: architecture)
         }
-        return SelectedEnvironmentRelease(release: release, source: source)
+        return release
     }
 
     private static func canonicalReleases(

@@ -17,7 +17,7 @@ struct EnvironmentPreparerTests {
     @Test("A ready environment performs no download or mutation command")
     func readyIsNoOp() async throws {
         
-        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let commands = RecordingSubprocessRunner(results: [])
         let validations = Counter()
         let preparer = EnvironmentPreparer(
@@ -40,7 +40,7 @@ struct EnvironmentPreparerTests {
     @Test("Installs exact toolchain without use then checksummed SDK through it")
     func installsMissingComponents() async throws {
         
-        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"), version: "1.0.0")
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let commands = RecordingSubprocessRunner(results: [
             SubprocessResult(succeeded: true, standardOutput: "", standardError: ""),
             SubprocessResult(succeeded: true, standardOutput: "", standardError: "")
@@ -76,8 +76,7 @@ struct EnvironmentPreparerTests {
         
         try await withTemporaryDirectory { temporaryDirectory in
             let installed = SwiftlyInstallation(
-                executableURL: temporaryDirectory.appending(path: "home/.swiftly/bin/swiftly"),
-                version: "1.0.0"
+                executableURL: temporaryDirectory.appending(path: "home/.swiftly/bin/swiftly")
             )
             let detection = DetectionSequence(values: [nil, installed])
             let commands = RecordingSubprocessRunner(results: [

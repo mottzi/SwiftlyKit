@@ -8,18 +8,17 @@ extension SwiftPM {
     ) async throws {
         
         try validateEnvironment(environment)
-        let runtimeEnvironment = SwiftPMEnvironment(environment)
         await onEvent?(.progress(OperationProgress(
             operation: .resolvingDependencies,
             detail: "Resolving package dependencies."
         )))
         let result = try await runner.run(
             command(
-                runtimeEnvironment,
+                environment,
                 swiftArguments: ["package", "--package-path", environment.packageRoot.path, "resolve"],
                 workingDirectory: environment.packageRoot
             ),
-            onOutput: outputHandler(onEvent)
+            onOutput: CommandOutput.handler(for: onEvent)
         )
         guard result.succeeded else {
             throw SwiftPMError.commandFailed(

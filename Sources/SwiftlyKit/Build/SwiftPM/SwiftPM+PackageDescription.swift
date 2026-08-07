@@ -6,26 +6,21 @@ extension SwiftPM {
         using environment: LocalBuildEnvironment
     ) async throws -> [ExecutableProduct] {
         try validateEnvironment(environment)
-        return try await packageDescription(
-            in: environment.packageRoot,
-            using: SwiftPMEnvironment(environment)
-        ).products
+        return try await packageDescription(using: environment).products
     }
     
     func packageDescription(
-        in packageRoot: URL,
-        using environment: SwiftPMEnvironment
+        using environment: LocalBuildEnvironment
     ) async throws -> SwiftPackageDescription {
         
-        try validate(environment)
         let result = try await runner.run(
             command(
                 environment,
                 swiftArguments: [
-                    "package", "--package-path", packageRoot.path,
+                    "package", "--package-path", environment.packageRoot.path,
                     "--disable-automatic-resolution", "dump-package"
                 ],
-                workingDirectory: packageRoot
+                workingDirectory: environment.packageRoot
             ),
             onOutput: nil
         )

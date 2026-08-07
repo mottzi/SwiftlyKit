@@ -10,7 +10,7 @@ struct ELFExecutableVerifierTests {
             for architecture in [LinuxArchitecture.arm64, .x86_64] {
                 let url = directory.appending(path: String(describing: architecture))
                 try writeELF(to: url, architecture: architecture)
-                try ELFExecutableVerifier().verify(url, architecture: architecture)
+                try ELFExecutableVerifier.verify(url, architecture: architecture)
             }
         }
     }
@@ -21,19 +21,19 @@ struct ELFExecutableVerifierTests {
             let mismatch = directory.appending(path: "mismatch")
             try writeELF(to: mismatch, architecture: .arm64)
             #expect(throws: SwiftPMError.self) {
-                try ELFExecutableVerifier().verify(mismatch, architecture: .x86_64)
+                try ELFExecutableVerifier.verify(mismatch, architecture: .x86_64)
             }
 
             let interpreter = directory.appending(path: "interpreter")
             try writeELF(to: interpreter, architecture: .arm64, secondSegment: 3)
             #expect(throws: SwiftPMError.self) {
-                try ELFExecutableVerifier().verify(interpreter, architecture: .arm64)
+                try ELFExecutableVerifier.verify(interpreter, architecture: .arm64)
             }
 
             let needed = directory.appending(path: "needed")
             try writeELF(to: needed, architecture: .arm64, secondSegment: 2, dynamicTag: 1)
             #expect(throws: SwiftPMError.self) {
-                try ELFExecutableVerifier().verify(needed, architecture: .arm64)
+                try ELFExecutableVerifier.verify(needed, architecture: .arm64)
             }
         }
     }
