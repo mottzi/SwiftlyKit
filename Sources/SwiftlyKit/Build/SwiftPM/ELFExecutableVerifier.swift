@@ -1,15 +1,18 @@
 import Foundation
 
+/// Statically linked ELF64 executable verification for supported Linux architectures.
 enum ELFExecutableVerifier {
     
-    static func verify(_ url: URL, architecture: LinuxArchitecture) throws {
+    static func verify(_ url: URL, architecture: LinuxArchitecture) throws(SwiftPMError) {
         
         do {
             try verifyContents(of: url, architecture: architecture)
         } catch let error as SwiftPMError {
             throw error
         } catch {
-            throw SwiftPMError.invalidExecutable("The output could not be read for verification.")
+            throw SwiftPMError.invalidExecutable(
+                "The output could not be read for verification: \(error.localizedDescription)"
+            )
         }
     }
     
@@ -23,7 +26,7 @@ extension ELFExecutableVerifier {
         guard values.isRegularFile == true, values.isSymbolicLink != true,
               FileManager.default.isExecutableFile(atPath: url.path)
         else { throw SwiftPMError.invalidExecutable("The output is not an executable regular file.") }
-
+        
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         let reader = Reader(data: data)
         guard data.count >= 64, Array(data.prefix(4)) == [0x7f, 0x45, 0x4c, 0x46],
@@ -35,29 +38,29 @@ extension ELFExecutableVerifier {
         guard try reader.uint16(18) == architecture.elfMachine else {
             throw SwiftPMError.invalidExecutable("The ELF architecture does not match the target.")
         }
-
+        
         let tableOffset = try reader.int(reader.uint64(32))
         let entrySize = Int(try reader.uint16(54))
         let entryCount = Int(try reader.uint16(56))
-        guard entrySize >= 56, entryCount > 0 else { throw malformed }
-
+        guard entrySize >= 56, entryCount > 0 else { throw malformedError }
+        
         var hasLoadSegment = false
         for index in 0..<entryCount {
             let offset = try reader.add(tableOffset, try reader.multiply(index, entrySize))
             let type = try reader.uint32(offset)
             _ = try reader.uint64(offset + 48)
             if type == 1 { hasLoadSegment = true }
-            if type == 3 { throw dynamicallyLinked }
-            if type == 2, try hasNeededEntry(reader, headerOffset: offset) { throw dynamicallyLinked }
+            if type == 3 { throw dynamicallyLinkedError }
+            if type == 2, try hasNeededEntry(reader, headerOffset: offset) { throw dynamicallyLinkedError }
         }
-        guard hasLoadSegment else { throw malformed }
+        guard hasLoadSegment else { throw malformedError }
     }
     
     private static func hasNeededEntry(_ reader: Reader, headerOffset: Int) throws -> Bool {
         
         let offset = try reader.int(reader.uint64(headerOffset + 8))
         let size = try reader.int(reader.uint64(headerOffset + 32))
-        guard size % 16 == 0 else { throw malformed }
+        guard size % 16 == 0 else { throw malformedError }
         for displacement in stride(from: 0, to: size, by: 16) {
             let tag = try reader.uint64(try reader.add(offset, displacement))
             if tag == 0 { return false }
@@ -66,20 +69,29 @@ extension ELFExecutableVerifier {
         return false
     }
     
-    private static let malformed: SwiftPMError = .invalidExecutable(
+}
+
+extension ELFExecutableVerifier {
+    
+    private static let malformedError = SwiftPMError.invalidExecutable(
         "The ELF program headers are malformed."
     )
-
-    private static let dynamicallyLinked: SwiftPMError = .invalidExecutable(
+    
+    private static let dynamicallyLinkedError = SwiftPMError.invalidExecutable(
         "The ELF declares a dynamic interpreter or required library."
     )
+    
+}
 
+extension ELFExecutableVerifier {
+
+    /// Bounds-checked little-endian decoding and offset arithmetic for one ELF byte buffer.
     private struct Reader {
         
         let data: Data
         
         func byte(_ offset: Int) throws -> UInt8 {
-            guard data.indices.contains(offset) else { throw ELFExecutableVerifier.malformed }
+            guard data.indices.contains(offset) else { throw ELFExecutableVerifier.malformedError }
             return data[offset]
         }
 
@@ -99,26 +111,26 @@ extension ELFExecutableVerifier {
         }
 
         func int(_ value: UInt64) throws -> Int {
-            guard value <= UInt64(Int.max) else { throw ELFExecutableVerifier.malformed }
+            guard value <= UInt64(Int.max) else { throw ELFExecutableVerifier.malformedError }
             return Int(value)
         }
 
         func add(_ lhs: Int, _ rhs: Int) throws -> Int {
             let (value, overflow) = lhs.addingReportingOverflow(rhs)
-            guard !overflow else { throw ELFExecutableVerifier.malformed }
+            guard !overflow else { throw ELFExecutableVerifier.malformedError }
             return value
         }
 
         func multiply(_ lhs: Int, _ rhs: Int) throws -> Int {
             let (value, overflow) = lhs.multipliedReportingOverflow(by: rhs)
-            guard !overflow else { throw ELFExecutableVerifier.malformed }
+            guard !overflow else { throw ELFExecutableVerifier.malformedError }
             return value
         }
 
         private func slice(_ offset: Int, _ count: Int) throws -> Data {
-            guard offset >= 0, count >= 0 else { throw ELFExecutableVerifier.malformed }
+            guard offset >= 0, count >= 0 else { throw ELFExecutableVerifier.malformedError }
             let end = try add(offset, count)
-            guard end <= data.count else { throw ELFExecutableVerifier.malformed }
+            guard end <= data.count else { throw ELFExecutableVerifier.malformedError }
             return data.subdata(in: offset..<end)
         }
         
