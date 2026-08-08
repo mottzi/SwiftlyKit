@@ -2,11 +2,16 @@ import Foundation
 
 /// A cancellation-aware FIFO gate for operations that may mutate shared user state.
 actor MutationGate {
-    
+
+    private var isOccupied = false
+    private var waiters: [Waiter] = []
+    private var cancelledWaiters: Set<UUID> = []
+    private var grantedWaiters: Set<UUID> = []
+
     func withAccess<Result: Sendable>(
         _ operation: @Sendable () async throws -> Result
     ) async throws -> Result {
-        
+
         try await acquire()
         do {
             let result = try await operation()
@@ -19,13 +24,13 @@ actor MutationGate {
     }
 
     private func acquire() async throws {
-        
+
         try Task.checkCancellation()
         guard isOccupied else {
             isOccupied = true
             return
         }
-        
+
         let id = UUID()
         let acquired = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
@@ -45,9 +50,9 @@ actor MutationGate {
             throw CancellationError()
         }
     }
-    
+
     private func cancel(_ id: UUID) {
-        
+
         if grantedWaiters.remove(id) != nil { return }
         guard let index = waiters.firstIndex(where: { $0.id == id }) else {
             cancelledWaiters.insert(id)
@@ -56,9 +61,9 @@ actor MutationGate {
         let waiter = waiters.remove(at: index)
         waiter.continuation.resume(returning: false)
     }
-    
+
     private func release() {
-        
+
         while !waiters.isEmpty {
             let waiter = waiters.removeFirst()
             if cancelledWaiters.remove(waiter.id) != nil {
@@ -78,10 +83,5 @@ actor MutationGate {
         let continuation: CheckedContinuation<Bool, Never>
 
     }
-
-    private var isOccupied = false
-    private var waiters: [Waiter] = []
-    private var cancelledWaiters: Set<UUID> = []
-    private var grantedWaiters: Set<UUID> = []
 
 }

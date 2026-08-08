@@ -1,9 +1,7 @@
 /// A supported Linux architecture for a build target.
 public enum LinuxArchitecture: Sendable, Hashable {
-    
     case arm64
     case x86_64
-    
 }
 
 extension LinuxArchitecture {
@@ -23,5 +21,5 @@ extension LinuxArchitecture {
             case .x86_64: 62
         }
     }
-    
+
 }

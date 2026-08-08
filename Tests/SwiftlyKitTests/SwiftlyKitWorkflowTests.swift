@@ -4,10 +4,10 @@ import Testing
 
 @Suite("SwiftlyKit workflow")
 struct SwiftlyKitWorkflowTests {
-    
+
     @Test("Preparation rejects package inputs changed after assessment")
     func staleAssessment() async throws {
-        
+
         try await withWorkflowTemporaryDirectory { packageRoot in
             let manifestURL = packageRoot.appending(path: "Package.swift")
             let originalManifest = Data("// swift-tools-version: 6.0\n".utf8)
@@ -38,16 +38,16 @@ struct SwiftlyKitWorkflowTests {
                 swiftPM: SwiftPM()
             )
             try Data("// swift-tools-version: 6.0\n// changed\n".utf8).write(to: manifestURL)
-            
+
             await #expect(throws: SwiftlyKitError.staleAssessment) {
                 try await kit.prepare(assessment)
             }
         }
     }
-    
+
     @Test("A prepared capability carries package and target context into product discovery")
     func capabilityDrivenProductDiscovery() async throws {
-        
+
         try await withWorkflowTemporaryDirectory { packageRoot in
             try Data("// swift-tools-version: 6.0\n".utf8).write(
                 to: packageRoot.appending(path: "Package.swift")
@@ -104,11 +104,11 @@ struct SwiftlyKitWorkflowTests {
                     validateEnvironment: { _ in }
                 )
             )
-            
+
             let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))
             let environment = try await kit.prepare(assessment)
             let products = try await kit.executableProducts(using: environment)
-            
+
             #expect(!assessment.requiresInstallation)
             #expect(assessment.isSwiftlyAvailable)
             #expect(assessment.isToolchainAvailable)
@@ -117,13 +117,13 @@ struct SwiftlyKitWorkflowTests {
             #expect(products.map(\.name) == ["Tool"])
         }
     }
-    
+
 }
 
 private func withWorkflowTemporaryDirectory<T>(
     _ body: (URL) async throws -> T
 ) async throws -> T {
-    
+
     let directory = FileManager.default.temporaryDirectory
         .appending(path: "SwiftlyKit-Workflow-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)

@@ -4,8 +4,10 @@ import Testing
 
 @Suite("Installed environment inventory")
 struct InstalledEnvironmentInventoryTests {
+
     @Test("Swiftly inventory retains unique stable semantic versions only")
     func parsesStableToolchains() throws {
+
         let data = Data("""
             {
               "toolchains": [
@@ -31,6 +33,7 @@ struct InstalledEnvironmentInventoryTests {
 
     @Test("SDK inventory is scoped to the toolchain used to list it")
     func parsesStaticSDKs() {
+
         let toolchain = inventoryVersion("6.3.3")
         let sdks = InstalledStaticLinuxSDK.parseList(
             """
@@ -47,6 +50,7 @@ struct InstalledEnvironmentInventoryTests {
             identifier: "swift-6.3.3-RELEASE_static-linux-0.1.0"
         )])
     }
+
 }
 
 private func inventoryVersion(_ value: String) -> SwiftVersion {

@@ -4,8 +4,10 @@ import Testing
 
 @Suite("ELF executable verification")
 struct ELFExecutableVerifierTests {
+
     @Test("Accepts both supported static architectures")
     func acceptsStaticExecutables() throws {
+
         try withSwiftPMTemporaryDirectory { directory in
             for architecture in [LinuxArchitecture.arm64, .x86_64] {
                 let url = directory.appending(path: String(describing: architecture))
@@ -17,6 +19,7 @@ struct ELFExecutableVerifierTests {
 
     @Test("Rejects architecture mismatch, interpreter, and needed library")
     func rejectsInvalidStaticExpectations() throws {
+
         try withSwiftPMTemporaryDirectory { directory in
             let mismatch = directory.appending(path: "mismatch")
             try writeELF(to: mismatch, architecture: .arm64)
@@ -37,6 +40,7 @@ struct ELFExecutableVerifierTests {
             }
         }
     }
+
 }
 
 func writeELF(
@@ -45,6 +49,7 @@ func writeELF(
     secondSegment: UInt32? = nil,
     dynamicTag: UInt64 = 0
 ) throws {
+
     let count = secondSegment == nil ? 120 : 192
     var data = Data(repeating: 0, count: count)
     data.replaceSubrange(0..<7, with: [0x7f, 0x45, 0x4c, 0x46, 2, 1, 1])
@@ -72,6 +77,7 @@ private func write<T: FixedWidthInteger>(_ value: T, at offset: Int, into data: 
 }
 
 func withSwiftPMTemporaryDirectory<T>(_ body: (URL) throws -> T) throws -> T {
+
     let directory = FileManager.default.temporaryDirectory
         .appending(path: "SwiftlyKit-SwiftPM-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
@@ -80,6 +86,7 @@ func withSwiftPMTemporaryDirectory<T>(_ body: (URL) throws -> T) throws -> T {
 }
 
 func withSwiftPMTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
+
     let directory = FileManager.default.temporaryDirectory
         .appending(path: "SwiftlyKit-SwiftPM-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)

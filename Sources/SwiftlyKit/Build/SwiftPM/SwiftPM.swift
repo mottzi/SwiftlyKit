@@ -1,10 +1,10 @@
 import Foundation
 
 struct SwiftPM: Sendable {
-    
+
     let runner: any SubprocessRunning
     let validateEnvironment: @Sendable (LocalBuildEnvironment) throws -> Void
-    
+
     init(
         runner: any SubprocessRunning = LiveSubprocessRunner(),
         validateEnvironment: @escaping @Sendable (LocalBuildEnvironment) throws -> Void = {
@@ -14,12 +14,13 @@ struct SwiftPM: Sendable {
         self.runner = runner
         self.validateEnvironment = validateEnvironment
     }
-    
+
 }
 
 extension SwiftPM {
-    
+
     private static func validate(_ environment: LocalBuildEnvironment) throws {
+
         let requirements: PackageRequirements
         do {
             requirements = try PackageRequirements.load(at: environment.packageRoot)
@@ -33,9 +34,8 @@ extension SwiftPM {
         guard FileManager.default.isExecutableFile(atPath: environment.swiftlyExecutableURL.path)
         else { throw SwiftlyKitError.incompatibleSwiftly }
 
-        guard SDKBundleLocator.locate(identifier: environment.staticLinuxSDK.identifier)
-                == environment.sdkBundleURL
-        else { throw SwiftlyKitError.staticLinuxSDKUnavailable }
+        let locatedSDKBundleURL = SDKBundleLocator.locate(identifier: environment.staticLinuxSDK.identifier)
+        guard locatedSDKBundleURL == environment.sdkBundleURL else { throw SwiftlyKitError.staticLinuxSDKUnavailable }
     }
-    
+
 }

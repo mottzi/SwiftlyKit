@@ -4,8 +4,10 @@ import Testing
 
 @Suite("SwiftlyKit value models")
 struct ValueModelTests {
+
     @Test("Swift versions describe and compare numerically")
     func swiftVersionDescriptionAndOrdering() {
+
         let patch = SwiftVersion(major: 6, minor: 1, patch: 1)
         let minor = SwiftVersion(major: 6, minor: 2, patch: 0)
         let major = SwiftVersion(major: 7, minor: 0, patch: 0)
@@ -19,6 +21,7 @@ struct ValueModelTests {
 
     @Test("Toolchain selection supports automatic and exact versions")
     func toolchainSelection() {
+
         let version = SwiftVersion(major: 6, minor: 2, patch: 0)
 
         #expect(ToolchainSelection.automatic == .automatic)
@@ -28,6 +31,7 @@ struct ValueModelTests {
 
     @Test("Linux architectures map to their SDK selectors and ELF values")
     func linuxArchitectureMappings() {
+
         #expect(LinuxArchitecture.arm64.swiftSDKSelector == "aarch64-swift-linux-musl")
         #expect(LinuxArchitecture.x86_64.swiftSDKSelector == "x86_64-swift-linux-musl")
         #expect(LinuxArchitecture.arm64.elfMachine == 183)
@@ -36,6 +40,7 @@ struct ValueModelTests {
 
     @Test("Executable products use name identity")
     func executableProductIdentity() {
+
         let server = ExecutableProduct(name: "Server")
         let sameServer = ExecutableProduct(name: "Server")
         let client = ExecutableProduct(name: "Client")
@@ -47,6 +52,7 @@ struct ValueModelTests {
 
     @Test("Build requests preserve supplied values")
     func buildRequestPreservesValues() {
+
         let scratchDirectory = URL(filePath: "/tmp/example/.build")
         let output = URL(filePath: "/tmp/example/server")
         let request = BuildRequest(
@@ -68,6 +74,7 @@ struct ValueModelTests {
 
     @Test("Build requests provide the documented defaults")
     func buildRequestDefaults() {
+
         let request = BuildRequest(
             ExecutableProduct(name: "Server")
         )
@@ -78,4 +85,5 @@ struct ValueModelTests {
         #expect(request.strip == false)
         #expect(request.environment.isEmpty)
     }
+
 }

@@ -1,13 +1,14 @@
 import Foundation
 
 extension SwiftPM {
-    
+
     func command(
         _ environment: LocalBuildEnvironment,
         swiftArguments: [String],
         workingDirectory: URL,
         additions: [String: String] = [:]
     ) -> SubprocessCommand {
+
         command(
             environment,
             tool: "swift",
@@ -16,7 +17,7 @@ extension SwiftPM {
             additions: additions
         )
     }
-    
+
     func command(
         _ environment: LocalBuildEnvironment,
         tool: String,
@@ -24,7 +25,7 @@ extension SwiftPM {
         workingDirectory: URL,
         additions: [String: String]
     ) -> SubprocessCommand {
-        
+
         let inheritedEnvironment = ProcessInfo.processInfo.environment
         var processEnvironment = inheritedEnvironment
         processEnvironment.merge(additions) { _, requested in requested }
@@ -37,7 +38,7 @@ extension SwiftPM {
 
         processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftlyExecutableURL
             .deletingLastPathComponent().path
-        
+
         return SubprocessCommand(
             executableURL: environment.swiftlyExecutableURL,
             arguments: ["run", tool] + toolArguments + ["+\(environment.swiftVersion)"],
@@ -45,10 +46,10 @@ extension SwiftPM {
             environment: processEnvironment
         )
     }
-    
+
     func boundedDiagnostic(_ result: SubprocessResult) -> String {
         String((result.standardError + "\n" + result.standardOutput).suffix(16_384))
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    
+
 }

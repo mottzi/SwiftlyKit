@@ -83,7 +83,8 @@ extension HostPreflight {
     
     private static func isUsableSDK(at url: URL) -> Bool {
         
-        guard url.isFileURL, url.path.hasPrefix("/") else { return false }
+        guard url.isFileURL else { return false }
+        guard url.path.hasPrefix("/") else { return false }
         
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return false }

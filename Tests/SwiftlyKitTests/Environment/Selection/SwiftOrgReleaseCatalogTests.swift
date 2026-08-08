@@ -4,8 +4,10 @@ import Testing
 
 @Suite("Swift.org release catalog")
 struct SwiftOrgReleaseCatalogTests {
+
     @Test("Official static SDK metadata produces exact identities and URLs")
     func parsesOfficialMetadata() throws {
+
         let data = Data("""
             [
               {
@@ -44,6 +46,7 @@ struct SwiftOrgReleaseCatalogTests {
 
     @Test("Malformed and non-SDK releases are excluded without poisoning valid releases")
     func filtersUnusableEntries() throws {
+
         let checksum = String(repeating: "a", count: 64)
         let data = Data("""
             [
@@ -69,6 +72,7 @@ struct SwiftOrgReleaseCatalogTests {
 
     @Test("Fetching requires a successful HTTP response")
     func validatesHTTPResponse() async {
+
         let catalog = SwiftOrgReleaseCatalog { url in
             #expect(url == SwiftOrgReleaseCatalog.releasesURL)
             return .init(data: Data("[]".utf8), statusCode: 503)
@@ -78,6 +82,7 @@ struct SwiftOrgReleaseCatalogTests {
             try await catalog.stableReleases()
         }
     }
+
 }
 
 private func swiftVersion(_ value: String) -> SwiftVersion {

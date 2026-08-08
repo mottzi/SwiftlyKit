@@ -1,11 +1,12 @@
 import Foundation
 
 struct SwiftPackageDescription: Sendable {
-    
+
     let products: [ExecutableProduct]
-    
+    private let resourceProducts: Set<String>
+
     init(data: Data) throws {
-        
+
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { throw SwiftPMError.malformedPackageDescription }
 
@@ -47,13 +48,17 @@ struct SwiftPackageDescription: Sendable {
             Self.requiresResources(product.targets, targets: targets) ? product.name : nil
         })
     }
-    
+
     func requiresResources(_ productName: String) -> Bool {
         resourceProducts.contains(productName)
     }
-    
+
+}
+
+extension SwiftPackageDescription {
+
     private static func referencedTargetNames(in value: Any?, knownNames: Set<String>) -> Set<String> {
-        
+
         guard let value else { return [] }
         if let string = value as? String { return knownNames.contains(string) ? [string] : [] }
         if let array = value as? [Any] {
@@ -66,9 +71,9 @@ struct SwiftPackageDescription: Sendable {
         }
         return []
     }
-    
+
     private static func requiresResources(_ roots: [String], targets: [String: Target]) -> Bool {
-        
+
         var pending = roots
         var visited: Set<String> = []
 
@@ -79,17 +84,20 @@ struct SwiftPackageDescription: Sendable {
             if target.hasResources { return true }
             pending.append(contentsOf: target.dependencies)
         }
+
         return false
     }
-    
+
+}
+
+extension SwiftPackageDescription {
+
     private struct Target {
-        
+
         let type: String
         let dependencies: Set<String>
         let hasResources: Bool
-        
+
     }
 
-    private let resourceProducts: Set<String>
-    
 }

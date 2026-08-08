@@ -7,7 +7,7 @@ struct InstalledEnvironmentInspectorTests {
 
     @Test("A complete inventory reads the Swiftly registry once")
     func completeInventoryReadsRegistryOnce() async throws {
-        
+
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let recorder = RecordingSubprocessRunner(results: [
             SubprocessResult(
@@ -31,12 +31,12 @@ struct InstalledEnvironmentInspectorTests {
                 standardError: ""
             )
         ])
-        
+
         let inventory = try await InstalledEnvironmentInspector(
             runner: recorder,
             isToolchainUsable: { _ in true }
         ).inspectAll(swiftly: swiftly)
-        
+
         #expect(inventory.toolchains.map(\.version) == [
             SwiftVersion(major: 6, minor: 3, patch: 0),
             SwiftVersion(major: 6, minor: 2, patch: 1)
@@ -105,10 +105,10 @@ struct InstalledEnvironmentInspectorTests {
         #expect(await recorder.commands.count == 1)
 
     }
-    
+
     @Test("Registry entries without an executable toolchain are unavailable")
     func staleRegistryEntry() async throws {
-        
+
         let recorder = RecordingSubprocessRunner(results: [
             SubprocessResult(
                 succeeded: true,

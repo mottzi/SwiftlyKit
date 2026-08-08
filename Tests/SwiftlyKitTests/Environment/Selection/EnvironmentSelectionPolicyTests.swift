@@ -4,8 +4,10 @@ import Testing
 
 @Suite("Environment selection policy")
 struct EnvironmentSelectionPolicyTests {
+
     @Test("Automatic selection follows preference, installed pair, then newest official precedence")
     func automaticPrecedence() throws {
+
         let releases = [selectionRelease("6.2.4"), selectionRelease("6.3.3")]
         let toolchains = [InstalledStableToolchain(version: selectionVersion("6.2.4"))]
         let sdks = [InstalledStaticLinuxSDK(
@@ -34,6 +36,7 @@ struct EnvironmentSelectionPolicyTests {
 
     @Test("Installed toolchain and SDK must form the exact official pair")
     func requiresExactInstalledPair() throws {
+
         let older = selectionRelease("6.2.4")
         let newer = selectionRelease("6.3.3")
         let selection = try select(
@@ -51,6 +54,7 @@ struct EnvironmentSelectionPolicyTests {
 
     @Test("Exact selection enforces tools version and architecture")
     func validatesExactSelection() {
+
         let release = selectionRelease("6.2.4", architectures: [.x86_64])
 
         #expect(throws: EnvironmentSelectionPolicy.SelectionError.incompatibleToolsVersion(
@@ -86,6 +90,7 @@ struct EnvironmentSelectionPolicyTests {
 
     @Test("Automatic preference rejects snapshots and unavailable stable releases")
     func rejectsInvalidPreferences() {
+
         #expect(throws: EnvironmentSelectionPolicy.SelectionError.invalidSwiftVersionPreference("main-snapshot")) {
             try select(preference: "main-snapshot", releases: [selectionRelease("6.3.3")])
         }
@@ -100,6 +105,7 @@ struct EnvironmentSelectionPolicyTests {
         toolchains: [InstalledStableToolchain] = [],
         sdks: [InstalledStaticLinuxSDK] = []
     ) throws -> OfficialStableRelease {
+
         try EnvironmentSelectionPolicy.select(
             toolchain: .automatic,
             toolsVersion: selectionVersion("6.2"),
@@ -110,12 +116,14 @@ struct EnvironmentSelectionPolicyTests {
             installedSDKs: sdks
         )
     }
+
 }
 
 private func selectionRelease(
     _ version: String,
     architectures: Set<LinuxArchitecture> = [.arm64, .x86_64]
 ) -> OfficialStableRelease {
+
     let parsedVersion = selectionVersion(version)
     let identifier = "swift-\(version)-RELEASE_static-linux-0.1.0"
     return OfficialStableRelease(

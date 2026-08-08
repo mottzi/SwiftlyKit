@@ -9,7 +9,7 @@ struct LiveSubprocessRunner: SubprocessRunning {
         _ command: SubprocessCommand,
         onOutput: SubprocessOutputHandler?
     ) async throws -> SubprocessResult {
-        
+
         try Task.checkCancellation()
         let sink = SubprocessOutputSink(handler: onOutput)
         do {
@@ -52,20 +52,21 @@ struct LiveSubprocessRunner: SubprocessRunning {
 }
 
 extension LiveSubprocessRunner {
-    
+
     private func processEnvironment(_ environment: [String: String]?) -> Environment {
+
         guard let environment else { return .inherit }
         return .custom(environment.map { key, value in
             Array("\(key)=\(value)\0".utf8)
         })
     }
-    
+
     private func collect(
         _ sequence: SubprocessOutputSequence,
         stream: SubprocessOutput,
         sink: SubprocessOutputSink
     ) async throws -> String {
-        
+
         var collected = ""
         for try await chunk in sequence.strings() {
             try Task.checkCancellation()
@@ -77,20 +78,20 @@ extension LiveSubprocessRunner {
         }
         return collected
     }
-    
+
 }
 
 private actor SubprocessOutputSink {
 
+    let handler: SubprocessOutputHandler?
+
     init(handler: SubprocessOutputHandler?) {
         self.handler = handler
     }
-    
+
     func emit(_ stream: SubprocessOutput, _ text: String) async {
         await handler?(stream, text)
     }
-
-    let handler: SubprocessOutputHandler?
 
 }
 

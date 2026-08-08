@@ -4,8 +4,10 @@ import Testing
 
 @Suite("SwiftPM build system")
 struct SwiftPMTests {
+
     @Test("Typed operations map to stable public errors")
     func typedErrorMapping() {
+
         #expect(SwiftPMError.commandFailed(
             operation: .packageDescription,
             diagnostic: "invalid manifest"
@@ -19,9 +21,10 @@ struct SwiftPMTests {
             diagnostic: "objcopy failed"
         ).swiftlyKitError == .stripFailed("objcopy failed"))
     }
-    
+
     @Test("Build uses exact toolchain, SDK, product, configuration, scratch, and disables resolution")
     func exactBuildCommand() async throws {
+
         try await withSwiftPMTemporaryDirectory { directory in
             let executable = directory.appending(path: "Tool")
             try writeELF(to: executable, architecture: .arm64)
@@ -75,6 +78,7 @@ struct SwiftPMTests {
 
     @Test("Build maps disabled resolution diagnostics to the dedicated internal error")
     func resolutionRequired() async throws {
+
         try await withSwiftPMTemporaryDirectory { directory in
             let packageJSON = """
                 {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
@@ -94,10 +98,10 @@ struct SwiftPMTests {
             }
         }
     }
-    
+
     @Test("Build rejects runtime resource bundles emitted by dependency products")
     func transitiveResources() async throws {
-        
+
         try await withSwiftPMTemporaryDirectory { directory in
             let packageJSON = """
                 {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
@@ -120,9 +124,11 @@ struct SwiftPMTests {
             }
         }
     }
+
 }
 
 private func buildEnvironment(in directory: URL) -> LocalBuildEnvironment {
+
     LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
         staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),

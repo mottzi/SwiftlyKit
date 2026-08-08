@@ -4,8 +4,10 @@ import Testing
 
 @Suite("Atomic build output publication")
 struct AtomicOutputPublisherTests {
+
     @Test("Publishes bytes and refuses replacement")
     func publishNoReplace() throws {
+
         try withSwiftPMTemporaryDirectory { directory in
             let source = directory.appending(path: "source")
             let output = directory.appending(path: "output")
@@ -20,4 +22,5 @@ struct AtomicOutputPublisherTests {
             #expect(try Data(contentsOf: output) == Data("first".utf8))
         }
     }
+
 }

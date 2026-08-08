@@ -4,8 +4,10 @@ import Testing
 
 @Suite("Swift package description")
 struct PackageDescriptionTests {
+
     @Test("Discovers explicit and implicit executable products in stable order")
     func discoversExecutables() throws {
+
         let description = try SwiftPackageDescription(data: Data(json.utf8))
         #expect(description.products.map(\.name) == ["Explicit", "Implicit"])
         #expect(description.requiresResources("Explicit"))
@@ -28,4 +30,5 @@ struct PackageDescriptionTests {
         }
         """
     }
+
 }

@@ -2,7 +2,7 @@ import Foundation
 
 /// Describes one executable build.
 public struct BuildRequest: Sendable {
-    
+
     /// The executable product to build.
     public let product: ExecutableProduct
     /// The SwiftPM build configuration.
@@ -31,5 +31,5 @@ public struct BuildRequest: Sendable {
         self.strip = strip
         self.environment = environment
     }
-    
+
 }

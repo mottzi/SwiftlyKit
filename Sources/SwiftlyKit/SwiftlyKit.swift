@@ -18,14 +18,19 @@ import Foundation
 /// )
 /// ```
 public struct SwiftlyKit: Sendable {
-    
+
+    private let mutationGate: MutationGate
+    private let assessor: EnvironmentAssessor
+    private let preparer: EnvironmentPreparer
+    private let swiftPM: SwiftPM
+
     public init() {
         self.mutationGate = MutationGate()
         self.assessor = EnvironmentAssessor()
         self.preparer = EnvironmentPreparer()
         self.swiftPM = SwiftPM()
     }
-    
+
     /// Assesses the exact environment required by a trusted local package.
     public func assess(
         _ packageRoot: URL,
@@ -34,12 +39,13 @@ public struct SwiftlyKit: Sendable {
     ) async throws -> EnvironmentAssessment {
         try await assessor.assess(packageRoot, for: target, toolchain: toolchain)
     }
-    
+
     /// Performs the exact mutations described by an accepted assessment.
     public func prepare(
         _ assessment: EnvironmentAssessment,
         onEvent: EventHandler? = nil
     ) async throws -> LocalBuildEnvironment {
+
         try await mutationGate.withAccess {
             do {
                 return try await preparer.prepare(assessment, onEvent: onEvent)
@@ -58,11 +64,12 @@ public struct SwiftlyKit: Sendable {
             }
         }
     }
-    
+
     /// Discovers executable products in the package bound to a prepared environment.
     public func executableProducts(
         using environment: LocalBuildEnvironment
     ) async throws -> [ExecutableProduct] {
+
         do {
             return try await swiftPM.executableProducts(using: environment)
         } catch is CancellationError {
@@ -75,12 +82,13 @@ public struct SwiftlyKit: Sendable {
             throw SwiftlyKitError.packageInspectionFailed("An unexpected package error occurred.")
         }
     }
-    
+
     /// Explicitly resolves dependencies in the package bound to a prepared environment.
     public func resolveDependencies(
         using environment: LocalBuildEnvironment,
         onEvent: EventHandler? = nil
     ) async throws {
+
         try await mutationGate.withAccess {
             do {
                 try await swiftPM.resolveDependencies(
@@ -100,17 +108,18 @@ public struct SwiftlyKit: Sendable {
             }
         }
     }
-    
+
     /// Builds, verifies, and optionally publishes one executable product.
     public func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
         onEvent: EventHandler? = nil
     ) async throws -> URL {
+
         try await mutationGate.withAccess {
-            guard !request.product.name.isEmpty else {
-                throw SwiftlyKitError.executableProductNotFound(request.product.name)
-            }
+            guard !request.product.name.isEmpty
+            else { throw SwiftlyKitError.executableProductNotFound(request.product.name) }
+
             do {
                 return try await swiftPM.build(
                     request,
@@ -140,10 +149,5 @@ public struct SwiftlyKit: Sendable {
         self.preparer = preparer
         self.swiftPM = swiftPM
     }
-
-    private let mutationGate: MutationGate
-    private let assessor: EnvironmentAssessor
-    private let preparer: EnvironmentPreparer
-    private let swiftPM: SwiftPM
 
 }

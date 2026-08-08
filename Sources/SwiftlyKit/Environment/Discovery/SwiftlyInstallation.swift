@@ -32,9 +32,7 @@ extension SwiftlyInstallation {
         }
         
         try Task.checkCancellation()
-        guard isCompatibleVersion(versionOutput) else {
-            throw SwiftlyKitError.incompatibleSwiftly
-        }
+        guard isCompatibleVersion(versionOutput) else { throw SwiftlyKitError.incompatibleSwiftly }
         
         return SwiftlyInstallation(executableURL: executableURL)
     }
@@ -62,13 +60,15 @@ extension SwiftlyInstallation {
     
     private static func isExecutableRegularFile(at url: URL) -> Bool {
         
-        guard url.isFileURL, url.path.hasPrefix("/") else { return false }
+        guard url.isFileURL else { return false }
+        guard url.path.hasPrefix("/") else { return false }
         
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return false }
         guard !isDirectory.boolValue else { return false }
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return false }
-        guard let type = attributes[.type] as? FileAttributeType, type == .typeRegular else { return false }
+        guard let type = attributes[.type] as? FileAttributeType else { return false }
+        guard type == .typeRegular else { return false }
         
         return FileManager.default.isExecutableFile(atPath: url.path)
     }
@@ -79,7 +79,8 @@ extension SwiftlyInstallation {
         let components = trimmed.split(separator: ".", omittingEmptySubsequences: false)
         guard components.count == 3 else { return false }
         guard components.allSatisfy(\.isASCIIDecimal) else { return false }
-        guard let major = UInt(components[0]), major >= 1 else { return false }
+        guard let major = UInt(components[0]) else { return false }
+        guard major >= 1 else { return false }
         guard UInt(components[1]) != nil else { return false }
         guard UInt(components[2]) != nil else { return false }
         return true

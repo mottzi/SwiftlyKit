@@ -2,7 +2,6 @@ import Foundation
 
 /// Errors reported by SwiftlyKit.
 public enum SwiftlyKitError: Error, Equatable, Sendable {
-    
     case invalidPackageRoot(URL)
     case unsupportedHost
     case developerToolsUnavailable
@@ -25,11 +24,10 @@ public enum SwiftlyKitError: Error, Equatable, Sendable {
     case executableVerificationFailed(String)
     case outputAlreadyExists(URL)
     case outputPublicationFailed(URL)
-    
 }
 
 extension SwiftlyKitError: LocalizedError {
-    
+
     public var errorDescription: String? {
         switch self {
             case .invalidPackageRoot: "The package root must be a readable local directory containing Package.swift."
@@ -56,5 +54,5 @@ extension SwiftlyKitError: LocalizedError {
             case .outputPublicationFailed(let url): "The executable could not be published at \(url.path)."
         }
     }
-    
+
 }

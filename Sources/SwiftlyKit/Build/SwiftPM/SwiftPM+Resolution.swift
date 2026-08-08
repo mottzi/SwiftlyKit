@@ -1,12 +1,12 @@
 import Foundation
 
 extension SwiftPM {
-    
+
     func resolveDependencies(
         using environment: LocalBuildEnvironment,
         onEvent: EventHandler? = nil
     ) async throws {
-        
+
         try validateEnvironment(environment)
 
         await onEvent?(.progress(OperationProgress(
@@ -26,5 +26,5 @@ extension SwiftPM {
         guard result.succeeded
         else { throw SwiftPMError.commandFailed(operation: .dependencyResolution, diagnostic: boundedDiagnostic(result)) }
     }
-    
+
 }

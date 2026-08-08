@@ -42,13 +42,16 @@ extension EnvironmentAssessor {
         for target: BuildTarget,
         toolchain: ToolchainSelection
     ) async throws -> EnvironmentAssessment {
-        
+
         try await checkHost()
+
         let requirements = try loadRequirements(at: packageRoot)
         let snapshot = try PackageInputSnapshot.capture(requirements)
+
         let swiftly = try await detectSwiftly()
         let releases = try await officialReleases()
         let inventory = try await installedInventory(swiftly)
+
         let release: OfficialStableRelease
         do {
             release = try EnvironmentSelectionPolicy.select(
@@ -93,6 +96,7 @@ extension EnvironmentAssessor {
 extension EnvironmentAssessor {
     
     private func loadRequirements(at packageRoot: URL) throws -> PackageRequirements {
+
         do {
             return try PackageRequirements.load(at: packageRoot)
         } catch let error as PackageRequirements.LoadingError {
@@ -101,6 +105,7 @@ extension EnvironmentAssessor {
     }
     
     private func officialReleases() async throws -> [OfficialStableRelease] {
+
         do {
             return try await loadReleases()
         } catch is CancellationError {
@@ -115,9 +120,8 @@ extension EnvironmentAssessor {
     private func installedInventory(
         _ swiftly: SwiftlyInstallation?
     ) async throws -> InstalledEnvironmentInventory {
-        guard let swiftly else {
-            return InstalledEnvironmentInventory(toolchains: [], sdks: [])
-        }
+
+        guard let swiftly else { return InstalledEnvironmentInventory(toolchains: [], sdks: []) }
         do {
             return try await inspectInventory(swiftly)
         } catch is CancellationError {

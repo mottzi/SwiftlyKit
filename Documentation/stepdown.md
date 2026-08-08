@@ -1,19 +1,23 @@
 # Step-down style
 
-Code should read from intent to detail. A reader should understand the main behavior before reaching mechanics or constants.
+Code should read from intent to detail.
+
+A reader should understand the main behavior before reaching mechanics or constants.
 
 ## Preferred order
 
-1. The module interface.
-2. The main algorithm.
-3. Subordinate semantic helpers, ordered by first use.
-4. Nested helper modules that contain behavior or state.
-5. Domain vocabulary such as private raw-value enums.
-6. Passive constants and shared error values.
+1. Stored instance properties, ordered from externally visible to private state.
+2. The remaining module interface.
+3. The main algorithm.
+4. Subordinate semantic helpers, ordered by first use.
+5. Nested helper modules that contain behavior or state.
+6. Domain vocabulary such as private raw-value enums.
+7. Passive static constants and shared error values.
 
 ## Rules
 
 - Use extensions as semantic chapters, not as one-function containers.
+- Declare every stored instance property at the top of the primary type declaration, before initializers, computed properties, and methods.
 - Put callers before the functions they call, unless a larger behavioral layer deserves priority.
 - Give behavior more weight than passive declarations. Swift does not require definitions before use.
 - Keep tightly coupled private helpers nested and in the same file. Extract them only if they gain independent callers, behavior, or an interface worth learning.

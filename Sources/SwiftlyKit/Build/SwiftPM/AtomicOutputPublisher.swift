@@ -2,24 +2,27 @@ import Darwin
 import Foundation
 
 enum AtomicOutputPublisher {
-    
+
     static func publish(_ source: URL, to destination: URL) throws -> URL {
-        
-        guard source.isFileURL, destination.isFileURL
-        else { throw SwiftPMError.outputPublicationFailed(destination) }
-        
+
+        guard source.isFileURL else { throw SwiftPMError.outputPublicationFailed(destination) }
+        guard destination.isFileURL else { throw SwiftPMError.outputPublicationFailed(destination) }
+
         guard !FileManager.default.fileExists(atPath: destination.path)
         else { throw SwiftPMError.outputAlreadyExists(destination) }
-        
+
         let temporary = destination
             .deletingLastPathComponent()
             .appending(path: ".\(destination.lastPathComponent).swiftlykit-\(UUID().uuidString)")
-        
+
         do {
             try FileManager.default.copyItem(at: source, to: temporary)
         } catch {
             throw SwiftPMError.outputPublicationFailed(destination)
         }
+        
+        do { try FileManager.default.copyItem(at: source, to: temporary) }
+        catch { throw SwiftPMError.outputPublicationFailed(destination) }
         
         defer { try? FileManager.default.removeItem(at: temporary) }
 
@@ -28,8 +31,8 @@ enum AtomicOutputPublisher {
             if errno == EEXIST { throw SwiftPMError.outputAlreadyExists(destination) }
             throw SwiftPMError.outputPublicationFailed(destination)
         }
-        
+
         return destination
     }
-    
+
 }

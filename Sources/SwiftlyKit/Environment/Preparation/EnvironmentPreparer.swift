@@ -70,9 +70,8 @@ extension EnvironmentPreparer {
             toolchain: assessment.swiftVersion,
             sdk: assessment.staticLinuxSDK.identifier
         ) else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
-        guard let sdkBundleURL = locateSDK(assessment.staticLinuxSDK.identifier) else {
-            throw EnvironmentPreparationError.unauthorizedMutationRequired
-        }
+        let sdkBundleURL = locateSDK(assessment.staticLinuxSDK.identifier)
+        guard let sdkBundleURL else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
         return LocalBuildEnvironment(
             swiftVersion: assessment.swiftVersion,
             staticLinuxSDK: assessment.staticLinuxSDK,
@@ -90,9 +89,8 @@ extension EnvironmentPreparer {
 
         var swiftly = try await detectSwiftly()
         if swiftly == nil {
-            guard assessment.requiredComponents.contains(.swiftly) else {
-                throw EnvironmentPreparationError.swiftlyUnavailableAfterInstallation
-            }
+            guard assessment.requiredComponents.contains(.swiftly)
+            else { throw EnvironmentPreparationError.swiftlyUnavailableAfterInstallation }
             try await bootstrapSwiftly(onEvent: onEvent)
             swiftly = try await detectSwiftly()
         }
@@ -102,9 +100,8 @@ extension EnvironmentPreparer {
         let sdk = assessment.release.staticLinuxSDK
         var state = try await inspect(swiftly, toolchain)
         if !state.contains(toolchain: toolchain) {
-            guard assessment.requiredComponents.contains(.toolchain) else {
-                throw EnvironmentPreparationError.unauthorizedMutationRequired
-            }
+            guard assessment.requiredComponents.contains(.toolchain)
+            else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
             await report(
                 .toolchain,
                 "Installing Swift \(toolchain) without changing the selected default.",
@@ -127,15 +124,12 @@ extension EnvironmentPreparer {
         }
 
         if !state.contains(toolchain: toolchain, sdk: sdk.identifier) {
-            guard assessment.requiredComponents.contains(.staticLinuxSDK) else {
-                throw EnvironmentPreparationError.unauthorizedMutationRequired
-            }
-            guard sdk.downloadURL.scheme?.lowercased() == "https" else {
-                throw EnvironmentPreparationError.invalidDownloadURL
-            }
-            guard sdk.checksum.count == 64,
-                  sdk.checksum.allSatisfy({ $0.isHexDigit })
+            guard assessment.requiredComponents.contains(.staticLinuxSDK)
+            else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
+            guard sdk.downloadURL.scheme?.lowercased() == "https"
             else { throw EnvironmentPreparationError.invalidDownloadURL }
+            guard sdk.checksum.count == 64 else { throw EnvironmentPreparationError.invalidDownloadURL }
+            guard sdk.checksum.allSatisfy({ $0.isHexDigit }) else { throw EnvironmentPreparationError.invalidDownloadURL }
             await report(
                 .staticLinuxSDK,
                 "Installing the matching checksummed Static Linux SDK.",
@@ -162,9 +156,7 @@ extension EnvironmentPreparer {
 
     private func bootstrapSwiftly(onEvent: EventHandler?) async throws {
 
-        guard Self.officialPackageURL.scheme == "https" else {
-            throw EnvironmentPreparationError.invalidDownloadURL
-        }
+        guard Self.officialPackageURL.scheme == "https" else { throw EnvironmentPreparationError.invalidDownloadURL }
 
         let stagingDirectory = temporaryDirectory.appending(
             path: "SwiftlyKit-\(UUID().uuidString)",
@@ -188,9 +180,7 @@ extension EnvironmentPreparer {
             if Task.isCancelled { throw CancellationError() }
             throw EnvironmentPreparationError.downloadFailed
         }
-        guard (200..<300).contains(statusCode) else {
-            throw EnvironmentPreparationError.invalidHTTPResponse(statusCode)
-        }
+        guard (200..<300).contains(statusCode) else { throw EnvironmentPreparationError.invalidHTTPResponse(statusCode) }
 
         await report(.swiftly, "Verifying the installer signature and Apple trust.", to: onEvent)
         let signature = try await execute(SubprocessCommand(
@@ -204,9 +194,9 @@ extension EnvironmentPreparer {
         )
         let appleTrust = output.localizedCaseInsensitiveContains("trusted by the Apple notary service")
             || output.localizedCaseInsensitiveContains("trusted by macOS")
-        guard signature.succeeded, officialSigner, appleTrust else {
-            throw EnvironmentPreparationError.packageSignatureRejected
-        }
+        guard signature.succeeded else { throw EnvironmentPreparationError.packageSignatureRejected }
+        guard officialSigner else { throw EnvironmentPreparationError.packageSignatureRejected }
+        guard appleTrust else { throw EnvironmentPreparationError.packageSignatureRejected }
 
         await report(.swiftly, "Installing Swiftly for the current user.", to: onEvent)
         try await checkedRun(SubprocessCommand(
@@ -246,6 +236,7 @@ extension EnvironmentPreparer {
         _ command: SubprocessCommand,
         onEvent: EventHandler?
     ) async throws -> SubprocessResult {
+
         do {
             return try await runner.run(command, onOutput: CommandOutput.handler(for: onEvent))
         } catch is CancellationError {
@@ -261,6 +252,7 @@ extension EnvironmentPreparer {
         _ detail: String,
         to handler: EventHandler?
     ) async {
+
         await handler?(.progress(OperationProgress(
             operation: .preparingEnvironment,
             component: component,
@@ -276,9 +268,7 @@ extension EnvironmentPreparer {
 
         guard source.scheme?.lowercased() == "https" else { throw EnvironmentPreparationError.invalidDownloadURL }
         let (temporaryURL, response) = try await URLSession.shared.download(from: source)
-        guard let response = response as? HTTPURLResponse else {
-            throw EnvironmentPreparationError.invalidHTTPResponse(0)
-        }
+        guard let response = response as? HTTPURLResponse else { throw EnvironmentPreparationError.invalidHTTPResponse(0) }
         guard (200..<300).contains(response.statusCode) else { return response.statusCode }
         try FileManager.default.moveItem(at: temporaryURL, to: destination)
         return response.statusCode

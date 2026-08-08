@@ -12,7 +12,7 @@ enum SDKBundleLocator {
             homeDirectory.appending(path: ".swiftpm/swift-sdks/\(bundleName)"),
             homeDirectory.appending(path: "Library/org.swift.swiftpm/swift-sdks/\(bundleName)")
         ]
-        
+
         for candidate in candidates {
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory) else { continue }

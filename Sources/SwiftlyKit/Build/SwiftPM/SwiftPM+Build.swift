@@ -1,13 +1,13 @@
 import Foundation
 
 extension SwiftPM {
-    
+
     func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
         onEvent: EventHandler? = nil
     ) async throws -> URL {
-        
+
         try validateEnvironment(environment)
 
         await onEvent?(.progress(OperationProgress(
@@ -21,7 +21,7 @@ extension SwiftPM {
 
         guard !description.requiresResources(request.product.name)
         else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
-        
+
         return try await withExactSDKSearchDirectory(environment) { sdkSearchDirectory in
             let commonArguments = buildArguments(
                 request,
@@ -46,7 +46,7 @@ extension SwiftPM {
                 }
                 throw SwiftPMError.commandFailed(operation: .build, diagnostic: diagnostic)
             }
-            
+
             let pathResult = try await runner.run(
                 command(
                     environment,
@@ -61,20 +61,18 @@ extension SwiftPM {
             else { throw SwiftPMError.commandFailed(operation: .locatingBuildOutput, diagnostic: boundedDiagnostic(pathResult)) }
 
             let binaryDirectory = pathResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !binaryDirectory.isEmpty
-            else { throw SwiftPMError.executableNotFound(request.product.name) }
+            guard !binaryDirectory.isEmpty else { throw SwiftPMError.executableNotFound(request.product.name) }
 
             let binaryDirectoryURL = URL(filePath: binaryDirectory)
             let hasRuntimeResourceBundle = try containsRuntimeResourceBundle(in: binaryDirectoryURL)
-            guard !hasRuntimeResourceBundle
-            else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
+            guard !hasRuntimeResourceBundle else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
 
             let executable = binaryDirectoryURL.appending(path: request.product.name)
             guard FileManager.default.fileExists(atPath: executable.path)
             else { throw SwiftPMError.executableNotFound(request.product.name) }
 
             try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
-            
+
             if request.strip {
                 await onEvent?(.progress(OperationProgress(
                     operation: .stripping,
@@ -87,7 +85,7 @@ extension SwiftPM {
                     onOutput: CommandOutput.handler(for: onEvent)
                 )
             }
-            
+
             if let output = request.output {
                 await onEvent?(.progress(OperationProgress(
                     operation: .publishing,
@@ -98,12 +96,12 @@ extension SwiftPM {
             return executable
         }
     }
-    
+
     private func withExactSDKSearchDirectory<T: Sendable>(
         _ environment: LocalBuildEnvironment,
         body: (URL) async throws -> T
     ) async throws -> T {
-        
+
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "SwiftlyKit-SDK-\(UUID().uuidString)", directoryHint: .isDirectory)
 
@@ -117,13 +115,13 @@ extension SwiftPM {
 
         return try await body(directory)
     }
-    
+
     private func buildArguments(
         _ request: BuildRequest,
         environment: LocalBuildEnvironment,
         sdkSearchDirectory: URL
     ) -> [String] {
-        
+
         var arguments = [
             "--package-path", environment.packageRoot.path,
             "--disable-automatic-resolution",
@@ -139,17 +137,17 @@ extension SwiftPM {
 
         return arguments
     }
-    
+
     private func indicatesRequiredResolution(_ diagnostic: String) -> Bool {
-        
+
         let lowercased = diagnostic.lowercased()
         return lowercased.contains("package.resolved")
             || lowercased.contains("automatic resolution is disabled")
             || lowercased.contains("dependencies could not be resolved")
     }
-    
+
     private func containsRuntimeResourceBundle(in directory: URL) throws -> Bool {
-        
+
         do {
             return try FileManager.default.contentsOfDirectory(
                 at: directory,
@@ -165,14 +163,14 @@ extension SwiftPM {
             throw SwiftPMError.invalidExecutable("The build output could not be inspected for runtime resources.")
         }
     }
-    
+
     private func strip(
         _ executable: URL,
         for request: BuildRequest,
         using environment: LocalBuildEnvironment,
         onOutput: SubprocessOutputHandler?
     ) async throws {
-        
+
         let result = try await runner.run(
             command(
                 environment,
@@ -189,16 +187,16 @@ extension SwiftPM {
 
         try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
     }
-    
+
 }
 
 private extension BuildConfiguration {
-    
+
     var runtimeName: String {
         switch self {
             case .debug: "debug"
             case .release: "release"
         }
     }
-    
+
 }

@@ -25,8 +25,8 @@ extension InstalledEnvironmentInspector {
     ) async throws -> InstalledEnvironmentInventory {
 
         let toolchains = try await installedToolchains(swiftly: swiftly)
-        guard let selectedToolchain,
-              toolchains.contains(where: { $0.version == selectedToolchain })
+        guard let selectedToolchain else { return InstalledEnvironmentInventory(toolchains: toolchains, sdks: []) }
+        guard toolchains.contains(where: { $0.version == selectedToolchain })
         else { return InstalledEnvironmentInventory(toolchains: toolchains, sdks: []) }
         let sdks = try await installedSDKs(swiftly: swiftly, toolchain: selectedToolchain)
         return InstalledEnvironmentInventory(toolchains: toolchains, sdks: sdks)
@@ -47,6 +47,7 @@ extension InstalledEnvironmentInspector {
                 continue
             }
         }
+
         return InstalledEnvironmentInventory(toolchains: toolchains, sdks: sdks)
     }
 
@@ -78,12 +79,8 @@ extension InstalledEnvironmentInspector {
             executableURL: swiftly.executableURL,
             arguments: ["list", "--format", "json"]
         ))
-        guard result.succeeded else {
-            throw InstalledEnvironmentError.commandFailed(result.combinedOutput)
-        }
-        guard let data = result.standardOutput.data(using: .utf8) else {
-            throw InstalledEnvironmentError.invalidOutput
-        }
+        guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
+        guard let data = result.standardOutput.data(using: .utf8) else { throw InstalledEnvironmentError.invalidOutput }
         do {
             return try InstalledStableToolchain.parseSwiftlyList(data)
                 .filter { isToolchainUsable($0.version) }
@@ -102,9 +99,7 @@ extension InstalledEnvironmentInspector {
             toolchain: toolchain,
             arguments: ["sdk", "list"]
         ))
-        guard result.succeeded else {
-            throw InstalledEnvironmentError.commandFailed(result.combinedOutput)
-        }
+        guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
         return InstalledStaticLinuxSDK.parseList(
             result.standardOutput,
             toolchainVersion: toolchain
@@ -112,6 +107,7 @@ extension InstalledEnvironmentInspector {
     }
 
     private func run(_ command: SubprocessCommand) async throws -> SubprocessResult {
+
         do {
             return try await runner.run(command)
         } catch is CancellationError {
@@ -123,7 +119,7 @@ extension InstalledEnvironmentInspector {
     }
 
     static func liveToolchainUsability(_ version: SwiftVersion) -> Bool {
-        
+
         let environment = ProcessInfo.processInfo.environment
         let toolchainsDirectory = environment["SWIFTLY_TOOLCHAINS_DIR"].map {
             URL(filePath: $0, directoryHint: .isDirectory)

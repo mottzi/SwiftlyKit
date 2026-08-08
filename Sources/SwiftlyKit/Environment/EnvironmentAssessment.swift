@@ -5,6 +5,10 @@ public struct EnvironmentAssessment: Sendable {
     
     public let requiredComponents: [PreparationComponent]
 
+    let packageInputs: PackageInputSnapshot
+    let release: OfficialStableRelease
+    let target: BuildTarget
+
     /// The canonical package root captured during assessment.
     public var packageRoot: URL {
         packageInputs.requirements.packageRoot
@@ -47,10 +51,6 @@ public struct EnvironmentAssessment: Sendable {
     public var requiresInstallation: Bool {
         !requiredComponents.isEmpty
     }
-    
-    let packageInputs: PackageInputSnapshot
-    let release: OfficialStableRelease
-    let target: BuildTarget
     
     init(
         packageInputs: PackageInputSnapshot,

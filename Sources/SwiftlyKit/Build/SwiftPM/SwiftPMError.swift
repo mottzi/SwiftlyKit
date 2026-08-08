@@ -1,7 +1,6 @@
 import Foundation
 
 enum SwiftPMError: Error, Equatable, Sendable {
-    
     case commandFailed(operation: SwiftPMOperation, diagnostic: String)
     case malformedPackageDescription
     case dependencyResolutionRequired
@@ -10,21 +9,18 @@ enum SwiftPMError: Error, Equatable, Sendable {
     case invalidExecutable(String)
     case outputAlreadyExists(URL)
     case outputPublicationFailed(URL)
-    
 }
 
 enum SwiftPMOperation: Equatable, Sendable {
-    
     case build
     case locatingBuildOutput
     case packageDescription
     case dependencyResolution
     case stripping
-    
 }
 
 extension SwiftPMError {
-    
+
     var swiftlyKitError: SwiftlyKitError {
         switch self {
             case .malformedPackageDescription: .packageInspectionFailed("SwiftPM returned malformed package metadata.")
@@ -43,5 +39,5 @@ extension SwiftPMError {
                 }
         }
     }
-    
+
 }
