@@ -152,6 +152,7 @@ extension ELFExecutableVerifier {
         }
 
         func validateRange(at offset: Int, byteCount: Int) throws {
+            
             guard offset >= 0 else { throw ELFExecutableVerifier.malformedError }
             guard byteCount >= 0 else { throw ELFExecutableVerifier.malformedError }
             
