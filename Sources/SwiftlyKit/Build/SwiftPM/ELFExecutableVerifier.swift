@@ -29,42 +29,71 @@ extension ELFExecutableVerifier {
         
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         let reader = Reader(data: data)
-        guard data.count >= 64, Array(data.prefix(4)) == [0x7f, 0x45, 0x4c, 0x46],
-              try reader.byte(4) == 2, try reader.byte(5) == 1, try reader.byte(6) == 1
-        else { throw SwiftPMError.invalidExecutable("The output is not a little-endian ELF64 file.") }
-        guard [UInt16(2), UInt16(3)].contains(try reader.uint16(16)) else {
+        guard try isLittleEndianELF64(reader) else {
+            throw SwiftPMError.invalidExecutable("The output is not a little-endian ELF64 file.")
+        }
+        guard ExecutableFileType(rawValue: try reader.uint16(at: 16)) != nil else {
             throw SwiftPMError.invalidExecutable("The ELF file is not executable.")
         }
-        guard try reader.uint16(18) == architecture.elfMachine else {
+        guard try reader.uint16(at: 18) == architecture.elfMachine else {
             throw SwiftPMError.invalidExecutable("The ELF architecture does not match the target.")
         }
         
-        let tableOffset = try reader.int(reader.uint64(32))
-        let entrySize = Int(try reader.uint16(54))
-        let entryCount = Int(try reader.uint16(56))
-        guard entrySize >= 56, entryCount > 0 else { throw malformedError }
+        let programHeaderTableOffset = try reader.int(from: reader.uint64(at: 32))
+        let programHeaderSize = Int(try reader.uint16(at: 54))
+        let programHeaderCount = Int(try reader.uint16(at: 56))
+        guard programHeaderSize >= 56, programHeaderCount > 0 else { throw malformedError }
         
-        var hasLoadSegment = false
-        for index in 0..<entryCount {
-            let offset = try reader.add(tableOffset, try reader.multiply(index, entrySize))
-            let type = try reader.uint32(offset)
-            _ = try reader.uint64(offset + 48)
-            if type == 1 { hasLoadSegment = true }
-            if type == 3 { throw dynamicallyLinkedError }
-            if type == 2, try hasNeededEntry(reader, headerOffset: offset) { throw dynamicallyLinkedError }
+        var hasLoadableSegment = false
+        for index in 0..<programHeaderCount {
+            let programHeaderOffset = try reader.add(
+                programHeaderTableOffset,
+                try reader.multiply(index, programHeaderSize)
+            )
+            try reader.validateRange(at: programHeaderOffset, byteCount: 56)
+            switch ProgramHeaderType(rawValue: try reader.uint32(at: programHeaderOffset)) {
+                case .loadable:
+                    hasLoadableSegment = true
+                case .interpreter:
+                    throw dynamicallyLinkedError
+                case .dynamicLinking:
+                    if try declaresNeededLibrary(reader, programHeaderOffset: programHeaderOffset) {
+                        throw dynamicallyLinkedError
+                    }
+                case nil:
+                    continue
+            }
         }
-        guard hasLoadSegment else { throw malformedError }
+        guard hasLoadableSegment else { throw malformedError }
     }
     
-    private static func hasNeededEntry(_ reader: Reader, headerOffset: Int) throws -> Bool {
+    private static func isLittleEndianELF64(_ reader: Reader) throws -> Bool {
+        guard reader.data.count >= 64,
+              reader.data.starts(with: [0x7f, 0x45, 0x4c, 0x46])
+        else { return false }
         
-        let offset = try reader.int(reader.uint64(headerOffset + 8))
-        let size = try reader.int(reader.uint64(headerOffset + 32))
-        guard size % 16 == 0 else { throw malformedError }
-        for displacement in stride(from: 0, to: size, by: 16) {
-            let tag = try reader.uint64(try reader.add(offset, displacement))
-            if tag == 0 { return false }
-            if tag == 1 { return true }
+        let fileClass = try reader.byte(at: 4)
+        let byteOrder = try reader.byte(at: 5)
+        let formatVersion = try reader.byte(at: 6)
+        return fileClass == 2 && byteOrder == 1 && formatVersion == 1
+    }
+    
+    private static func declaresNeededLibrary(
+        _ reader: Reader,
+        programHeaderOffset: Int
+    ) throws -> Bool {
+        
+        let entriesOffset = try reader.int(from: reader.uint64(at: programHeaderOffset + 8))
+        let entriesSize = try reader.int(from: reader.uint64(at: programHeaderOffset + 32))
+        let entrySize = 16
+        guard entriesSize.isMultiple(of: entrySize) else { throw malformedError }
+        for displacement in stride(from: 0, to: entriesSize, by: entrySize) {
+            let entryOffset = try reader.add(entriesOffset, displacement)
+            switch DynamicEntryTag(rawValue: try reader.uint64(at: entryOffset)) {
+                case .end: return false
+                case .neededLibrary: return true
+                case nil: continue
+            }
         }
         return false
     }
@@ -84,33 +113,53 @@ extension ELFExecutableVerifier {
 }
 
 extension ELFExecutableVerifier {
+    
+    private enum ExecutableFileType: UInt16 {
+        case executable = 2
+        case positionIndependent = 3
+    }
+    
+    private enum ProgramHeaderType: UInt32 {
+        case loadable = 1
+        case dynamicLinking = 2
+        case interpreter = 3
+    }
+    
+    private enum DynamicEntryTag: UInt64 {
+        case end = 0
+        case neededLibrary = 1
+    }
+    
+}
+
+extension ELFExecutableVerifier {
 
     /// Reader for little-endian ELF values with checks for invalid offsets and overflow.
     private struct Reader {
         
         let data: Data
         
-        func byte(_ offset: Int) throws -> UInt8 {
+        func byte(at offset: Int) throws -> UInt8 {
             guard data.indices.contains(offset) else { throw ELFExecutableVerifier.malformedError }
             return data[offset]
         }
 
-        func uint16(_ offset: Int) throws -> UInt16 {
-            let bytes = try slice(offset, 2)
+        func uint16(at offset: Int) throws -> UInt16 {
+            let bytes = try slice(at: offset, byteCount: 2)
             return UInt16(bytes[0]) | UInt16(bytes[1]) << 8
         }
 
-        func uint32(_ offset: Int) throws -> UInt32 {
-            let bytes = try slice(offset, 4)
+        func uint32(at offset: Int) throws -> UInt32 {
+            let bytes = try slice(at: offset, byteCount: 4)
             return bytes.enumerated().reduce(0) { $0 | UInt32($1.element) << UInt32($1.offset * 8) }
         }
 
-        func uint64(_ offset: Int) throws -> UInt64 {
-            let bytes = try slice(offset, 8)
+        func uint64(at offset: Int) throws -> UInt64 {
+            let bytes = try slice(at: offset, byteCount: 8)
             return bytes.enumerated().reduce(0) { $0 | UInt64($1.element) << UInt64($1.offset * 8) }
         }
 
-        func int(_ value: UInt64) throws -> Int {
+        func int(from value: UInt64) throws -> Int {
             guard value <= UInt64(Int.max) else { throw ELFExecutableVerifier.malformedError }
             return Int(value)
         }
@@ -127,9 +176,13 @@ extension ELFExecutableVerifier {
             return value
         }
 
-        private func slice(_ offset: Int, _ count: Int) throws -> Data {
-            guard offset >= 0, count >= 0 else { throw ELFExecutableVerifier.malformedError }
-            let end = try add(offset, count)
+        func validateRange(at offset: Int, byteCount: Int) throws {
+            _ = try slice(at: offset, byteCount: byteCount)
+        }
+        
+        private func slice(at offset: Int, byteCount: Int) throws -> Data {
+            guard offset >= 0, byteCount >= 0 else { throw ELFExecutableVerifier.malformedError }
+            let end = try add(offset, byteCount)
             guard end <= data.count else { throw ELFExecutableVerifier.malformedError }
             return data.subdata(in: offset..<end)
         }
