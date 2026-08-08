@@ -1,6 +1,6 @@
 import Foundation
 
-/// Statically linked ELF64 executable verification for supported Linux architectures.
+/// Verifier for static ELF64 build outputs for supported Linux architectures.
 enum ELFExecutableVerifier {
     
     static func verify(_ url: URL, architecture: LinuxArchitecture) throws(SwiftPMError) {
@@ -85,7 +85,7 @@ extension ELFExecutableVerifier {
 
 extension ELFExecutableVerifier {
 
-    /// Bounds-checked little-endian decoding and offset arithmetic for one ELF byte buffer.
+    /// Reader for little-endian ELF values with checks for invalid offsets and overflow.
     private struct Reader {
         
         let data: Data
