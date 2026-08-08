@@ -9,17 +9,18 @@ extension SwiftPM {
     ) async throws -> URL {
         
         try validateEnvironment(environment)
+
         await onEvent?(.progress(OperationProgress(
             operation: .building,
             detail: "Building \(request.product.name)."
         )))
+
         let description = try await packageDescription(using: environment)
-        guard description.products.contains(request.product) else {
-            throw SwiftPMError.executableNotFound(request.product.name)
-        }
-        guard !description.requiresResources(request.product.name) else {
-            throw SwiftPMError.unsupportedProductResources(request.product.name)
-        }
+        guard description.products.contains(request.product)
+        else { throw SwiftPMError.executableNotFound(request.product.name) }
+
+        guard !description.requiresResources(request.product.name)
+        else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
         
         return try await withExactSDKSearchDirectory(environment) { sdkSearchDirectory in
             let commonArguments = buildArguments(
@@ -27,6 +28,7 @@ extension SwiftPM {
                 environment: environment,
                 sdkSearchDirectory: sdkSearchDirectory
             )
+
             let buildResult = try await runner.run(
                 command(
                     environment,
@@ -36,6 +38,7 @@ extension SwiftPM {
                 ),
                 onOutput: CommandOutput.handler(for: onEvent)
             )
+
             guard buildResult.succeeded else {
                 let diagnostic = boundedDiagnostic(buildResult)
                 if indicatesRequiredResolution(diagnostic) {
@@ -53,24 +56,23 @@ extension SwiftPM {
                 ),
                 onOutput: nil
             )
-            guard pathResult.succeeded else {
-                throw SwiftPMError.commandFailed(
-                    operation: .locatingBuildOutput,
-                    diagnostic: boundedDiagnostic(pathResult)
-                )
-            }
+
+            guard pathResult.succeeded
+            else { throw SwiftPMError.commandFailed(operation: .locatingBuildOutput, diagnostic: boundedDiagnostic(pathResult)) }
+
             let binaryDirectory = pathResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !binaryDirectory.isEmpty else {
-                throw SwiftPMError.executableNotFound(request.product.name)
-            }
+            guard !binaryDirectory.isEmpty
+            else { throw SwiftPMError.executableNotFound(request.product.name) }
+
             let binaryDirectoryURL = URL(filePath: binaryDirectory)
-            if try containsRuntimeResourceBundle(in: binaryDirectoryURL) {
-                throw SwiftPMError.unsupportedProductResources(request.product.name)
-            }
+            let hasRuntimeResourceBundle = try containsRuntimeResourceBundle(in: binaryDirectoryURL)
+            guard !hasRuntimeResourceBundle
+            else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
+
             let executable = binaryDirectoryURL.appending(path: request.product.name)
-            guard FileManager.default.fileExists(atPath: executable.path) else {
-                throw SwiftPMError.executableNotFound(request.product.name)
-            }
+            guard FileManager.default.fileExists(atPath: executable.path)
+            else { throw SwiftPMError.executableNotFound(request.product.name) }
+
             try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
             
             if request.strip {
@@ -104,12 +106,15 @@ extension SwiftPM {
         
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "SwiftlyKit-SDK-\(UUID().uuidString)", directoryHint: .isDirectory)
+
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: directory) }
+
         try FileManager.default.createSymbolicLink(
             at: directory.appending(path: environment.sdkBundleURL.lastPathComponent),
             withDestinationURL: environment.sdkBundleURL
         )
+
         return try await body(directory)
     }
     
@@ -127,9 +132,11 @@ extension SwiftPM {
             "--product", request.product.name,
             "--configuration", request.configuration.runtimeName
         ]
+
         if let scratchDirectory = request.scratchDirectory {
             arguments += ["--scratch-path", scratchDirectory.path]
         }
+
         return arguments
     }
     
@@ -176,12 +183,10 @@ extension SwiftPM {
             ),
             onOutput: onOutput
         )
-        guard result.succeeded else {
-            throw SwiftPMError.commandFailed(
-                operation: .stripping,
-                diagnostic: boundedDiagnostic(result)
-            )
-        }
+
+        guard result.succeeded
+        else { throw SwiftPMError.commandFailed(operation: .stripping, diagnostic: boundedDiagnostic(result)) }
+
         try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
     }
     

@@ -28,11 +28,13 @@ extension SwiftPM {
         let inheritedEnvironment = ProcessInfo.processInfo.environment
         var processEnvironment = inheritedEnvironment
         processEnvironment.merge(additions) { _, requested in requested }
+
         for protectedKey in [
             "HOME", "CFFIXED_USER_HOME", "SWIFTLY_HOME", "SWIFTLY_HOME_DIR", "SWIFTLY_TOOLCHAINS_DIR"
         ] {
             processEnvironment[protectedKey] = inheritedEnvironment[protectedKey]
         }
+
         processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftlyExecutableURL
             .deletingLastPathComponent().path
         

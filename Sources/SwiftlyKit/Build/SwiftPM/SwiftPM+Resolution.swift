@@ -8,10 +8,12 @@ extension SwiftPM {
     ) async throws {
         
         try validateEnvironment(environment)
+
         await onEvent?(.progress(OperationProgress(
             operation: .resolvingDependencies,
             detail: "Resolving package dependencies."
         )))
+
         let result = try await runner.run(
             command(
                 environment,
@@ -20,12 +22,9 @@ extension SwiftPM {
             ),
             onOutput: CommandOutput.handler(for: onEvent)
         )
-        guard result.succeeded else {
-            throw SwiftPMError.commandFailed(
-                operation: .dependencyResolution,
-                diagnostic: boundedDiagnostic(result)
-            )
-        }
+
+        guard result.succeeded
+        else { throw SwiftPMError.commandFailed(operation: .dependencyResolution, diagnostic: boundedDiagnostic(result)) }
     }
     
 }

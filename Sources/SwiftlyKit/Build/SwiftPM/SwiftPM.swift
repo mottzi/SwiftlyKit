@@ -26,12 +26,13 @@ extension SwiftPM {
         } catch let error as PackageRequirements.LoadingError {
             throw error.swiftlyKitError
         }
-        guard requirements.toolsVersion <= environment.swiftVersion else {
-            throw SwiftlyKitError.unsupportedToolsVersion(requirements.toolsVersion)
-        }
-        guard FileManager.default.isExecutableFile(atPath: environment.swiftlyExecutableURL.path) else {
-            throw SwiftlyKitError.incompatibleSwiftly
-        }
+
+        guard requirements.toolsVersion <= environment.swiftVersion
+        else { throw SwiftlyKitError.unsupportedToolsVersion(requirements.toolsVersion) }
+
+        guard FileManager.default.isExecutableFile(atPath: environment.swiftlyExecutableURL.path)
+        else { throw SwiftlyKitError.incompatibleSwiftly }
+
         guard SDKBundleLocator.locate(identifier: environment.staticLinuxSDK.identifier)
                 == environment.sdkBundleURL
         else { throw SwiftlyKitError.staticLinuxSDKUnavailable }
