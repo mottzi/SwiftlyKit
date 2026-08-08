@@ -13,6 +13,26 @@ public struct SwiftVersion: Sendable, Hashable {
 
 }
 
+extension SwiftVersion: CustomStringConvertible {
+    
+    public var description: String {
+        "\(major).\(minor).\(patch)"
+    }
+
+}
+
+extension SwiftVersion: Comparable {
+    
+    public static func < (lhs: SwiftVersion, rhs: SwiftVersion) -> Bool {
+        
+        if lhs.major != rhs.major { return lhs.major < rhs.major }
+        if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
+        
+        return lhs.patch < rhs.patch
+    }
+    
+}
+
 extension SwiftVersion {
     
     init?(parsing value: String) {
@@ -31,27 +51,6 @@ extension SwiftVersion {
         } else {
             self.init(major: major, minor: minor, patch: 0)
         }
-    }
-    
-}
-
-
-extension SwiftVersion: CustomStringConvertible {
-    
-    public var description: String {
-        "\(major).\(minor).\(patch)"
-    }
-
-}
-
-extension SwiftVersion: Comparable {
-    
-    public static func < (lhs: SwiftVersion, rhs: SwiftVersion) -> Bool {
-        
-        if lhs.major != rhs.major { return lhs.major < rhs.major }
-        if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
-        
-        return lhs.patch < rhs.patch
     }
     
 }

@@ -3,8 +3,6 @@ import Foundation
 /// Prepares exactly the environment authorized by an accepted assessment.
 struct EnvironmentPreparer: Sendable {
 
-    static let officialPackageURL = URL(string: "https://download.swift.org/swiftly/darwin/swiftly.pkg")!
-
     let homeDirectory: URL
     let temporaryDirectory: URL
     let runner: any SubprocessRunning
@@ -286,5 +284,7 @@ extension EnvironmentPreparer {
         return response.statusCode
 
     }
+
+    static let officialPackageURL = URL(string: "https://download.swift.org/swiftly/darwin/swiftly.pkg")!
 
 }

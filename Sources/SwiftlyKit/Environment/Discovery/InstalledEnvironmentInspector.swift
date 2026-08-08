@@ -68,17 +68,6 @@ extension InstalledEnvironmentInspector {
         )
 
     }
-    
-    private func run(_ command: SubprocessCommand) async throws -> SubprocessResult {
-        do {
-            return try await runner.run(command)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            if Task.isCancelled { throw CancellationError() }
-            throw InstalledEnvironmentError.commandCouldNotRun(command.executableURL)
-        }
-    }
 
     private func installedToolchains(
         swiftly: SwiftlyInstallation
@@ -121,7 +110,18 @@ extension InstalledEnvironmentInspector {
             toolchainVersion: toolchain
         )
     }
-    
+
+    private func run(_ command: SubprocessCommand) async throws -> SubprocessResult {
+        do {
+            return try await runner.run(command)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw InstalledEnvironmentError.commandCouldNotRun(command.executableURL)
+        }
+    }
+
     static func liveToolchainUsability(_ version: SwiftVersion) -> Bool {
         
         let environment = ProcessInfo.processInfo.environment

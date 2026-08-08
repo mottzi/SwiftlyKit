@@ -19,33 +19,12 @@ import Foundation
 /// ```
 public struct SwiftlyKit: Sendable {
     
-    private let mutationGate: MutationGate
-    private let assessor: EnvironmentAssessor
-    private let preparer: EnvironmentPreparer
-    private let swiftPM: SwiftPM
-    
     public init() {
         self.mutationGate = MutationGate()
         self.assessor = EnvironmentAssessor()
         self.preparer = EnvironmentPreparer()
         self.swiftPM = SwiftPM()
     }
-    
-    init(
-        mutationGate: MutationGate = MutationGate(),
-        assessor: EnvironmentAssessor,
-        preparer: EnvironmentPreparer,
-        swiftPM: SwiftPM
-    ) {
-        self.mutationGate = mutationGate
-        self.assessor = assessor
-        self.preparer = preparer
-        self.swiftPM = swiftPM
-    }
-    
-}
-
-extension SwiftlyKit {
     
     /// Assesses the exact environment required by a trusted local package.
     public func assess(
@@ -149,5 +128,22 @@ extension SwiftlyKit {
             }
         }
     }
-    
+
+    init(
+        mutationGate: MutationGate = MutationGate(),
+        assessor: EnvironmentAssessor,
+        preparer: EnvironmentPreparer,
+        swiftPM: SwiftPM
+    ) {
+        self.mutationGate = mutationGate
+        self.assessor = assessor
+        self.preparer = preparer
+        self.swiftPM = swiftPM
+    }
+
+    private let mutationGate: MutationGate
+    private let assessor: EnvironmentAssessor
+    private let preparer: EnvironmentPreparer
+    private let swiftPM: SwiftPM
+
 }

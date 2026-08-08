@@ -2,10 +2,6 @@ import Foundation
 
 /// Fetches the official stable Swift release catalog without retaining network state.
 struct SwiftOrgReleaseCatalog: Sendable {
-    static let releasesURL = URL(string: "https://www.swift.org/api/v1/install/releases.json")!
-
-    private let load: @Sendable (URL) async throws -> Response
-
     init() {
         self.init { url in
             let (data, response) = try await URLSession.shared.data(from: url)
@@ -55,6 +51,8 @@ struct SwiftOrgReleaseCatalog: Sendable {
 
         return releasesByVersion.values.sorted { $0.version > $1.version }
     }
+
+    private let load: @Sendable (URL) async throws -> Response
 }
 
 extension SwiftOrgReleaseCatalog {
@@ -71,19 +69,6 @@ extension SwiftOrgReleaseCatalog {
 }
 
 extension SwiftOrgReleaseCatalog {
-    private struct ReleasePayload: Decodable {
-        let name: String?
-        let tag: String?
-        let platforms: [PlatformPayload]?
-    }
-
-    private struct PlatformPayload: Decodable {
-        let platform: String?
-        let version: String?
-        let checksum: String?
-        let archs: [String]?
-    }
-
     private static func release(from payload: ReleasePayload) -> OfficialStableRelease? {
         guard let name = payload.name,
               let version = SwiftVersion(parsing: name),
@@ -123,6 +108,19 @@ extension SwiftOrgReleaseCatalog {
         }) else { return nil }
         return checksum.lowercased()
     }
+
+    private struct ReleasePayload: Decodable {
+        let name: String?
+        let tag: String?
+        let platforms: [PlatformPayload]?
+    }
+
+    private struct PlatformPayload: Decodable {
+        let platform: String?
+        let version: String?
+        let checksum: String?
+        let archs: [String]?
+    }
 }
 
 extension LinuxArchitecture {
@@ -133,4 +131,8 @@ extension LinuxArchitecture {
             default: return nil
         }
     }
+}
+
+extension SwiftOrgReleaseCatalog {
+    static let releasesURL = URL(string: "https://www.swift.org/api/v1/install/releases.json")!
 }

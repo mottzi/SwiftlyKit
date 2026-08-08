@@ -15,10 +15,6 @@ public struct CommandOutput: Sendable {
         self.stream = stream
         self.text = text
     }
-    
-}
-
-extension CommandOutput {
 
     static func handler(for eventHandler: EventHandler?) -> SubprocessOutputHandler? {
         guard let eventHandler else { return nil }

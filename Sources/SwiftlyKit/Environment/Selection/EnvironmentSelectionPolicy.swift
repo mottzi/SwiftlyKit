@@ -71,10 +71,17 @@ extension EnvironmentSelectionPolicy {
         case unsupportedArchitecture(version: SwiftVersion, architecture: LinuxArchitecture)
         case noCompatibleRelease(toolsVersion: SwiftVersion, architecture: LinuxArchitecture)
     }
+}
 
-    private struct InstalledPair: Hashable {
-        let toolchainVersion: SwiftVersion
-        let sdkIdentifier: String
+extension EnvironmentSelectionPolicy {
+    private static func canonicalReleases(
+        _ releases: [OfficialStableRelease]
+    ) -> [OfficialStableRelease] {
+        var releasesByVersion: [SwiftVersion: OfficialStableRelease] = [:]
+        for release in releases {
+            releasesByVersion[release.version] = release
+        }
+        return releasesByVersion.values.sorted { $0.version > $1.version }
     }
 
     private static func selectExact(
@@ -95,14 +102,9 @@ extension EnvironmentSelectionPolicy {
         return release
     }
 
-    private static func canonicalReleases(
-        _ releases: [OfficialStableRelease]
-    ) -> [OfficialStableRelease] {
-        var releasesByVersion: [SwiftVersion: OfficialStableRelease] = [:]
-        for release in releases {
-            releasesByVersion[release.version] = release
-        }
-        return releasesByVersion.values.sorted { $0.version > $1.version }
+    private struct InstalledPair: Hashable {
+        let toolchainVersion: SwiftVersion
+        let sdkIdentifier: String
     }
 }
 

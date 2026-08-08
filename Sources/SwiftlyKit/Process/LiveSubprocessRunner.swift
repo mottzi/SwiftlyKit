@@ -4,18 +4,7 @@ import System
 
 /// The sole adapter between SwiftlyKit operations and swift-subprocess.
 struct LiveSubprocessRunner: SubprocessRunning {
-    
-    private static let processPlatformOptions: PlatformOptions = {
-        var options = PlatformOptions()
-        options.createSession = true
-        options.teardownSequence = [
-            .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(1))
-        ]
-        return options
-    }()
 
-    static let outputLimit = 1_048_576
-    
     func run(
         _ command: SubprocessCommand,
         onOutput: SubprocessOutputHandler?
@@ -59,7 +48,7 @@ struct LiveSubprocessRunner: SubprocessRunning {
             throw error
         }
     }
-    
+
 }
 
 extension LiveSubprocessRunner {
@@ -92,9 +81,7 @@ extension LiveSubprocessRunner {
 }
 
 private actor SubprocessOutputSink {
-    
-    let handler: SubprocessOutputHandler?
-    
+
     init(handler: SubprocessOutputHandler?) {
         self.handler = handler
     }
@@ -102,5 +89,22 @@ private actor SubprocessOutputSink {
     func emit(_ stream: SubprocessOutput, _ text: String) async {
         await handler?(stream, text)
     }
-    
+
+    let handler: SubprocessOutputHandler?
+
+}
+
+extension LiveSubprocessRunner {
+
+    private static let processPlatformOptions: PlatformOptions = {
+        var options = PlatformOptions()
+        options.createSession = true
+        options.teardownSequence = [
+            .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(1))
+        ]
+        return options
+    }()
+
+    static let outputLimit = 1_048_576
+
 }

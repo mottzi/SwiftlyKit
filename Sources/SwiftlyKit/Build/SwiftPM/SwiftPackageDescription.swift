@@ -3,7 +3,6 @@ import Foundation
 struct SwiftPackageDescription: Sendable {
     
     let products: [ExecutableProduct]
-    private let resourceProducts: Set<String>
     
     init(data: Data) throws {
         
@@ -44,26 +43,6 @@ struct SwiftPackageDescription: Sendable {
         resourceProducts.contains(productName)
     }
     
-    private struct Target {
-        
-        let type: String
-        let dependencies: Set<String>
-        let hasResources: Bool
-        
-    }
-    
-    private static func requiresResources(_ roots: [String], targets: [String: Target]) -> Bool {
-        
-        var pending = roots
-        var visited: Set<String> = []
-        while let name = pending.popLast() {
-            guard visited.insert(name).inserted, let target = targets[name] else { continue }
-            if target.hasResources { return true }
-            pending.append(contentsOf: target.dependencies)
-        }
-        return false
-    }
-    
     private static func referencedTargetNames(in value: Any?, knownNames: Set<String>) -> Set<String> {
         
         guard let value else { return [] }
@@ -78,5 +57,27 @@ struct SwiftPackageDescription: Sendable {
         }
         return []
     }
+    
+    private static func requiresResources(_ roots: [String], targets: [String: Target]) -> Bool {
+        
+        var pending = roots
+        var visited: Set<String> = []
+        while let name = pending.popLast() {
+            guard visited.insert(name).inserted, let target = targets[name] else { continue }
+            if target.hasResources { return true }
+            pending.append(contentsOf: target.dependencies)
+        }
+        return false
+    }
+    
+    private struct Target {
+        
+        let type: String
+        let dependencies: Set<String>
+        let hasResources: Bool
+        
+    }
+
+    private let resourceProducts: Set<String>
     
 }
