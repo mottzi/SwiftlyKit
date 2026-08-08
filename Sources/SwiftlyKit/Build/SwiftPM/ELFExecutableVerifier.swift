@@ -23,47 +23,48 @@ extension ELFExecutableVerifier {
     private static func verifyContents(of url: URL, architecture: LinuxArchitecture) throws {
         
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-        guard values.isRegularFile == true, values.isSymbolicLink != true,
+        
+        guard values.isRegularFile == true,
+              values.isSymbolicLink == false,
               FileManager.default.isExecutableFile(atPath: url.path)
         else { throw SwiftPMError.invalidExecutable("The output is not an executable regular file.") }
         
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         let reader = Reader(data: data)
-        guard try isLittleEndianELF64(reader) else {
-            throw SwiftPMError.invalidExecutable("The output is not a little-endian ELF64 file.")
-        }
-        guard ExecutableFileType(rawValue: try reader.uint16(at: 16)) != nil else {
-            throw SwiftPMError.invalidExecutable("The ELF file is not executable.")
-        }
-        guard try reader.uint16(at: 18) == architecture.elfMachine else {
-            throw SwiftPMError.invalidExecutable("The ELF architecture does not match the target.")
-        }
+        
+        guard try isLittleEndianELF64(reader)
+        else { throw SwiftPMError.invalidExecutable("The output is not a little-endian ELF64 file.") }
+        
+        guard ExecutableFileType(rawValue: try reader.uint16(at: 16)) != nil
+        else { throw SwiftPMError.invalidExecutable("The ELF file is not executable.") }
+        
+        guard try reader.uint16(at: 18) == architecture.elfMachine
+        else { throw SwiftPMError.invalidExecutable("The ELF architecture does not match the target.") }
         
         let programHeaderTableOffset = try reader.int(from: reader.uint64(at: 32))
         let programHeaderSize = Int(try reader.uint16(at: 54))
         let programHeaderCount = Int(try reader.uint16(at: 56))
+        
         guard programHeaderSize >= 56, programHeaderCount > 0 else { throw malformedError }
         
         var hasLoadableSegment = false
+        
         for index in 0..<programHeaderCount {
-            let programHeaderOffset = try reader.add(
-                programHeaderTableOffset,
-                try reader.multiply(index, programHeaderSize)
-            )
+            let programHeaderDisplacement = try reader.multiply(index, programHeaderSize)
+            let programHeaderOffset = try reader.add(programHeaderTableOffset, programHeaderDisplacement)
             try reader.validateRange(at: programHeaderOffset, byteCount: 56)
+            
             switch ProgramHeaderType(rawValue: try reader.uint32(at: programHeaderOffset)) {
-            case .loadable:
-                hasLoadableSegment = true
-            case .interpreter:
-                throw dynamicallyLinkedError
-            case .dynamicLinking:
-                if try declaresNeededLibrary(reader, programHeaderOffset: programHeaderOffset) {
-                    throw dynamicallyLinkedError
-                }
-            case nil:
-                continue
+                case .loadable: hasLoadableSegment = true
+                case .interpreter: throw dynamicallyLinkedError
+                case .dynamicLinking:
+                    if try declaresNeededLibrary(reader, programHeaderOffset: programHeaderOffset) {
+                        throw dynamicallyLinkedError
+                    }
+                case nil: continue
             }
         }
+        
         guard hasLoadableSegment else { throw malformedError }
     }
     
@@ -72,13 +73,14 @@ extension ELFExecutableVerifier {
 extension ELFExecutableVerifier {
     
     private static func isLittleEndianELF64(_ reader: Reader) throws -> Bool {
-        guard reader.data.count >= 64,
-              reader.data.starts(with: [0x7f, 0x45, 0x4c, 0x46])
-        else { return false }
+        
+        guard reader.data.count >= 64 else { return false }
+        guard reader.data.starts(with: [0x7f, 0x45, 0x4c, 0x46]) else { return false }
         
         let fileClass = try reader.byte(at: 4)
         let byteOrder = try reader.byte(at: 5)
         let formatVersion = try reader.byte(at: 6)
+        
         return fileClass == 2 && byteOrder == 1 && formatVersion == 1
     }
     
@@ -150,13 +152,16 @@ extension ELFExecutableVerifier {
         }
 
         func validateRange(at offset: Int, byteCount: Int) throws {
-            _ = try slice(at: offset, byteCount: byteCount)
+            guard offset >= 0 else { throw ELFExecutableVerifier.malformedError }
+            guard byteCount >= 0 else { throw ELFExecutableVerifier.malformedError }
+            
+            let end = try add(offset, byteCount)
+            guard end <= data.count else { throw ELFExecutableVerifier.malformedError }
         }
         
         private func slice(at offset: Int, byteCount: Int) throws -> Data {
-            guard offset >= 0, byteCount >= 0 else { throw ELFExecutableVerifier.malformedError }
-            let end = try add(offset, byteCount)
-            guard end <= data.count else { throw ELFExecutableVerifier.malformedError }
+            try validateRange(at: offset, byteCount: byteCount)
+            let end = offset + byteCount
             return data.subdata(in: offset..<end)
         }
         
