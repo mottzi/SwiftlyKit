@@ -52,20 +52,24 @@ extension ELFExecutableVerifier {
             )
             try reader.validateRange(at: programHeaderOffset, byteCount: 56)
             switch ProgramHeaderType(rawValue: try reader.uint32(at: programHeaderOffset)) {
-                case .loadable:
-                    hasLoadableSegment = true
-                case .interpreter:
+            case .loadable:
+                hasLoadableSegment = true
+            case .interpreter:
+                throw dynamicallyLinkedError
+            case .dynamicLinking:
+                if try declaresNeededLibrary(reader, programHeaderOffset: programHeaderOffset) {
                     throw dynamicallyLinkedError
-                case .dynamicLinking:
-                    if try declaresNeededLibrary(reader, programHeaderOffset: programHeaderOffset) {
-                        throw dynamicallyLinkedError
-                    }
-                case nil:
-                    continue
+                }
+            case nil:
+                continue
             }
         }
         guard hasLoadableSegment else { throw malformedError }
     }
+    
+}
+
+extension ELFExecutableVerifier {
     
     private static func isLittleEndianELF64(_ reader: Reader) throws -> Bool {
         guard reader.data.count >= 64,
@@ -78,56 +82,25 @@ extension ELFExecutableVerifier {
         return fileClass == 2 && byteOrder == 1 && formatVersion == 1
     }
     
-    private static func declaresNeededLibrary(
-        _ reader: Reader,
-        programHeaderOffset: Int
-    ) throws -> Bool {
-        
+    private static func declaresNeededLibrary(_ reader: Reader, programHeaderOffset: Int) throws -> Bool {
+    
         let entriesOffset = try reader.int(from: reader.uint64(at: programHeaderOffset + 8))
         let entriesSize = try reader.int(from: reader.uint64(at: programHeaderOffset + 32))
         let entrySize = 16
+        
         guard entriesSize.isMultiple(of: entrySize) else { throw malformedError }
+        
         for displacement in stride(from: 0, to: entriesSize, by: entrySize) {
             let entryOffset = try reader.add(entriesOffset, displacement)
+            
             switch DynamicEntryTag(rawValue: try reader.uint64(at: entryOffset)) {
                 case .end: return false
                 case .neededLibrary: return true
                 case nil: continue
             }
         }
+        
         return false
-    }
-    
-}
-
-extension ELFExecutableVerifier {
-    
-    private static let malformedError = SwiftPMError.invalidExecutable(
-        "The ELF program headers are malformed."
-    )
-    
-    private static let dynamicallyLinkedError = SwiftPMError.invalidExecutable(
-        "The ELF declares a dynamic interpreter or required library."
-    )
-    
-}
-
-extension ELFExecutableVerifier {
-    
-    private enum ExecutableFileType: UInt16 {
-        case executable = 2
-        case positionIndependent = 3
-    }
-    
-    private enum ProgramHeaderType: UInt32 {
-        case loadable = 1
-        case dynamicLinking = 2
-        case interpreter = 3
-    }
-    
-    private enum DynamicEntryTag: UInt64 {
-        case end = 0
-        case neededLibrary = 1
     }
     
 }
@@ -188,5 +161,37 @@ extension ELFExecutableVerifier {
         }
         
     }
+    
+}
+
+extension ELFExecutableVerifier {
+    
+    private enum ExecutableFileType: UInt16 {
+        case executable = 2
+        case positionIndependent = 3
+    }
+    
+    private enum ProgramHeaderType: UInt32 {
+        case loadable = 1
+        case dynamicLinking = 2
+        case interpreter = 3
+    }
+    
+    private enum DynamicEntryTag: UInt64 {
+        case end = 0
+        case neededLibrary = 1
+    }
+    
+}
+
+extension ELFExecutableVerifier {
+    
+    private static let malformedError = SwiftPMError.invalidExecutable(
+        "The ELF program headers are malformed."
+    )
+    
+    private static let dynamicallyLinkedError = SwiftPMError.invalidExecutable(
+        "The ELF declares a dynamic interpreter or required library."
+    )
     
 }
