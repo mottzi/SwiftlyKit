@@ -5,6 +5,15 @@ import System
 /// The sole adapter between SwiftlyKit operations and swift-subprocess.
 struct LiveSubprocessRunner: SubprocessRunning {
     
+    private static let processPlatformOptions: PlatformOptions = {
+        var options = PlatformOptions()
+        options.createSession = true
+        options.teardownSequence = [
+            .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(1))
+        ]
+        return options
+    }()
+
     static let outputLimit = 1_048_576
     
     func run(
@@ -20,7 +29,7 @@ struct LiveSubprocessRunner: SubprocessRunning {
                 arguments: Arguments(command.arguments),
                 environment: processEnvironment(command.environment),
                 workingDirectory: command.workingDirectory.map { FilePath($0.path) },
-                platformOptions: .swiftlyKitProcess,
+                platformOptions: Self.processPlatformOptions,
                 input: .none,
                 output: .sequence,
                 error: .sequence
@@ -92,19 +101,6 @@ private actor SubprocessOutputSink {
     
     func emit(_ stream: SubprocessOutput, _ text: String) async {
         await handler?(stream, text)
-    }
-    
-}
-
-extension PlatformOptions {
-    
-    static var swiftlyKitProcess: PlatformOptions {
-        var options = PlatformOptions()
-        options.createSession = true
-        options.teardownSequence = [
-            .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(1))
-        ]
-        return options
     }
     
 }

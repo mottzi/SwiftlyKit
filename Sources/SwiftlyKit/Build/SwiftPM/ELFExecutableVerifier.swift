@@ -13,6 +13,10 @@ enum ELFExecutableVerifier {
         }
     }
     
+}
+
+extension ELFExecutableVerifier {
+    
     private static func verifyContents(of url: URL, architecture: LinuxArchitecture) throws {
         
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
@@ -62,20 +66,20 @@ enum ELFExecutableVerifier {
         return false
     }
     
-    private static var malformed: SwiftPMError {
-        .invalidExecutable("The ELF program headers are malformed.")
-    }
+    private static let malformed: SwiftPMError = .invalidExecutable(
+        "The ELF program headers are malformed."
+    )
 
-    private static var dynamicallyLinked: SwiftPMError {
-        .invalidExecutable("The ELF declares a dynamic interpreter or required library.")
-    }
+    private static let dynamicallyLinked: SwiftPMError = .invalidExecutable(
+        "The ELF declares a dynamic interpreter or required library."
+    )
 
     private struct Reader {
         
         let data: Data
         
         func byte(_ offset: Int) throws -> UInt8 {
-            guard data.indices.contains(offset) else { throw malformed }
+            guard data.indices.contains(offset) else { throw ELFExecutableVerifier.malformed }
             return data[offset]
         }
 
@@ -95,31 +99,27 @@ enum ELFExecutableVerifier {
         }
 
         func int(_ value: UInt64) throws -> Int {
-            guard value <= UInt64(Int.max) else { throw malformed }
+            guard value <= UInt64(Int.max) else { throw ELFExecutableVerifier.malformed }
             return Int(value)
         }
 
         func add(_ lhs: Int, _ rhs: Int) throws -> Int {
             let (value, overflow) = lhs.addingReportingOverflow(rhs)
-            guard !overflow else { throw malformed }
+            guard !overflow else { throw ELFExecutableVerifier.malformed }
             return value
         }
 
         func multiply(_ lhs: Int, _ rhs: Int) throws -> Int {
             let (value, overflow) = lhs.multipliedReportingOverflow(by: rhs)
-            guard !overflow else { throw malformed }
+            guard !overflow else { throw ELFExecutableVerifier.malformed }
             return value
         }
 
         private func slice(_ offset: Int, _ count: Int) throws -> Data {
-            guard offset >= 0, count >= 0 else { throw malformed }
+            guard offset >= 0, count >= 0 else { throw ELFExecutableVerifier.malformed }
             let end = try add(offset, count)
-            guard end <= data.count else { throw malformed }
+            guard end <= data.count else { throw ELFExecutableVerifier.malformed }
             return data.subdata(in: offset..<end)
-        }
-
-        private var malformed: SwiftPMError {
-            .invalidExecutable("The ELF program headers are malformed.")
         }
         
     }
