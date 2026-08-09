@@ -25,7 +25,6 @@ extension SwiftPM {
         else { throw SwiftlyKitError.incompatibleSwiftly }
 
         let locatedSDKBundleURL = SDKBundleLocator.locate(identifier: environment.staticLinuxSDK.identifier)
-
         guard locatedSDKBundleURL == environment.sdkBundleURL else { throw SwiftlyKitError.staticLinuxSDKUnavailable }
     }
 

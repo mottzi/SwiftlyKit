@@ -5,6 +5,20 @@ public struct OperationProgress: Sendable {
     public let component: PreparationComponent?
     public let detail: String
 
+    init(
+        operation: Operation,
+        component: PreparationComponent? = nil,
+        detail: String
+    ) {
+        self.operation = operation
+        self.component = component
+        self.detail = detail
+    }
+
+}
+
+extension OperationProgress {
+    
     public enum Operation: Sendable, Hashable {
         case preparingEnvironment
         case resolvingDependencies
@@ -12,11 +26,5 @@ public struct OperationProgress: Sendable {
         case stripping
         case publishing
     }
-
-    init(operation: Operation, component: PreparationComponent? = nil, detail: String) {
-        self.operation = operation
-        self.component = component
-        self.detail = detail
-    }
-
+    
 }

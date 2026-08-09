@@ -20,20 +20,19 @@ extension SwiftlyInstallation {
         try Task.checkCancellation()
 
         let candidates = candidateURLs(environment: environment, homeDirectory: homeDirectory)
-
         guard let executableURL = candidates.first(where: isExecutableRegularFile(at:)) else { return nil }
 
         let versionOutput: String
-        do { versionOutput = try await versionProbe(executableURL) }
-        catch is CancellationError { throw CancellationError() }
-        catch {
+        do {
+            versionOutput = try await versionProbe(executableURL)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
             if Task.isCancelled { throw CancellationError() }
-
             throw SwiftlyKitError.incompatibleSwiftly
         }
 
         try Task.checkCancellation()
-
         guard isCompatibleVersion(versionOutput) else { throw SwiftlyKitError.incompatibleSwiftly }
 
         return SwiftlyInstallation(executableURL: executableURL)
@@ -51,9 +50,7 @@ extension SwiftlyInstallation {
         var canonicalCandidates: [URL] = []
         for candidate in candidates {
             let canonicalCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL
-
             guard !canonicalCandidates.contains(canonicalCandidate) else { continue }
-
             canonicalCandidates.append(canonicalCandidate)
         }
 
@@ -68,6 +65,7 @@ extension SwiftlyInstallation {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return false }
         guard !isDirectory.boolValue else { return false }
+        
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return false }
         guard let type = attributes[.type] as? FileAttributeType else { return false }
         guard type == .typeRegular else { return false }
@@ -79,12 +77,14 @@ extension SwiftlyInstallation {
 
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         let components = trimmed.split(separator: ".", omittingEmptySubsequences: false)
+        
         guard components.count == 3 else { return false }
         guard components.allSatisfy(\.isASCIIDecimal) else { return false }
         guard let major = UInt(components[0]) else { return false }
         guard major >= 1 else { return false }
         guard UInt(components[1]) != nil else { return false }
         guard UInt(components[2]) != nil else { return false }
+        
         return true
     }
 
@@ -100,29 +100,21 @@ extension SwiftlyInstallation {
         try Task.checkCancellation()
 
         do {
-            let command = SubprocessCommand(
-                executableURL: executableURL,
-                arguments: ["--version"]
-            )
-
+            let command = SubprocessCommand(executableURL: executableURL, arguments: ["--version"])
             let result = try await runner.run(command)
-
+            
             try Task.checkCancellation()
-
             guard result.succeeded else { throw SwiftlyKitError.incompatibleSwiftly }
-
+            
             try Task.checkCancellation()
-
             return result.standardOutput
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as SwiftlyKitError {
             if Task.isCancelled { throw CancellationError() }
-
             throw error
         } catch {
             if Task.isCancelled { throw CancellationError() }
-
             throw SwiftlyKitError.incompatibleSwiftly
         }
     }

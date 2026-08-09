@@ -31,6 +31,7 @@ extension SwiftPM {
                 environment: environment,
                 sdkSearchDirectory: sdkSearchDirectory
             )
+            
             let buildCommand = command(
                 environment,
                 swiftArguments: ["build"] + commonArguments,
@@ -42,10 +43,8 @@ extension SwiftPM {
 
             guard buildResult.succeeded else {
                 let diagnostic = boundedDiagnostic(buildResult)
-                if indicatesRequiredResolution(diagnostic) {
-                    throw SwiftPMError.dependencyResolutionRequired
-                }
-                throw SwiftPMError.commandFailed(operation: .build, diagnostic: diagnostic)
+                if indicatesRequiredResolution(diagnostic) { throw SwiftPMError.dependencyResolutionRequired }
+                else { throw SwiftPMError.commandFailed(operation: .build, diagnostic: diagnostic) }
             }
 
             let pathCommand = command(
@@ -56,18 +55,19 @@ extension SwiftPM {
             )
 
             let pathResult = try await runner.run(pathCommand, onOutput: nil)
-
-            guard pathResult.succeeded
-            else { throw SwiftPMError.commandFailed(operation: .locatingBuildOutput, diagnostic: boundedDiagnostic(pathResult)) }
+            
+            guard pathResult.succeeded else {
+                throw SwiftPMError.commandFailed(
+                    operation: .locatingBuildOutput,
+                    diagnostic: boundedDiagnostic(pathResult)
+                )
+            }
 
             let binaryDirectory = pathResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-
             guard !binaryDirectory.isEmpty else { throw SwiftPMError.executableNotFound(request.product.name) }
 
             let binaryDirectoryURL = URL(filePath: binaryDirectory)
-
             let hasRuntimeResourceBundle = try containsRuntimeResourceBundle(in: binaryDirectoryURL)
-
             guard !hasRuntimeResourceBundle else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
 
             let executable = binaryDirectoryURL.appending(path: request.product.name)
@@ -151,6 +151,7 @@ extension SwiftPM {
     private func indicatesRequiredResolution(_ diagnostic: String) -> Bool {
 
         let lowercased = diagnostic.lowercased()
+        
         return lowercased.contains("package.resolved")
             || lowercased.contains("automatic resolution is disabled")
             || lowercased.contains("dependencies could not be resolved")
@@ -167,7 +168,6 @@ extension SwiftPM {
 
             return try contents.contains { url in
                 guard url.pathExtension == "resources" else { return false }
-
                 let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
                 return resourceValues.isDirectory == true
             }
@@ -194,7 +194,7 @@ extension SwiftPM {
         )
 
         let result = try await runner.run(stripCommand, onOutput: onOutput)
-
+        
         guard result.succeeded
         else { throw SwiftPMError.commandFailed(operation: .stripping, diagnostic: boundedDiagnostic(result)) }
 

@@ -4,7 +4,8 @@ extension SwiftPM {
 
     func executableProducts(using environment: LocalBuildEnvironment) async throws -> [ExecutableProduct] {
         try validateEnvironment(environment)
-        return try await packageDescription(using: environment).products
+        let package = try await packageDescription(using: environment)
+        return package.products
     }
 
     func packageDescription(using environment: LocalBuildEnvironment) async throws -> SwiftPackageDescription {
@@ -12,8 +13,10 @@ extension SwiftPM {
         let packageCommand = command(
             environment,
             swiftArguments: [
-                "package", "--package-path", environment.packageRoot.path,
-                "--disable-automatic-resolution", "dump-package"
+                "package",
+                "--package-path", environment.packageRoot.path,
+                "--disable-automatic-resolution",
+                "dump-package"
             ],
             workingDirectory: environment.packageRoot
         )

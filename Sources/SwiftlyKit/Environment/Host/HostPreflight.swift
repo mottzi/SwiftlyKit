@@ -13,27 +13,32 @@ struct HostPreflight: Sendable {
 
 extension HostPreflight {
 
+    @discardableResult
     /// Validates the host before returning the canonical active SDK directory.
     func check() async throws -> URL {
 
         try Task.checkCancellation()
 
-        guard hostFacts.isAppleSilicon else { throw SwiftlyKitError.unsupportedHost }
-        guard hostFacts.operatingSystemVersion.majorVersion >= 13 else { throw SwiftlyKitError.unsupportedHost }
+        guard hostFacts.isAppleSilicon,
+              hostFacts.operatingSystemVersion.majorVersion >= 13
+        else { throw SwiftlyKitError.unsupportedHost }
 
         let sdkURL: URL
-        do { sdkURL = try await sdkProbe() }
-        catch is CancellationError { throw CancellationError() }
-        catch {
+        do {
+            sdkURL = try await sdkProbe()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
             if Task.isCancelled { throw CancellationError() }
-
             throw SwiftlyKitError.developerToolsUnavailable
         }
 
         try Task.checkCancellation()
 
-        let canonicalSDKURL = sdkURL.resolvingSymlinksInPath().standardizedFileURL
-
+        let canonicalSDKURL = sdkURL
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        
         guard Self.isUsableSDK(at: canonicalSDKURL) else { throw SwiftlyKitError.developerToolsUnavailable }
 
         return canonicalSDKURL
@@ -43,9 +48,7 @@ extension HostPreflight {
 
 extension HostPreflight {
 
-    static func liveSDKProbe(
-        runner: any SubprocessRunning = LiveSubprocessRunner()
-    ) async throws -> URL {
+    static func liveSDKProbe(runner: any SubprocessRunning = LiveSubprocessRunner()) async throws -> URL {
 
         try Task.checkCancellation()
 
@@ -54,29 +57,23 @@ extension HostPreflight {
                 executableURL: URL(filePath: "/usr/bin/xcrun"),
                 arguments: ["--sdk", "macosx", "--show-sdk-path"]
             )
-
             let result = try await runner.run(command)
-
+            
             try Task.checkCancellation()
-
             guard result.succeeded else { throw SwiftlyKitError.developerToolsUnavailable }
 
             let path = result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-
             guard path.hasPrefix("/") else { throw SwiftlyKitError.developerToolsUnavailable }
 
             try Task.checkCancellation()
-
             return URL(filePath: path)
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as SwiftlyKitError {
             if Task.isCancelled { throw CancellationError() }
-
             throw error
         } catch {
             if Task.isCancelled { throw CancellationError() }
-
             throw SwiftlyKitError.developerToolsUnavailable
         }
     }

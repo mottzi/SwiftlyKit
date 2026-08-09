@@ -22,6 +22,7 @@ struct SwiftPackageDescription: Sendable {
                 dependencies: Self.referencedTargetNames(in: raw["dependencies"], knownNames: targetNames),
                 hasResources: !((raw["resources"] as? [Any]) ?? []).isEmpty
             )
+            
             return (name, target)
         })
 
@@ -61,15 +62,19 @@ extension SwiftPackageDescription {
     private static func referencedTargetNames(in value: Any?, knownNames: Set<String>) -> Set<String> {
 
         guard let value else { return [] }
+        
         if let string = value as? String { return knownNames.contains(string) ? [string] : [] }
+        
         if let array = value as? [Any] {
             return array.reduce(into: Set<String>()) { $0.formUnion(referencedTargetNames(in: $1, knownNames: knownNames)) }
         }
+        
         if let dictionary = value as? [String: Any] {
             return dictionary.reduce(into: Set<String>()) {
                 $0.formUnion(referencedTargetNames(in: $1.value, knownNames: knownNames))
             }
         }
+        
         return []
     }
 

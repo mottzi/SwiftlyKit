@@ -75,9 +75,7 @@ public struct SwiftlyKit: Sendable {
             catch is CancellationError { throw CancellationError() }
             catch let error as SwiftlyKitError { throw error }
             catch let error as SwiftPMError { throw error.swiftlyKitError }
-            catch {
-                throw SwiftlyKitError.dependencyResolutionFailed("An unexpected dependency resolution error occurred.")
-            }
+            catch { throw SwiftlyKitError.dependencyResolutionFailed("An unexpected dependency resolution error occurred.") }
         }
     }
     

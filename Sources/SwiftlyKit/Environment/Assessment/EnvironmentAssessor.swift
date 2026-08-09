@@ -4,7 +4,7 @@ import Foundation
 struct EnvironmentAssessor: Sendable {
 
     private(set) var checkHost: @Sendable () async throws -> Void = {
-        _ = try await HostPreflight().check()
+        try await HostPreflight().check()
     }
 
     private(set) var detectSwiftly: @Sendable () async throws -> SwiftlyInstallation? = {
@@ -49,16 +49,16 @@ struct EnvironmentAssessor: Sendable {
                 installedToolchains: inventory.toolchains,
                 installedSDKs: inventory.sdks
             )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as EnvironmentSelectionPolicy.SelectionError {
+            throw error.swiftlyKitError
+        } catch {
+            throw SwiftlyKitError.compatibleReleaseUnavailable
         }
-        catch is CancellationError { throw CancellationError() }
-        catch let error as EnvironmentSelectionPolicy.SelectionError { throw error.swiftlyKitError }
-        catch { throw SwiftlyKitError.compatibleReleaseUnavailable }
 
         let toolchainAvailable = inventory.contains(toolchain: release.version)
-        let sdkListed = inventory.contains(
-            toolchain: release.version,
-            sdk: release.staticLinuxSDK.identifier
-        )
+        let sdkListed = inventory.contains(toolchain: release.version, sdk: release.staticLinuxSDK.identifier)
         let sdkBundleURL = locateSDK(release.staticLinuxSDK.identifier)
         let sdkAvailable = sdkBundleURL != nil && (sdkListed || !toolchainAvailable)
 
@@ -80,19 +80,25 @@ struct EnvironmentAssessor: Sendable {
 extension EnvironmentAssessor {
 
     private func loadRequirements(at packageRoot: URL) throws -> PackageRequirements {
-
-        do { return try PackageRequirements.load(at: packageRoot) }
-        catch let error as PackageRequirements.LoadingError { throw error.swiftlyKitError }
+        
+        do {
+            return try PackageRequirements.load(at: packageRoot)
+        } catch let error as PackageRequirements.LoadingError {
+            throw error.swiftlyKitError
+        }
     }
 
     private func officialReleases() async throws -> [OfficialStableRelease] {
 
-        do { return try await loadReleases() }
-        catch is CancellationError { throw CancellationError() }
-        catch SwiftOrgReleaseCatalog.CatalogError.invalidPayload {
+        do {
+            return try await loadReleases()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch SwiftOrgReleaseCatalog.CatalogError.invalidPayload {
             throw SwiftlyKitError.integrityCheckFailed("Swift.org returned unsupported release metadata.")
+        } catch {
+            throw SwiftlyKitError.networkFailure("The Swift.org release catalog is unavailable.")
         }
-        catch { throw SwiftlyKitError.networkFailure("The Swift.org release catalog is unavailable.") }
     }
 
     private func installedInventory(_ swiftly: SwiftlyInstallation?) async throws -> InstalledEnvironmentInventory {

@@ -16,11 +16,11 @@ extension InstalledEnvironmentInspector {
     ) async throws -> InstalledEnvironmentInventory {
 
         let toolchains = try await installedToolchains(swiftly: swiftly)
-
+        
         guard let selectedToolchain,
               toolchains.contains(where: { $0.version == selectedToolchain })
         else { return InstalledEnvironmentInventory(toolchains: toolchains, sdks: []) }
-
+        
         let sdks = try await installedSDKs(swiftly: swiftly, toolchain: selectedToolchain)
 
         return InstalledEnvironmentInventory(toolchains: toolchains, sdks: sdks)
@@ -87,41 +87,38 @@ extension InstalledEnvironmentInspector {
             toolchain: toolchain,
             arguments: ["sdk", "list"]
         )
-
+        
         let result = try await run(command)
 
         guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
 
-        return InstalledStaticLinuxSDK.parseList(
-            result.standardOutput,
-            toolchainVersion: toolchain
-        )
+        return InstalledStaticLinuxSDK.parseList(result.standardOutput, toolchainVersion: toolchain)
     }
 
     private func run(_ command: SubprocessCommand) async throws -> SubprocessResult {
 
-        do { return try await runner.run(command) }
-        catch is CancellationError { throw CancellationError() }
-        catch {
+        do {
+            return try await runner.run(command)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
             if Task.isCancelled { throw CancellationError() }
-
             throw InstalledEnvironmentError.commandCouldNotRun(command.executableURL)
         }
     }
 
     static func liveToolchainUsability(_ version: SwiftVersion) -> Bool {
-
-        let environment = ProcessInfo.processInfo.environment
+        
         let defaultToolchainsDirectory = FileManager.default.homeDirectoryForCurrentUser.appending(
             path: "Library/Developer/Toolchains",
             directoryHint: .isDirectory
         )
-        let toolchainsDirectory = environment["SWIFTLY_TOOLCHAINS_DIR"].map {
+        
+        let toolchainsDirectory = ProcessInfo.processInfo.environment["SWIFTLY_TOOLCHAINS_DIR"].map {
             URL(filePath: $0, directoryHint: .isDirectory)
         } ?? defaultToolchainsDirectory
-        let executable = toolchainsDirectory.appending(
-            path: "swift-\(version)-RELEASE.xctoolchain/usr/bin/swift"
-        )
+        
+        let executable = toolchainsDirectory.appending(path: "swift-\(version)-RELEASE.xctoolchain/usr/bin/swift")
 
         return FileManager.default.isExecutableFile(atPath: executable.path)
     }

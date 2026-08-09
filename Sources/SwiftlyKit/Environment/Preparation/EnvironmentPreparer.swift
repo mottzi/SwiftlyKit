@@ -8,18 +8,17 @@ struct EnvironmentPreparer: Sendable {
     private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
 
     private(set) var checkHost: @Sendable () async throws -> Void = {
-        _ = try await HostPreflight().check()
+        try await HostPreflight().check()
     }
 
-    private(set) var downloadPackage: @Sendable (URL, URL) async throws -> Int =
-        EnvironmentPreparer.liveDownload
+    private(set) var downloadPackage: @Sendable (URL, URL) async throws -> Int = EnvironmentPreparer.liveDownload
 
     private(set) var detectSwiftly: @Sendable () async throws -> SwiftlyInstallation? = {
         try await SwiftlyInstallation.detect()
     }
 
-    private(set) var inspect: @Sendable (SwiftlyInstallation, SwiftVersion) async throws -> InstalledEnvironmentInventory =
-        { swiftly, toolchain in
+    private(set) var inspect: @Sendable (SwiftlyInstallation, SwiftVersion) async throws -> InstalledEnvironmentInventory
+    = { swiftly, toolchain in
         try await InstalledEnvironmentInspector().inspect(
             swiftly: swiftly,
             selectedToolchain: toolchain
@@ -42,21 +41,16 @@ extension EnvironmentPreparer {
     func prepare(_ assessment: EnvironmentAssessment, onEvent: EventHandler? = nil) async throws -> LocalBuildEnvironment {
 
         try await checkHost()
-
         try await revalidate(assessment)
-
         try Task.checkCancellation()
 
         let swiftly = try await installRequiredComponents(assessment, onEvent: onEvent)
         let inventory = try await inspect(swiftly, assessment.swiftVersion)
 
-        guard inventory.contains(
-            toolchain: assessment.swiftVersion,
-            sdk: assessment.staticLinuxSDK.identifier
-        ) else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
+        guard inventory.contains(toolchain: assessment.swiftVersion, sdk: assessment.staticLinuxSDK.identifier)
+        else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
 
         let sdkBundleURL = locateSDK(assessment.staticLinuxSDK.identifier)
-
         guard let sdkBundleURL else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
 
         return LocalBuildEnvironment(
@@ -75,16 +69,15 @@ extension EnvironmentPreparer {
     ) async throws -> SwiftlyInstallation {
 
         var swiftly = try await detectSwiftly()
-
+        
         if swiftly == nil {
             guard assessment.requiredComponents.contains(.swiftly)
             else { throw EnvironmentPreparationError.swiftlyUnavailableAfterInstallation }
-
+            
             try await bootstrapSwiftly(onEvent: onEvent)
-
             swiftly = try await detectSwiftly()
         }
-
+        
         guard let swiftly else { throw EnvironmentPreparationError.swiftlyUnavailableAfterInstallation }
 
         let toolchain = assessment.swiftVersion
@@ -122,11 +115,12 @@ extension EnvironmentPreparer {
         if !state.contains(toolchain: toolchain, sdk: sdk.identifier) {
             guard assessment.requiredComponents.contains(.staticLinuxSDK)
             else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
-            guard sdk.downloadURL.scheme?.lowercased() == "https"
+            
+            guard sdk.downloadURL.scheme?.lowercased() == "https",
+                  sdk.checksum.count == 64,
+                  sdk.checksum.allSatisfy(\.isHexDigit)
             else { throw EnvironmentPreparationError.invalidDownloadURL }
-            guard sdk.checksum.count == 64 else { throw EnvironmentPreparationError.invalidDownloadURL }
-            guard sdk.checksum.allSatisfy({ $0.isHexDigit }) else { throw EnvironmentPreparationError.invalidDownloadURL }
-
+            
             await report(
                 .staticLinuxSDK,
                 "Installing the matching checksummed Static Linux SDK.",
@@ -147,7 +141,6 @@ extension EnvironmentPreparer {
         }
 
         return swiftly
-
     }
 
 }
@@ -165,7 +158,6 @@ extension EnvironmentPreparer {
 
         do { try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: false) }
         catch { throw EnvironmentPreparationError.downloadFailed }
-
         defer { try? FileManager.default.removeItem(at: stagingDirectory) }
 
         let packageURL = stagingDirectory.appending(path: "swiftly.pkg")
@@ -173,11 +165,12 @@ extension EnvironmentPreparer {
         await report(.swiftly, "Downloading the official Swiftly installer from Swift.org.", to: onEvent)
 
         let statusCode: Int
-        do { statusCode = try await downloadPackage(Self.officialPackageURL, packageURL) }
-        catch is CancellationError { throw CancellationError() }
-        catch {
+        do {
+            statusCode = try await downloadPackage(Self.officialPackageURL, packageURL)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
             if Task.isCancelled { throw CancellationError() }
-
             throw EnvironmentPreparationError.downloadFailed
         }
 
@@ -190,18 +183,16 @@ extension EnvironmentPreparer {
             arguments: ["--check-signature", packageURL.path],
             workingDirectory: stagingDirectory
         )
-
+        
         let signature = try await execute(verifySignatureCommand, onEvent: onEvent)
 
         let output = signature.combinedOutput
-        let officialSigner = output.localizedCaseInsensitiveContains(
-            "Developer ID Installer: Swift Open Source"
-        )
+        let officialSigner = output.localizedCaseInsensitiveContains("Developer ID Installer: Swift Open Source")
         let appleTrust = output.localizedCaseInsensitiveContains("trusted by the Apple notary service")
             || output.localizedCaseInsensitiveContains("trusted by macOS")
-        guard signature.succeeded else { throw EnvironmentPreparationError.packageSignatureRejected }
-        guard officialSigner else { throw EnvironmentPreparationError.packageSignatureRejected }
-        guard appleTrust else { throw EnvironmentPreparationError.packageSignatureRejected }
+        
+        guard signature.succeeded, officialSigner, appleTrust
+        else { throw EnvironmentPreparationError.packageSignatureRejected }
 
         await report(.swiftly, "Installing Swiftly for the current user.", to: onEvent)
 
@@ -210,7 +201,6 @@ extension EnvironmentPreparer {
             arguments: ["-pkg", packageURL.path, "-target", "CurrentUserHomeDirectory"],
             workingDirectory: stagingDirectory
         )
-
         try await checkedRun(installPackageCommand, onEvent: onEvent)
 
         await report(
@@ -227,28 +217,23 @@ extension EnvironmentPreparer {
             ],
             workingDirectory: stagingDirectory
         )
-
         try await checkedRun(initializeSwiftlyCommand, onEvent: onEvent)
-
     }
 
     private func checkedRun(_ command: SubprocessCommand, onEvent: EventHandler?) async throws {
-
+        
         let result = try await execute(command, onEvent: onEvent)
-
-        guard result.succeeded else {
-            throw EnvironmentPreparationError.installationFailed(Self.bounded(result.combinedOutput))
-        }
-
+        guard result.succeeded
+        else { throw EnvironmentPreparationError.installationFailed(Self.bounded(result.combinedOutput)) }
     }
 
     private func execute(_ command: SubprocessCommand, onEvent: EventHandler?) async throws -> SubprocessResult {
-
-        do { return try await runner.run(command, onOutput: CommandOutput.handler(for: onEvent)) }
-        catch is CancellationError { throw CancellationError() }
-        catch {
+        do {
+            return try await runner.run(command, onOutput: CommandOutput.handler(for: onEvent))
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
             if Task.isCancelled { throw CancellationError() }
-
             throw EnvironmentPreparationError.commandCouldNotRun(command.executableURL)
         }
     }
@@ -260,6 +245,7 @@ extension EnvironmentPreparer {
             component: component,
             detail: detail
         )
+        
         await handler?(.progress(progress))
     }
 
@@ -277,9 +263,8 @@ extension EnvironmentPreparer {
         guard (200..<300).contains(response.statusCode) else { return response.statusCode }
 
         try FileManager.default.moveItem(at: temporaryURL, to: destination)
-
+        
         return response.statusCode
-
     }
 
     static let officialPackageURL = URL(string: "https://download.swift.org/swiftly/darwin/swiftly.pkg")!

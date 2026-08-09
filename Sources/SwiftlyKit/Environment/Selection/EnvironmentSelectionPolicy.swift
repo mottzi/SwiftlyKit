@@ -12,26 +12,15 @@ enum EnvironmentSelectionPolicy {
     ) throws -> OfficialStableRelease {
 
         let releases = canonicalReleases(releases)
-
-        switch toolchain {
-            case .exact(let version): return try selectExact(
-                version,
-                toolsVersion: toolsVersion,
-                architecture: architecture,
-                releases: releases
-            )
-            case .automatic: break
+        
+        if case .exact(let version) = toolchain {
+            return try selectExact(version, toolsVersion: toolsVersion, architecture: architecture, releases: releases)
         }
 
-        if let preference = swiftVersionPreference {
-            guard let version = SwiftVersion(parsing: preference)
-            else { throw SelectionError.invalidSwiftVersionPreference(preference) }
-            return try selectExact(
-                version,
-                toolsVersion: toolsVersion,
-                architecture: architecture,
-                releases: releases
-            )
+        if let swiftVersionPreference {
+            guard let version = SwiftVersion(parsing: swiftVersionPreference)
+            else { throw SelectionError.invalidSwiftVersionPreference(swiftVersionPreference) }
+            return try selectExact(version, toolsVersion: toolsVersion, architecture: architecture, releases: releases)
         }
 
         let installedVersions = Set(installedToolchains.map(\.version))
@@ -39,30 +28,30 @@ enum EnvironmentSelectionPolicy {
             InstalledPair(toolchainVersion: $0.toolchainVersion, sdkIdentifier: $0.identifier)
         })
 
-        if let release = releases.first(where: { release in
+        let installedRelease = releases.first { release in
+            guard release.version >= toolsVersion else { return false }
+            guard release.staticLinuxSDK.supports(architecture) else { return false }
+            guard installedVersions.contains(release.version) else { return false }
+
             let installedPair = InstalledPair(
                 toolchainVersion: release.version,
                 sdkIdentifier: release.staticLinuxSDK.identifier
             )
 
-            return release.version >= toolsVersion
-                && release.staticLinuxSDK.supports(architecture)
-                && installedVersions.contains(release.version)
-                && installedPairs.contains(installedPair)
-        }) {
-            return release
+            return installedPairs.contains(installedPair)
+        }
+        
+        if let installedRelease { return installedRelease }
+
+        let compatibleRelease = releases.first { release in
+            guard release.version >= toolsVersion else { return false }
+            guard release.staticLinuxSDK.supports(architecture) else { return false }
+            return true
         }
 
-        guard let release = releases.first(where: {
-            $0.version >= toolsVersion && $0.staticLinuxSDK.supports(architecture)
-        }) else {
-            throw SelectionError.noCompatibleRelease(
-                toolsVersion: toolsVersion,
-                architecture: architecture
-            )
-        }
-
-        return release
+        if let compatibleRelease { return compatibleRelease }
+        
+        throw SelectionError.noCompatibleRelease(toolsVersion: toolsVersion, architecture: architecture)
     }
 
 }
@@ -84,6 +73,7 @@ extension EnvironmentSelectionPolicy {
     private static func canonicalReleases(_ releases: [OfficialStableRelease]) -> [OfficialStableRelease] {
 
         var releasesByVersion: [SwiftVersion: OfficialStableRelease] = [:]
+        
         for release in releases {
             releasesByVersion[release.version] = release
         }
@@ -100,8 +90,10 @@ extension EnvironmentSelectionPolicy {
 
         guard let release = releases.first(where: { $0.version == version })
         else { throw SelectionError.unavailableRelease(version) }
+        
         guard version >= toolsVersion
         else { throw SelectionError.incompatibleToolsVersion(requested: version, required: toolsVersion) }
+        
         guard release.staticLinuxSDK.supports(architecture)
         else { throw SelectionError.unsupportedArchitecture(version: version, architecture: architecture) }
 

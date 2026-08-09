@@ -11,7 +11,6 @@ struct PackageInputSnapshot: Equatable, Sendable {
 
         do {
             let manifestURL = requirements.packageRoot.appending(path: "Package.swift")
-
             let manifest = try Data(contentsOf: manifestURL)
             let swiftVersionFile = try requirements.swiftVersionFileURL.map { try Data(contentsOf: $0) }
 

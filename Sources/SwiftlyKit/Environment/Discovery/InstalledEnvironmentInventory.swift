@@ -34,12 +34,13 @@ extension InstalledStableToolchain {
         do { payload = try JSONDecoder().decode(ToolchainListPayload.self, from: data) }
         catch { throw InventoryError.invalidSwiftlyPayload }
 
-        return Set(payload.toolchains.compactMap { item in
+        let toolchains: Set<InstalledStableToolchain> = Set(payload.toolchains.compactMap { item in
             guard item.version.type == "stable" else { return nil }
             guard let version = SwiftVersion(parsing: item.version.name) else { return nil }
             return InstalledStableToolchain(version: version)
         })
-        .sorted { $0.version > $1.version }
+
+        return toolchains.sorted { $0.version > $1.version }
     }
 
     private struct ToolchainListPayload: Decodable {
@@ -68,25 +69,24 @@ struct InstalledStaticLinuxSDK: Hashable, Sendable {
 
     let toolchainVersion: SwiftVersion
     let identifier: String
-
-}
-
-extension InstalledStaticLinuxSDK {
-
+    
     /// Parses the line-oriented identifiers emitted by `swift sdk list`.
     static func parseList(_ output: String, toolchainVersion: SwiftVersion) -> [InstalledStaticLinuxSDK] {
 
         Set(output.split(whereSeparator: \Character.isNewline).compactMap { line in
             let identifier = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            
             guard identifier.contains("_static-linux-") else { return nil }
             guard !identifier.contains(where: \Character.isWhitespace) else { return nil }
-            return InstalledStaticLinuxSDK(
-                toolchainVersion: toolchainVersion,
-                identifier: identifier
-            )
+            
+            return InstalledStaticLinuxSDK(toolchainVersion: toolchainVersion, identifier: identifier)
         })
         .sorted { $0.identifier < $1.identifier }
     }
+
+}
+
+extension InstalledStaticLinuxSDK {
 
 }
 

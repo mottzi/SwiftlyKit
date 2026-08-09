@@ -5,6 +5,7 @@ enum SDKBundleLocator {
     static func locate(identifier: String, homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL? {
 
         let bundleName = "\(identifier).artifactbundle"
+        
         let candidates = [
             homeDirectory.appending(path: ".swiftpm/swift-sdks/\(bundleName)"),
             homeDirectory.appending(path: "Library/org.swift.swiftpm/swift-sdks/\(bundleName)")

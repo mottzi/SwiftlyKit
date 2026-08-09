@@ -15,10 +15,10 @@ struct SwiftOrgReleaseCatalog: Sendable {
 
         do {
             let response = try await load(Self.releasesURL)
-
             try Task.checkCancellation()
 
-            guard response.statusCode == 200 else { throw CatalogError.unexpectedResponse(statusCode: response.statusCode) }
+            guard response.statusCode == 200
+            else { throw CatalogError.unexpectedResponse(statusCode: response.statusCode) }
 
             return try Self.parse(response.data)
         } catch is CancellationError {
@@ -27,7 +27,6 @@ struct SwiftOrgReleaseCatalog: Sendable {
             throw error
         } catch {
             if Task.isCancelled { throw CancellationError() }
-
             throw CatalogError.networkFailure
         }
     }
@@ -53,10 +52,8 @@ struct SwiftOrgReleaseCatalog: Sendable {
 extension SwiftOrgReleaseCatalog {
 
     struct Response: Sendable {
-
         let data: Data
         let statusCode: Int?
-
     }
 
     enum CatalogError: Error, Equatable, Sendable {
@@ -74,6 +71,7 @@ extension SwiftOrgReleaseCatalog {
         guard let name = payload.name else { return nil }
         guard let version = SwiftVersion(parsing: name) else { return nil }
         guard payload.tag == "swift-\(name)-RELEASE" else { return nil }
+        
         guard let platform = payload.platforms?.first(where: { $0.platform == "static-sdk" }) else { return nil }
         guard let sdkVersion = platform.version else { return nil }
         guard SwiftVersion(parsing: sdkVersion) != nil else { return nil }
@@ -105,11 +103,8 @@ extension SwiftOrgReleaseCatalog {
 
         guard let checksum else { return nil }
         guard checksum.utf8.count == 64 else { return nil }
-        guard checksum.utf8.allSatisfy({ byte in
-            byte >= Character("0").asciiValue! && byte <= Character("9").asciiValue!
-                || byte >= Character("a").asciiValue! && byte <= Character("f").asciiValue!
-                || byte >= Character("A").asciiValue! && byte <= Character("F").asciiValue!
-        }) else { return nil }
+        guard checksum.isASCIIHexadecimal else { return nil }
+
         return checksum.lowercased()
     }
 

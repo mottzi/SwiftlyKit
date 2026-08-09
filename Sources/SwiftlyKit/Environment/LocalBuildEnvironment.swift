@@ -19,7 +19,6 @@ public struct LocalBuildEnvironment: Sendable {
         sdkBundleURL: URL,
         target: BuildTarget
     ) {
-
         self.swiftVersion = swiftVersion
         self.staticLinuxSDK = staticLinuxSDK
         self.packageRoot = packageRoot

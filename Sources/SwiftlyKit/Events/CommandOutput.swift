@@ -4,11 +4,6 @@ public struct CommandOutput: Sendable {
     public let stream: Stream
     public let text: String
 
-    public enum Stream: Sendable, Hashable {
-        case standardOutput
-        case standardError
-    }
-
     init(stream: Stream, text: String) {
         self.stream = stream
         self.text = text
@@ -28,4 +23,13 @@ public struct CommandOutput: Sendable {
         }
     }
 
+}
+
+extension CommandOutput {
+    
+    public enum Stream: Sendable, Hashable {
+        case standardOutput
+        case standardError
+    }
+    
 }

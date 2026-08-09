@@ -15,7 +15,11 @@ extension SwiftPM {
 
         let resolutionCommand = command(
             environment,
-            swiftArguments: ["package", "--package-path", environment.packageRoot.path, "resolve"],
+            swiftArguments: [
+                "package",
+                "--package-path", environment.packageRoot.path,
+                "resolve"
+            ],
             workingDirectory: environment.packageRoot
         )
 

@@ -58,6 +58,7 @@ actor MutationGate {
     private func cancel(_ id: UUID) {
 
         if grantedWaiters.remove(id) != nil { return }
+        
         guard let index = waiters.firstIndex(where: { $0.id == id }) else {
             cancelledWaiters.insert(id)
             return
@@ -80,6 +81,7 @@ actor MutationGate {
 
             grantedWaiters.insert(waiter.id)
             waiter.continuation.resume(returning: true)
+            
             return
         }
 

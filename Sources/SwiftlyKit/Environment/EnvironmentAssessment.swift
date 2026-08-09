@@ -9,6 +9,23 @@ public struct EnvironmentAssessment: Sendable {
     let release: OfficialStableRelease
     let target: BuildTarget
 
+    init(
+        packageInputs: PackageInputSnapshot,
+        release: OfficialStableRelease,
+        requiredComponents: [PreparationComponent],
+        target: BuildTarget
+    ) {
+
+        self.packageInputs = packageInputs
+        self.release = release
+        self.requiredComponents = requiredComponents
+        self.target = target
+    }
+
+}
+
+extension EnvironmentAssessment {
+    
     /// The canonical package root captured during assessment.
     public var packageRoot: URL {
         packageInputs.requirements.packageRoot
@@ -51,18 +68,5 @@ public struct EnvironmentAssessment: Sendable {
     public var requiresInstallation: Bool {
         !requiredComponents.isEmpty
     }
-
-    init(
-        packageInputs: PackageInputSnapshot,
-        release: OfficialStableRelease,
-        requiredComponents: [PreparationComponent],
-        target: BuildTarget
-    ) {
-
-        self.packageInputs = packageInputs
-        self.release = release
-        self.requiredComponents = requiredComponents
-        self.target = target
-    }
-
+    
 }

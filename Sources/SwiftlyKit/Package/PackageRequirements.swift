@@ -14,21 +14,22 @@ struct PackageRequirements: Equatable, Sendable {
         guard packageRoot.isFileURL else { throw LoadingError.invalidPackageRoot(packageRoot) }
 
         let canonicalRoot = packageRoot.resolvingSymlinksInPath().standardizedFileURL
-
+        
         guard isDirectory(at: canonicalRoot) else { throw LoadingError.invalidPackageRoot(packageRoot) }
 
         let manifestURL = canonicalRoot.appending(path: "Package.swift")
-        guard FileManager.default.fileExists(atPath: manifestURL.path) else { throw LoadingError.invalidPackageRoot(packageRoot) }
-        guard isRegularReadableFile(at: manifestURL) else { throw LoadingError.unreadableManifest(manifestURL) }
+        
+        guard FileManager.default.fileExists(atPath: manifestURL.path)
+        else { throw LoadingError.invalidPackageRoot(packageRoot) }
+        
+        guard isRegularReadableFile(at: manifestURL)
+        else { throw LoadingError.unreadableManifest(manifestURL) }
 
         let manifest: String
         do {
             let data = try Data(contentsOf: manifestURL)
-
             let decoded = String(data: data, encoding: .utf8)
-
             guard let decoded else { throw LoadingError.unreadableManifest(manifestURL) }
-
             manifest = decoded
         } catch let error as LoadingError {
             throw error
@@ -100,12 +101,14 @@ extension PackageRequirements {
         guard labelStart.prefix(label.count).lowercased() == label else { return nil }
 
         let valueStart = labelStart.dropFirst(label.count)
+       
         let valueBeforeTerminator: Substring
         if let semicolon = valueStart.firstIndex(of: ";") {
             valueBeforeTerminator = valueStart[..<semicolon]
         } else {
             valueBeforeTerminator = valueStart
         }
+        
         let value = valueBeforeTerminator
             .drop(while: isHorizontalWhitespace)
             .reversed()
@@ -134,11 +137,8 @@ extension PackageRequirements {
 
                 do {
                     let data = try Data(contentsOf: candidate)
-
                     let value = String(data: data, encoding: .utf8)
-
                     guard let value else { throw LoadingError.unreadableSwiftVersionFile(canonicalCandidate) }
-
                     return (value.trimmingCharacters(in: .whitespacesAndNewlines), canonicalCandidate)
                 } catch let error as LoadingError {
                     throw error
