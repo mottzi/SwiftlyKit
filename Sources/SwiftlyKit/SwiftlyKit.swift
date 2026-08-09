@@ -18,19 +18,20 @@ import Foundation
 /// )
 /// ```
 public struct SwiftlyKit: Sendable {
-
+    
     private let mutationGate: MutationGate
     private let assessor: EnvironmentAssessor
     private let preparer: EnvironmentPreparer
     private let swiftPM: SwiftPM
-
+    
     public init() {
-        self.mutationGate = MutationGate()
-        self.assessor = EnvironmentAssessor()
-        self.preparer = EnvironmentPreparer()
-        self.swiftPM = SwiftPM()
+        self.init(
+            assessor: EnvironmentAssessor(),
+            preparer: EnvironmentPreparer(),
+            swiftPM: SwiftPM()
+        )
     }
-
+    
     /// Assesses the exact environment required by a trusted local package.
     public func assess(
         _ packageRoot: URL,
@@ -39,112 +40,76 @@ public struct SwiftlyKit: Sendable {
     ) async throws -> EnvironmentAssessment {
         try await assessor.assess(packageRoot, for: target, toolchain: toolchain)
     }
-
+    
     /// Performs the exact mutations described by an accepted assessment.
     public func prepare(
         _ assessment: EnvironmentAssessment,
         onEvent: EventHandler? = nil
     ) async throws -> LocalBuildEnvironment {
-
+        
         try await mutationGate.withAccess {
-            do {
-                return try await preparer.prepare(assessment, onEvent: onEvent)
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch let error as SwiftlyKitError {
-                throw error
-            } catch let error as EnvironmentPreparationError {
-                throw error.swiftlyKitError
-            } catch let error as InstalledEnvironmentError {
-                throw error.swiftlyKitError
-            } catch {
-                throw SwiftlyKitError.swiftlyInstallationFailed(
-                    "An unexpected environment error occurred."
-                )
-            }
+            do { return try await preparer.prepare(assessment, onEvent: onEvent) }
+            catch is CancellationError { throw CancellationError() }
+            catch let error as SwiftlyKitError { throw error }
+            catch let error as EnvironmentPreparationError { throw error.swiftlyKitError }
+            catch let error as InstalledEnvironmentError { throw error.swiftlyKitError }
+            catch { throw SwiftlyKitError.swiftlyInstallationFailed("An unexpected environment error occurred.") }
         }
     }
-
+    
     /// Discovers executable products in the package bound to a prepared environment.
-    public func executableProducts(
-        using environment: LocalBuildEnvironment
-    ) async throws -> [ExecutableProduct] {
-
-        do {
-            return try await swiftPM.executableProducts(using: environment)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as SwiftlyKitError {
-            throw error
-        } catch let error as SwiftPMError {
-            throw error.swiftlyKitError
-        } catch {
-            throw SwiftlyKitError.packageInspectionFailed("An unexpected package error occurred.")
-        }
+    public func executableProducts(using environment: LocalBuildEnvironment) async throws -> [ExecutableProduct] {
+        
+        do { return try await swiftPM.executableProducts(using: environment) }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as SwiftlyKitError { throw error }
+        catch let error as SwiftPMError { throw error.swiftlyKitError }
+        catch { throw SwiftlyKitError.packageInspectionFailed("An unexpected package error occurred.") }
     }
-
+    
     /// Explicitly resolves dependencies in the package bound to a prepared environment.
-    public func resolveDependencies(
-        using environment: LocalBuildEnvironment,
-        onEvent: EventHandler? = nil
-    ) async throws {
-
+    public func resolveDependencies(using environment: LocalBuildEnvironment, onEvent: EventHandler? = nil) async throws {
+        
         try await mutationGate.withAccess {
-            do {
-                try await swiftPM.resolveDependencies(
-                    using: environment,
-                    onEvent: onEvent
-                )
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch let error as SwiftlyKitError {
-                throw error
-            } catch let error as SwiftPMError {
-                throw error.swiftlyKitError
-            } catch {
-                throw SwiftlyKitError.dependencyResolutionFailed(
-                    "An unexpected dependency resolution error occurred."
-                )
+            do { try await swiftPM.resolveDependencies(using: environment, onEvent: onEvent) }
+            catch is CancellationError { throw CancellationError() }
+            catch let error as SwiftlyKitError { throw error }
+            catch let error as SwiftPMError { throw error.swiftlyKitError }
+            catch {
+                throw SwiftlyKitError.dependencyResolutionFailed("An unexpected dependency resolution error occurred.")
             }
         }
     }
-
+    
     /// Builds, verifies, and optionally publishes one executable product.
     public func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
         onEvent: EventHandler? = nil
     ) async throws -> URL {
-
+        
         try await mutationGate.withAccess {
             guard !request.product.name.isEmpty
             else { throw SwiftlyKitError.executableProductNotFound(request.product.name) }
-
-            do {
-                return try await swiftPM.build(
-                    request,
-                    using: environment,
-                    onEvent: onEvent
-                )
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch let error as SwiftlyKitError {
-                throw error
-            } catch let error as SwiftPMError {
-                throw error.swiftlyKitError
-            } catch {
-                throw SwiftlyKitError.buildFailed("An unexpected build error occurred.")
-            }
+            
+            do { return try await swiftPM.build(request, using: environment, onEvent: onEvent) }
+            catch is CancellationError { throw CancellationError() }
+            catch let error as SwiftlyKitError { throw error }
+            catch let error as SwiftPMError { throw error.swiftlyKitError }
+            catch { throw SwiftlyKitError.buildFailed("An unexpected build error occurred.") }
         }
     }
+    
+}
+
+extension SwiftlyKit {
 
     init(
-        mutationGate: MutationGate = MutationGate(),
         assessor: EnvironmentAssessor,
         preparer: EnvironmentPreparer,
         swiftPM: SwiftPM
     ) {
-        self.mutationGate = mutationGate
+        self.mutationGate = MutationGate()
         self.assessor = assessor
         self.preparer = preparer
         self.swiftPM = swiftPM

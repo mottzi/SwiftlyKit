@@ -3,52 +3,34 @@ import Foundation
 /// Prepares exactly the environment authorized by an accepted assessment.
 struct EnvironmentPreparer: Sendable {
 
-    let homeDirectory: URL
-    let temporaryDirectory: URL
-    let runner: any SubprocessRunning
-    let checkHost: @Sendable () async throws -> Void
-    let downloadPackage: @Sendable (URL, URL) async throws -> Int
-    let detectSwiftly: @Sendable () async throws -> SwiftlyInstallation?
-    let inspect: @Sendable (SwiftlyInstallation, SwiftVersion) async throws -> InstalledEnvironmentInventory
-    let locateSDK: @Sendable (String) -> URL?
-    let revalidate: @Sendable (EnvironmentAssessment) async throws -> Void
-
-    init(
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        temporaryDirectory: URL = FileManager.default.temporaryDirectory,
-        runner: any SubprocessRunning = LiveSubprocessRunner(),
-        checkHost: @escaping @Sendable () async throws -> Void = {
-            _ = try await HostPreflight().check()
-        },
-        downloadPackage: @escaping @Sendable (URL, URL) async throws -> Int =
-            EnvironmentPreparer.liveDownload,
-        detectSwiftly: @escaping @Sendable () async throws -> SwiftlyInstallation? = {
-            try await SwiftlyInstallation.detect()
-        },
-        inspect: @escaping @Sendable (SwiftlyInstallation, SwiftVersion) async throws -> InstalledEnvironmentInventory = { swiftly, toolchain in
-            try await InstalledEnvironmentInspector().inspect(
-                swiftly: swiftly,
-                selectedToolchain: toolchain
-            )
-        },
-        locateSDK: @escaping @Sendable (String) -> URL? = {
-            SDKBundleLocator.locate(identifier: $0)
-        },
-        revalidate: @escaping @Sendable (EnvironmentAssessment) async throws -> Void = {
-            try $0.packageInputs.validateCurrent()
-        }
-    ) {
-
-        self.homeDirectory = homeDirectory
-        self.temporaryDirectory = temporaryDirectory
-        self.runner = runner
-        self.checkHost = checkHost
-        self.downloadPackage = downloadPackage
-        self.detectSwiftly = detectSwiftly
-        self.inspect = inspect
-        self.locateSDK = locateSDK
-        self.revalidate = revalidate
-
+    private(set) var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    private(set) var temporaryDirectory: URL = FileManager.default.temporaryDirectory
+    private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
+    
+    private(set) var checkHost: @Sendable () async throws -> Void = {
+        _ = try await HostPreflight().check()
+    }
+    
+    private(set) var downloadPackage: @Sendable (URL, URL) async throws -> Int =
+        EnvironmentPreparer.liveDownload
+    
+    private(set) var detectSwiftly: @Sendable () async throws -> SwiftlyInstallation? = {
+        try await SwiftlyInstallation.detect()
+    }
+    
+    private(set) var inspect: @Sendable (SwiftlyInstallation, SwiftVersion) async throws -> InstalledEnvironmentInventory = { swiftly, toolchain in
+        try await InstalledEnvironmentInspector().inspect(
+            swiftly: swiftly,
+            selectedToolchain: toolchain
+        )
+    }
+    
+    private(set) var locateSDK: @Sendable (String) -> URL? = {
+        SDKBundleLocator.locate(identifier: $0)
+    }
+    
+    private(set) var revalidate: @Sendable (EnvironmentAssessment) async throws -> Void = {
+        try $0.packageInputs.validateCurrent()
     }
 
 }
@@ -162,21 +144,16 @@ extension EnvironmentPreparer {
             path: "SwiftlyKit-\(UUID().uuidString)",
             directoryHint: .isDirectory
         )
-        do {
-            try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: false)
-        } catch {
-            throw EnvironmentPreparationError.downloadFailed
-        }
+        do { try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: false) }
+        catch { throw EnvironmentPreparationError.downloadFailed }
         defer { try? FileManager.default.removeItem(at: stagingDirectory) }
 
         let packageURL = stagingDirectory.appending(path: "swiftly.pkg")
         let statusCode: Int
         await report(.swiftly, "Downloading the official Swiftly installer from Swift.org.", to: onEvent)
-        do {
-            statusCode = try await downloadPackage(Self.officialPackageURL, packageURL)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
+        do { statusCode = try await downloadPackage(Self.officialPackageURL, packageURL) }
+        catch is CancellationError { throw CancellationError() }
+        catch {
             if Task.isCancelled { throw CancellationError() }
             throw EnvironmentPreparationError.downloadFailed
         }
@@ -237,11 +214,9 @@ extension EnvironmentPreparer {
         onEvent: EventHandler?
     ) async throws -> SubprocessResult {
 
-        do {
-            return try await runner.run(command, onOutput: CommandOutput.handler(for: onEvent))
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
+        do { return try await runner.run(command, onOutput: CommandOutput.handler(for: onEvent)) }
+        catch is CancellationError { throw CancellationError() }
+        catch {
             if Task.isCancelled { throw CancellationError() }
             throw EnvironmentPreparationError.commandCouldNotRun(command.executableURL)
         }

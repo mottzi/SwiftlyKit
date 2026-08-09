@@ -2,17 +2,10 @@ import Foundation
 
 struct SwiftPM: Sendable {
 
-    let runner: any SubprocessRunning
-    let validateEnvironment: @Sendable (LocalBuildEnvironment) throws -> Void
-
-    init(
-        runner: any SubprocessRunning = LiveSubprocessRunner(),
-        validateEnvironment: @escaping @Sendable (LocalBuildEnvironment) throws -> Void = {
-            try SwiftPM.validate($0)
-        }
-    ) {
-        self.runner = runner
-        self.validateEnvironment = validateEnvironment
+    private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
+    
+    private(set) var validateEnvironment: @Sendable (LocalBuildEnvironment) throws -> Void = {
+        try SwiftPM.validate($0)
     }
 
 }
@@ -22,11 +15,8 @@ extension SwiftPM {
     private static func validate(_ environment: LocalBuildEnvironment) throws {
 
         let requirements: PackageRequirements
-        do {
-            requirements = try PackageRequirements.load(at: environment.packageRoot)
-        } catch let error as PackageRequirements.LoadingError {
-            throw error.swiftlyKitError
-        }
+        do { requirements = try PackageRequirements.load(at: environment.packageRoot) }
+        catch let error as PackageRequirements.LoadingError { throw error.swiftlyKitError }
 
         guard requirements.toolsVersion <= environment.swiftVersion
         else { throw SwiftlyKitError.unsupportedToolsVersion(requirements.toolsVersion) }

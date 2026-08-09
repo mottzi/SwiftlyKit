@@ -3,17 +3,10 @@ import Foundation
 /// Read-only validation of the host and its active macOS SDK.
 struct HostPreflight: Sendable {
     
-    let hostFacts: HostFacts
-    let sdkProbe: @Sendable () async throws -> URL
+    private(set) var hostFacts: HostFacts = .live
     
-    init(
-        hostFacts: HostFacts = .live,
-        sdkProbe: @escaping @Sendable () async throws -> URL = {
-            try await HostPreflight.liveSDKProbe()
-        }
-    ) {
-        self.hostFacts = hostFacts
-        self.sdkProbe = sdkProbe
+    private(set) var sdkProbe: @Sendable () async throws -> URL = {
+        try await HostPreflight.liveSDKProbe()
     }
     
 }
@@ -29,11 +22,9 @@ extension HostPreflight {
         guard hostFacts.operatingSystemVersion.majorVersion >= 13 else { throw SwiftlyKitError.unsupportedHost }
         
         let sdkURL: URL
-        do {
-            sdkURL = try await sdkProbe()
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
+        do { sdkURL = try await sdkProbe() }
+        catch is CancellationError { throw CancellationError() }
+        catch {
             if Task.isCancelled { throw CancellationError() }
             throw SwiftlyKitError.developerToolsUnavailable
         }

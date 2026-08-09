@@ -1,4 +1,3 @@
-import Darwin
 import Foundation
 
 enum AtomicOutputPublisher {
@@ -14,22 +13,16 @@ enum AtomicOutputPublisher {
         let temporary = destination
             .deletingLastPathComponent()
             .appending(path: ".\(destination.lastPathComponent).swiftlykit-\(UUID().uuidString)")
-
-        do {
-            try FileManager.default.copyItem(at: source, to: temporary)
-        } catch {
-            throw SwiftPMError.outputPublicationFailed(destination)
-        }
         
         do { try FileManager.default.copyItem(at: source, to: temporary) }
         catch { throw SwiftPMError.outputPublicationFailed(destination) }
-        
         defer { try? FileManager.default.removeItem(at: temporary) }
 
         let renameStatus = renameatx_np(AT_FDCWD, temporary.path, AT_FDCWD, destination.path, UInt32(RENAME_EXCL))
-        guard renameStatus == 0 else {
+        
+        if renameStatus != 0 {
             if errno == EEXIST { throw SwiftPMError.outputAlreadyExists(destination) }
-            throw SwiftPMError.outputPublicationFailed(destination)
+            else { throw SwiftPMError.outputPublicationFailed(destination) }
         }
 
         return destination

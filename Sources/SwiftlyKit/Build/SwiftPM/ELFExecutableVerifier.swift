@@ -5,15 +5,9 @@ enum ELFExecutableVerifier {
 
     static func verify(_ url: URL, architecture: LinuxArchitecture) throws(SwiftPMError) {
 
-        do {
-            try verifyContents(of: url, architecture: architecture)
-        } catch let error as SwiftPMError {
-            throw error
-        } catch {
-            throw SwiftPMError.invalidExecutable(
-                "The output could not be read for verification: \(error.localizedDescription)"
-            )
-        }
+        do { try verifyContents(of: url, architecture: architecture) }
+        catch let error as SwiftPMError { throw error }
+        catch { throw .invalidExecutable("The output could not be read for verification: \(error.localizedDescription)") }
     }
 
 }

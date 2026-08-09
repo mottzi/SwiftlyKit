@@ -3,18 +3,10 @@ import Foundation
 /// Fetches the official stable Swift release catalog without retaining network state.
 struct SwiftOrgReleaseCatalog: Sendable {
 
-    private let load: @Sendable (URL) async throws -> Response
-
-    init() {
-        self.init { url in
-            let (data, response) = try await URLSession.shared.data(from: url)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode
-            return Response(data: data, statusCode: statusCode)
-        }
-    }
-
-    init(load: @escaping @Sendable (URL) async throws -> Response) {
-        self.load = load
+    private(set) var load: @Sendable (URL) async throws -> Response = { url in
+        let (data, response) = try await URLSession.shared.data(from: url)
+        let statusCode = (response as? HTTPURLResponse)?.statusCode
+        return Response(data: data, statusCode: statusCode)
     }
 
     func stableReleases() async throws -> [OfficialStableRelease] {
@@ -40,11 +32,8 @@ struct SwiftOrgReleaseCatalog: Sendable {
     static func parse(_ data: Data) throws -> [OfficialStableRelease] {
 
         let payloads: [ReleasePayload]
-        do {
-            payloads = try JSONDecoder().decode([ReleasePayload].self, from: data)
-        } catch {
-            throw CatalogError.invalidPayload
-        }
+        do { payloads = try JSONDecoder().decode([ReleasePayload].self, from: data) }
+        catch { throw CatalogError.invalidPayload }
 
         var releasesByVersion: [SwiftVersion: OfficialStableRelease] = [:]
         for payload in payloads {

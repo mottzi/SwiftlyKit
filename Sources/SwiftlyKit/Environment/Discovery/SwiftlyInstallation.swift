@@ -22,11 +22,9 @@ extension SwiftlyInstallation {
         guard let executableURL = candidates.first(where: isExecutableRegularFile(at:)) else { return nil }
         
         let versionOutput: String
-        do {
-            versionOutput = try await versionProbe(executableURL)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
+        do { versionOutput = try await versionProbe(executableURL) }
+        catch is CancellationError { throw CancellationError() }
+        catch {
             if Task.isCancelled { throw CancellationError() }
             throw SwiftlyKitError.incompatibleSwiftly
         }

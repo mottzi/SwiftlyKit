@@ -3,39 +3,25 @@ import Foundation
 /// Read-only orchestration that resolves one exact build environment.
 struct EnvironmentAssessor: Sendable {
     
-    let checkHost: @Sendable () async throws -> Void
-    let detectSwiftly: @Sendable () async throws -> SwiftlyInstallation?
-    let loadReleases: @Sendable () async throws -> [OfficialStableRelease]
-    let inspectInventory: @Sendable (SwiftlyInstallation) async throws -> InstalledEnvironmentInventory
-    let locateSDK: @Sendable (String) -> URL?
-    
-    init(
-        checkHost: @escaping @Sendable () async throws -> Void = {
-            _ = try await HostPreflight().check()
-        },
-        detectSwiftly: @escaping @Sendable () async throws -> SwiftlyInstallation? = {
-            try await SwiftlyInstallation.detect()
-        },
-        loadReleases: @escaping @Sendable () async throws -> [OfficialStableRelease] = {
-            try await SwiftOrgReleaseCatalog().stableReleases()
-        },
-        inspectInventory: @escaping @Sendable (SwiftlyInstallation) async throws -> InstalledEnvironmentInventory = {
-            try await InstalledEnvironmentInspector().inspectAll(swiftly: $0)
-        },
-        locateSDK: @escaping @Sendable (String) -> URL? = {
-            SDKBundleLocator.locate(identifier: $0)
-        }
-    ) {
-        self.checkHost = checkHost
-        self.detectSwiftly = detectSwiftly
-        self.loadReleases = loadReleases
-        self.inspectInventory = inspectInventory
-        self.locateSDK = locateSDK
+    private(set) var checkHost: @Sendable () async throws -> Void = {
+        _ = try await HostPreflight().check()
     }
     
-}
-
-extension EnvironmentAssessor {
+    private(set) var detectSwiftly: @Sendable () async throws -> SwiftlyInstallation? = {
+        try await SwiftlyInstallation.detect()
+    }
+    
+    private(set) var loadReleases: @Sendable () async throws -> [OfficialStableRelease] = {
+        try await SwiftOrgReleaseCatalog().stableReleases()
+    }
+    
+    private(set) var inspectInventory: @Sendable (SwiftlyInstallation) async throws -> InstalledEnvironmentInventory = {
+        try await InstalledEnvironmentInspector().inspectAll(swiftly: $0)
+    }
+    
+    private(set) var locateSDK: @Sendable (String) -> URL? = {
+        SDKBundleLocator.locate(identifier: $0)
+    }
     
     func assess(
         _ packageRoot: URL,
@@ -63,13 +49,10 @@ extension EnvironmentAssessor {
                 installedToolchains: inventory.toolchains,
                 installedSDKs: inventory.sdks
             )
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as EnvironmentSelectionPolicy.SelectionError {
-            throw error.swiftlyKitError
-        } catch {
-            throw SwiftlyKitError.compatibleReleaseUnavailable
         }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as EnvironmentSelectionPolicy.SelectionError { throw error.swiftlyKitError }
+        catch { throw SwiftlyKitError.compatibleReleaseUnavailable }
         
         let toolchainAvailable = inventory.contains(toolchain: release.version)
         let sdkListed = inventory.contains(
@@ -97,24 +80,18 @@ extension EnvironmentAssessor {
     
     private func loadRequirements(at packageRoot: URL) throws -> PackageRequirements {
 
-        do {
-            return try PackageRequirements.load(at: packageRoot)
-        } catch let error as PackageRequirements.LoadingError {
-            throw error.swiftlyKitError
-        }
+        do { return try PackageRequirements.load(at: packageRoot) }
+        catch let error as PackageRequirements.LoadingError { throw error.swiftlyKitError }
     }
     
     private func officialReleases() async throws -> [OfficialStableRelease] {
 
-        do {
-            return try await loadReleases()
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch SwiftOrgReleaseCatalog.CatalogError.invalidPayload {
+        do { return try await loadReleases() }
+        catch is CancellationError { throw CancellationError() }
+        catch SwiftOrgReleaseCatalog.CatalogError.invalidPayload {
             throw SwiftlyKitError.integrityCheckFailed("Swift.org returned unsupported release metadata.")
-        } catch {
-            throw SwiftlyKitError.networkFailure("The Swift.org release catalog is unavailable.")
         }
+        catch { throw SwiftlyKitError.networkFailure("The Swift.org release catalog is unavailable.") }
     }
     
     private func installedInventory(
@@ -122,13 +99,9 @@ extension EnvironmentAssessor {
     ) async throws -> InstalledEnvironmentInventory {
 
         guard let swiftly else { return InstalledEnvironmentInventory(toolchains: [], sdks: []) }
-        do {
-            return try await inspectInventory(swiftly)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            throw SwiftlyKitError.incompatibleSwiftly
-        }
+        do { return try await inspectInventory(swiftly) }
+        catch is CancellationError { throw CancellationError() }
+        catch { throw SwiftlyKitError.incompatibleSwiftly }
     }
     
 }

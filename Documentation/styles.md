@@ -18,4 +18,5 @@ Apply these rules to statement layout.
 - Indent every `case` one level inside its `switch`.
 - Keep a case containing exactly one non-compound statement on the same line as its case label.
 - Place a compound case body on subsequent indented lines. Compound statements include conditionals, switches, loops, and `do` blocks.
+- When a `do` block and an associated `catch` clause each contain exactly one non-compound statement, keep each complete block on its own single line only when that line ends before column 125. Expand any horizontally long block, placing its statement on subsequent indented lines. Apply the line-length decision independently to the `do` block and every clause in a `catch` chain.
 - When nested fallible operations produce separately meaningful domain values, bind the inner result before performing the outer operation.

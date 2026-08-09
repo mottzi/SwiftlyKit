@@ -3,17 +3,9 @@ import Foundation
 /// Inspects Swiftly and SwiftPM without changing selection or installed state.
 struct InstalledEnvironmentInspector: Sendable {
 
-    let runner: any SubprocessRunning
-    let isToolchainUsable: @Sendable (SwiftVersion) -> Bool
-
-    init(
-        runner: any SubprocessRunning = LiveSubprocessRunner(),
-        isToolchainUsable: @escaping @Sendable (SwiftVersion) -> Bool =
-            InstalledEnvironmentInspector.liveToolchainUsability
-    ) {
-        self.runner = runner
-        self.isToolchainUsable = isToolchainUsable
-    }
+    private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
+    private(set) var isToolchainUsable: @Sendable (SwiftVersion) -> Bool =
+        InstalledEnvironmentInspector.liveToolchainUsability
 
 }
 
@@ -39,13 +31,9 @@ extension InstalledEnvironmentInspector {
         let toolchains = try await installedToolchains(swiftly: swiftly)
         var sdks: [InstalledStaticLinuxSDK] = []
         for toolchain in toolchains {
-            do {
-                sdks += try await installedSDKs(swiftly: swiftly, toolchain: toolchain.version)
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                continue
-            }
+            do { sdks += try await installedSDKs(swiftly: swiftly, toolchain: toolchain.version) }
+            catch is CancellationError { throw CancellationError() }
+            catch { continue }
         }
 
         return InstalledEnvironmentInventory(toolchains: toolchains, sdks: sdks)
@@ -81,12 +69,8 @@ extension InstalledEnvironmentInspector {
         ))
         guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
         guard let data = result.standardOutput.data(using: .utf8) else { throw InstalledEnvironmentError.invalidOutput }
-        do {
-            return try InstalledStableToolchain.parseSwiftlyList(data)
-                .filter { isToolchainUsable($0.version) }
-        } catch {
-            throw InstalledEnvironmentError.invalidOutput
-        }
+        do { return try InstalledStableToolchain.parseSwiftlyList(data).filter { isToolchainUsable($0.version) } }
+        catch { throw InstalledEnvironmentError.invalidOutput }
     }
     
     private func installedSDKs(
@@ -108,11 +92,9 @@ extension InstalledEnvironmentInspector {
 
     private func run(_ command: SubprocessCommand) async throws -> SubprocessResult {
 
-        do {
-            return try await runner.run(command)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
+        do { return try await runner.run(command) }
+        catch is CancellationError { throw CancellationError() }
+        catch {
             if Task.isCancelled { throw CancellationError() }
             throw InstalledEnvironmentError.commandCouldNotRun(command.executableURL)
         }

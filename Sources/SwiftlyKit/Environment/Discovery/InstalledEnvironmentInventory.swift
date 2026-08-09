@@ -31,11 +31,8 @@ extension InstalledStableToolchain {
     static func parseSwiftlyList(_ data: Data) throws -> [InstalledStableToolchain] {
 
         let payload: ToolchainListPayload
-        do {
-            payload = try JSONDecoder().decode(ToolchainListPayload.self, from: data)
-        } catch {
-            throw InventoryError.invalidSwiftlyPayload
-        }
+        do { payload = try JSONDecoder().decode(ToolchainListPayload.self, from: data) }
+        catch { throw InventoryError.invalidSwiftlyPayload }
 
         return Set(payload.toolchains.compactMap { item in
             guard item.version.type == "stable" else { return nil }
