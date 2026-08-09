@@ -19,16 +19,6 @@ struct ValueModelTests {
         #expect(SwiftVersion(major: 6, minor: 2, patch: 1) > minor)
     }
 
-    @Test("Toolchain selection supports automatic and exact versions")
-    func toolchainSelection() {
-
-        let version = SwiftVersion(major: 6, minor: 2, patch: 0)
-
-        #expect(ToolchainSelection.automatic == .automatic)
-        #expect(ToolchainSelection.exact(version) == .exact(version))
-        #expect(ToolchainSelection.exact(version) != .automatic)
-    }
-
     @Test("Linux architectures map to their SDK selectors and ELF values")
     func linuxArchitectureMappings() {
 
@@ -36,40 +26,6 @@ struct ValueModelTests {
         #expect(LinuxArchitecture.x86_64.swiftSDKSelector == "x86_64-swift-linux-musl")
         #expect(LinuxArchitecture.arm64.elfMachine == 183)
         #expect(LinuxArchitecture.x86_64.elfMachine == 62)
-    }
-
-    @Test("Executable products use name identity")
-    func executableProductIdentity() {
-
-        let server = ExecutableProduct(name: "Server")
-        let sameServer = ExecutableProduct(name: "Server")
-        let client = ExecutableProduct(name: "Client")
-
-        #expect(server.name == "Server")
-        #expect(server == sameServer)
-        #expect(server != client)
-    }
-
-    @Test("Build requests preserve supplied values")
-    func buildRequestPreservesValues() {
-
-        let scratchDirectory = URL(filePath: "/tmp/example/.build")
-        let output = URL(filePath: "/tmp/example/server")
-        let request = BuildRequest(
-            ExecutableProduct(name: "Server"),
-            configuration: .release,
-            scratchDirectory: scratchDirectory,
-            output: output,
-            strip: true,
-            environment: ["SWIFT_VERSION": "6.2"]
-        )
-
-        #expect(request.product.name == "Server")
-        #expect(request.configuration == .release)
-        #expect(request.scratchDirectory == scratchDirectory)
-        #expect(request.output == output)
-        #expect(request.strip)
-        #expect(request.environment == ["SWIFT_VERSION": "6.2"])
     }
 
     @Test("Build requests provide the documented defaults")

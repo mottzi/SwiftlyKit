@@ -42,6 +42,12 @@ struct SwiftlyKitWorkflowTests {
             await #expect(throws: SwiftlyKitError.staleAssessment) {
                 try await kit.prepare(assessment)
             }
+
+            try originalManifest.write(to: manifestURL)
+            try Data("6.2.1\n".utf8).write(to: packageRoot.appending(path: ".swift-version"))
+            await #expect(throws: SwiftlyKitError.staleAssessment) {
+                try await kit.prepare(assessment)
+            }
         }
     }
 
@@ -118,6 +124,42 @@ struct SwiftlyKitWorkflowTests {
         }
     }
 
+    @Test("Public mutating workflows share one instance-level gate")
+    func mutatingWorkflowsAreSerialized() async throws {
+
+        try await withWorkflowTemporaryDirectory { packageRoot in
+            let executable = packageRoot.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let runner = WorkflowMutationRunner(binaryDirectory: packageRoot)
+            let kit = SwiftlyKit(
+                assessor: EnvironmentAssessor(),
+                preparer: EnvironmentPreparer(),
+                swiftPM: SwiftPM(
+                    runner: runner,
+                    validateEnvironment: { _ in }
+                )
+            )
+            let environment = LocalBuildEnvironment(
+                swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
+                staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
+                packageRoot: packageRoot,
+                swiftlyExecutableURL: URL(filePath: "/swiftly"),
+                sdkBundleURL: packageRoot.appending(path: "sdk.artifactbundle"),
+                target: .linux(.arm64)
+            )
+
+            async let resolution: Void = kit.resolveDependencies(using: environment)
+            async let build = kit.build(
+                BuildRequest(ExecutableProduct(name: "Tool")),
+                using: environment
+            )
+            let (_, built) = try await (resolution, build)
+
+            #expect(built == executable)
+            #expect(await runner.maximumConcurrentCommands == 1)
+        }
+    }
+
 }
 
 private func withWorkflowTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
@@ -127,4 +169,47 @@ private func withWorkflowTemporaryDirectory<T>(_ body: (URL) async throws -> T) 
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
     defer { try? FileManager.default.removeItem(at: directory) }
     return try await body(directory)
+}
+
+private actor WorkflowMutationRunner: SubprocessRunning {
+
+    private let binaryDirectory: URL
+    private var concurrentCommands = 0
+    private(set) var maximumConcurrentCommands = 0
+
+    init(binaryDirectory: URL) {
+        self.binaryDirectory = binaryDirectory
+    }
+
+    func run(
+        _ command: SubprocessCommand,
+        onOutput: SubprocessOutputHandler?
+    ) async throws -> SubprocessResult {
+
+        concurrentCommands += 1
+        maximumConcurrentCommands = max(maximumConcurrentCommands, concurrentCommands)
+        defer { concurrentCommands -= 1 }
+        try await Task.sleep(for: .milliseconds(5))
+
+        if command.arguments.contains("dump-package") {
+            return SubprocessResult(
+                succeeded: true,
+                standardOutput: """
+                    {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
+                     "targets":[{"name":"Tool","type":"executable","dependencies":[],"resources":[]}]}
+                    """,
+                standardError: ""
+            )
+        }
+        if command.arguments.contains("--show-bin-path") {
+            return SubprocessResult(
+                succeeded: true,
+                standardOutput: binaryDirectory.path + "\n",
+                standardError: ""
+            )
+        }
+
+        return SubprocessResult(succeeded: true, standardOutput: "", standardError: "")
+    }
+
 }

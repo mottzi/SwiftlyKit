@@ -12,7 +12,10 @@ struct SwiftPM: Sendable {
 
 extension SwiftPM {
 
-    private static func validate(_ environment: LocalBuildEnvironment) throws {
+    static func validate(
+        _ environment: LocalBuildEnvironment,
+        locateSDK: (String) -> URL? = { SDKBundleLocator.locate(identifier: $0) }
+    ) throws {
 
         let requirements: PackageRequirements
         do { requirements = try PackageRequirements.load(at: environment.packageRoot) }
@@ -24,7 +27,7 @@ extension SwiftPM {
         guard FileManager.default.isExecutableFile(atPath: environment.swiftlyExecutableURL.path)
         else { throw SwiftlyKitError.incompatibleSwiftly }
 
-        let locatedSDKBundleURL = SDKBundleLocator.locate(identifier: environment.staticLinuxSDK.identifier)
+        let locatedSDKBundleURL = locateSDK(environment.staticLinuxSDK.identifier)
         guard locatedSDKBundleURL == environment.sdkBundleURL else { throw SwiftlyKitError.staticLinuxSDKUnavailable }
     }
 

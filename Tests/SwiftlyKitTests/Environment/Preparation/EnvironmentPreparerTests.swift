@@ -117,6 +117,91 @@ struct EnvironmentPreparerTests {
         }
     }
 
+    @Test("Bootstrap rejects unsuccessful downloads before running an installer command")
+    func bootstrapRejectsHTTPFailure() async throws {
+
+        let commands = RecordingSubprocessRunner(results: [])
+        let preparer = EnvironmentPreparer(
+            runner: commands,
+            checkHost: {},
+            downloadPackage: { _, _ in 503 },
+            detectSwiftly: { nil },
+            revalidate: { _ in }
+        )
+
+        await #expect(throws: EnvironmentPreparationError.invalidHTTPResponse(503)) {
+            try await preparer.prepare(assessment(requires: [.swiftly]))
+        }
+        #expect(await commands.commands.isEmpty)
+    }
+
+    @Test("Bootstrap rejects an untrusted package before installation")
+    func bootstrapRejectsUntrustedPackage() async throws {
+
+        try await withTemporaryDirectory { temporaryDirectory in
+            let commands = RecordingSubprocessRunner(results: [
+                SubprocessResult(
+                    succeeded: true,
+                    standardOutput: "Developer ID Installer: Unrelated Vendor; trusted by macOS",
+                    standardError: ""
+                )
+            ])
+            let preparer = EnvironmentPreparer(
+                temporaryDirectory: temporaryDirectory,
+                runner: commands,
+                checkHost: {},
+                downloadPackage: { _, destination in
+                    try Data("package".utf8).write(to: destination)
+                    return 200
+                },
+                detectSwiftly: { nil },
+                revalidate: { _ in }
+            )
+
+            await #expect(throws: EnvironmentPreparationError.packageSignatureRejected) {
+                try await preparer.prepare(assessment(requires: [.swiftly]))
+            }
+
+            let recorded = await commands.commands
+            #expect(recorded.count == 1)
+            #expect(recorded[0].executableURL.path == "/usr/sbin/pkgutil")
+        }
+    }
+
+    @Test("Preparation refuses mutations not authorized by the assessment")
+    func unauthorizedMutationIsRejected() async throws {
+
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+        let commands = RecordingSubprocessRunner(results: [])
+        let preparer = EnvironmentPreparer(
+            runner: commands,
+            checkHost: {},
+            detectSwiftly: { swiftly },
+            inspect: { _, _ in self.inventory(includesToolchain: false, includesSDK: false) },
+            revalidate: { _ in }
+        )
+
+        await #expect(throws: EnvironmentPreparationError.unauthorizedMutationRequired) {
+            try await preparer.prepare(assessment(requires: []))
+        }
+        #expect(await commands.commands.isEmpty)
+    }
+
+    @Test("Download cancellation remains CancellationError")
+    func downloadCancellationIsPreserved() async throws {
+
+        let preparer = EnvironmentPreparer(
+            checkHost: {},
+            downloadPackage: { _, _ in throw CancellationError() },
+            detectSwiftly: { nil },
+            revalidate: { _ in }
+        )
+
+        await #expect(throws: CancellationError.self) {
+            try await preparer.prepare(assessment(requires: [.swiftly]))
+        }
+    }
+
     private func inventory(includesToolchain: Bool, includesSDK: Bool) -> InstalledEnvironmentInventory {
 
         InstalledEnvironmentInventory(
