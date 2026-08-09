@@ -4,8 +4,9 @@ enum AtomicOutputPublisher {
 
     static func publish(_ source: URL, to destination: URL) throws -> URL {
 
-        guard source.isFileURL else { throw SwiftPMError.outputPublicationFailed(destination) }
-        guard destination.isFileURL else { throw SwiftPMError.outputPublicationFailed(destination) }
+        guard source.isFileURL,
+              destination.isFileURL
+        else { throw SwiftPMError.outputPublicationFailed(destination) }
 
         guard !FileManager.default.fileExists(atPath: destination.path)
         else { throw SwiftPMError.outputAlreadyExists(destination) }

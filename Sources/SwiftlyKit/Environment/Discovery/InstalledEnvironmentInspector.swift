@@ -4,8 +4,7 @@ import Foundation
 struct InstalledEnvironmentInspector: Sendable {
 
     private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
-    private(set) var isToolchainUsable: @Sendable (SwiftVersion) -> Bool =
-        InstalledEnvironmentInspector.liveToolchainUsability
+    private(set) var isToolchainUsable: @Sendable (SwiftVersion) -> Bool = Self.liveToolchainUsability
 
 }
 
@@ -17,12 +16,12 @@ extension InstalledEnvironmentInspector {
     ) async throws -> InstalledEnvironmentInventory {
 
         let toolchains = try await installedToolchains(swiftly: swiftly)
-        guard let selectedToolchain else { return InstalledEnvironmentInventory(toolchains: toolchains, sdks: []) }
-        guard toolchains.contains(where: { $0.version == selectedToolchain })
+        guard let selectedToolchain,
+              toolchains.contains(where: { $0.version == selectedToolchain })
         else { return InstalledEnvironmentInventory(toolchains: toolchains, sdks: []) }
         let sdks = try await installedSDKs(swiftly: swiftly, toolchain: selectedToolchain)
+        
         return InstalledEnvironmentInventory(toolchains: toolchains, sdks: sdks)
-
     }
     
     /// Inspects every usable stable toolchain without repeating the Swiftly registry query.
@@ -49,26 +48,27 @@ extension InstalledEnvironmentInspector {
         arguments: [String],
         workingDirectory: URL? = nil
     ) -> SubprocessCommand {
-
+        
         SubprocessCommand(
             executableURL: swiftly,
             arguments: ["run", "swift"] + arguments + ["+\(toolchain)"],
             workingDirectory: workingDirectory
         )
-
     }
-
-    private func installedToolchains(
-        swiftly: SwiftlyInstallation
-    ) async throws -> [InstalledStableToolchain] {
+    
+    private func installedToolchains(swiftly: SwiftlyInstallation) async throws -> [InstalledStableToolchain] {
         
         try Task.checkCancellation()
-        let result = try await run(SubprocessCommand(
+        
+        let command = SubprocessCommand(
             executableURL: swiftly.executableURL,
             arguments: ["list", "--format", "json"]
-        ))
+        )
+        
+        let result = try await run(command)
         guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
         guard let data = result.standardOutput.data(using: .utf8) else { throw InstalledEnvironmentError.invalidOutput }
+        
         do { return try InstalledStableToolchain.parseSwiftlyList(data).filter { isToolchainUsable($0.version) } }
         catch { throw InstalledEnvironmentError.invalidOutput }
     }

@@ -7,10 +7,18 @@ Apply these rules to statement layout.
 - A line is horizontally long when its final character is at column 125 or later. Indentation counts toward the column.
 - Place one blank line immediately inside the opening and closing braces of every type and extension declaration. Keep case-only enums compact, without those blank lines.
 - Place one blank line immediately after a function's opening brace when its body contains more than three nonblank lines.
+- Keep a function declaration header on one line when its final character would occur before column 125.
 - Separate consecutive semantic phases with one blank line.
+- Treat cancellation checks, input construction, operation execution, result validation, and result transformation as separate semantic phases.
+- In a chronological workflow, do not pass a value produced by a multiline initializer directly into another operation. Bind it to a meaningfully named local constant first.
 - In chronological workflows, reject invalid states with `guard` so the successful path remains unnested.
 - Prefer one predicate per `guard`.
-- Combine predicates in one `guard` only when separate guards would duplicate the same multiline `else` body.
+- Combine consecutive predicates in one `guard` when and only when their separate `else` blocks would be identical and nontrivial.
+- An `else` block is trivial only when it contains exactly one of these statements: `return`, `break`, `continue`, `return true`, `return false`, `return nil`, `return` followed by a simple reference, or `throw` followed by a simple reference.
+- A simple reference is an identifier or dot-separated member chain, optionally beginning with a dot, containing no call, subscript, operator, closure, or literal.
+- Every other `else` block is nontrivial, including a block with multiple statements or a statement that constructs or transforms a value, calls a function, or contains diagnostic text.
+- Never combine predicates whose `else` blocks differ.
+- In a combined `guard`, place each predicate on its own aligned line.
 - Before formatting a `guard`, bind evaluated subexpressions to meaningfully named local constants when its condition would be horizontally long.
 - After extracting those values, keep a `guard` with a one-statement `else` body on one line when the complete statement ends before column 125.
 - If that complete statement remains horizontally long, place `else` on the following line while keeping its one-statement body on that line.
