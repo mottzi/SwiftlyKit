@@ -139,7 +139,7 @@ func strictSwiftVersionParsing() {
     #expect(SwiftVersion(parsing: "6.2") == SwiftVersion(major: 6, minor: 2, patch: 0))
     #expect(SwiftVersion(parsing: "6.2.1") == SwiftVersion(major: 6, minor: 2, patch: 1))
 
-    for value in [
+    let values = [
         "",
         "6",
         "6.",
@@ -151,7 +151,8 @@ func strictSwiftVersionParsing() {
         "6.2+build",
         "6.2.1.0",
         String(repeating: "9", count: 40) + ".0"
-    ] {
+    ]
+    for value in values {
         #expect(SwiftVersion(parsing: value) == nil)
     }
 }

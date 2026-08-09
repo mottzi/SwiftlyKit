@@ -97,13 +97,14 @@ struct SwiftlyInstallationTests {
             try makeExecutable(at: executable)
             let environment = ["SWIFTLY_BIN_DIR": temporaryDirectory.path]
 
-            for output in [
+            let outputs = [
                 "",
                 "0.9.0",
                 "1.2",
                 "1.2.3-rc1",
                 String(repeating: "9", count: 40) + ".0.0"
-            ] {
+            ]
+            for output in outputs {
                 await #expect(throws: SwiftlyKitError.incompatibleSwiftly) {
                     try await SwiftlyInstallation.detect(
                         environment: environment,

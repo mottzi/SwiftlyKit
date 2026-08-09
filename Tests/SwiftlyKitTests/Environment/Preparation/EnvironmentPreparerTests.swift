@@ -117,6 +117,17 @@ struct EnvironmentPreparerTests {
         }
     }
 
+    private func inventory(includesToolchain: Bool, includesSDK: Bool) -> InstalledEnvironmentInventory {
+
+        InstalledEnvironmentInventory(
+            toolchains: includesToolchain ? [InstalledStableToolchain(version: version)] : [],
+            sdks: includesSDK ? [InstalledStaticLinuxSDK(
+                toolchainVersion: version,
+                identifier: sdk.identifier
+            )] : []
+        )
+    }
+
     private func assessment(requires components: [PreparationComponent]) -> EnvironmentAssessment {
 
         let requirements = PackageRequirements(
@@ -134,17 +145,6 @@ struct EnvironmentPreparerTests {
             release: OfficialStableRelease(version: version, staticLinuxSDK: sdk),
             requiredComponents: components,
             target: .linux(.arm64)
-        )
-    }
-
-    private func inventory(includesToolchain: Bool, includesSDK: Bool) -> InstalledEnvironmentInventory {
-
-        InstalledEnvironmentInventory(
-            toolchains: includesToolchain ? [InstalledStableToolchain(version: version)] : [],
-            sdks: includesSDK ? [InstalledStaticLinuxSDK(
-                toolchainVersion: version,
-                identifier: sdk.identifier
-            )] : []
         )
     }
 
