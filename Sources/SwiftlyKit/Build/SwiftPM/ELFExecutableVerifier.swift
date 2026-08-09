@@ -29,8 +29,7 @@ extension ELFExecutableVerifier {
         guard try isLittleEndianELF64(reader)
         else { throw SwiftPMError.invalidExecutable("The output is not a little-endian ELF64 file.") }
 
-        let fileTypeRawValue = try reader.uint16(at: 16)
-        guard ExecutableFileType(rawValue: fileTypeRawValue) != nil
+        guard ExecutableFileType(rawValue: try reader.uint16(at: 16)) != nil
         else { throw SwiftPMError.invalidExecutable("The ELF file is not executable.") }
 
         guard try reader.uint16(at: 18) == architecture.elfMachine
@@ -51,8 +50,7 @@ extension ELFExecutableVerifier {
             let programHeaderOffset = try reader.add(programHeaderTableOffset, programHeaderDisplacement)
             try reader.validateRange(at: programHeaderOffset, byteCount: 56)
 
-            let programHeaderTypeRawValue = try reader.uint32(at: programHeaderOffset)
-            switch ProgramHeaderType(rawValue: programHeaderTypeRawValue) {
+            switch ProgramHeaderType(rawValue: try reader.uint32(at: programHeaderOffset)) {
                 case .loadable: hasLoadableSegment = true
                 case .interpreter: throw dynamicallyLinkedError
                 case .dynamicLinking:
@@ -95,8 +93,7 @@ extension ELFExecutableVerifier {
         for displacement in stride(from: 0, to: entriesSize, by: entrySize) {
             let entryOffset = try reader.add(entriesOffset, displacement)
 
-            let entryTagRawValue = try reader.uint64(at: entryOffset)
-            switch DynamicEntryTag(rawValue: entryTagRawValue) {
+            switch DynamicEntryTag(rawValue: try reader.uint64(at: entryOffset)) {
                 case .end: return false
                 case .neededLibrary: return true
                 case nil: continue

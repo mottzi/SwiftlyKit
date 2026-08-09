@@ -9,11 +9,13 @@ struct LiveSubprocessRunnerTests {
     func captureAndStreamOutput() async throws {
 
         let recorder = OutputRecorder()
+        let command = SubprocessCommand(
+            executableURL: URL(filePath: "/bin/sh"),
+            arguments: ["-c", "printf standard; printf diagnostic >&2"]
+        )
+
         let result = try await LiveSubprocessRunner().run(
-            SubprocessCommand(
-                executableURL: URL(filePath: "/bin/sh"),
-                arguments: ["-c", "printf standard; printf diagnostic >&2"]
-            ),
+            command,
             onOutput: { stream, text in
                 await recorder.record(stream, text)
             }

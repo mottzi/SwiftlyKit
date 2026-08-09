@@ -14,18 +14,21 @@ struct PackageRequirements: Equatable, Sendable {
         guard packageRoot.isFileURL else { throw LoadingError.invalidPackageRoot(packageRoot) }
 
         let canonicalRoot = packageRoot.resolvingSymlinksInPath().standardizedFileURL
+
         guard isDirectory(at: canonicalRoot) else { throw LoadingError.invalidPackageRoot(packageRoot) }
 
         let manifestURL = canonicalRoot.appending(path: "Package.swift")
-        let manifestExists = FileManager.default.fileExists(atPath: manifestURL.path)
-        guard manifestExists else { throw LoadingError.invalidPackageRoot(packageRoot) }
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else { throw LoadingError.invalidPackageRoot(packageRoot) }
         guard isRegularReadableFile(at: manifestURL) else { throw LoadingError.unreadableManifest(manifestURL) }
 
         let manifest: String
         do {
             let data = try Data(contentsOf: manifestURL)
+
             let decoded = String(data: data, encoding: .utf8)
+
             guard let decoded else { throw LoadingError.unreadableManifest(manifestURL) }
+
             manifest = decoded
         } catch let error as LoadingError {
             throw error
@@ -86,11 +89,13 @@ extension PackageRequirements {
     private static func parseToolsVersionDirective(in line: Substring) -> SwiftVersion? {
 
         let leadingTrimmed = line.drop(while: isHorizontalWhitespace)
+
         guard leadingTrimmed.hasPrefix("//") else { return nil }
 
         let label = "swift-tools-version:"
         let afterCommentMarker = leadingTrimmed.dropFirst(2)
         let labelStart = afterCommentMarker.drop(while: isHorizontalWhitespace)
+
         guard labelStart.count >= label.count else { return nil }
         guard labelStart.prefix(label.count).lowercased() == label else { return nil }
 
@@ -124,12 +129,14 @@ extension PackageRequirements {
             if FileManager.default.fileExists(atPath: candidate.path) {
                 let canonicalCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL
 
-                let isReadable = isRegularReadableFile(at: candidate)
-                guard isReadable else { throw LoadingError.unreadableSwiftVersionFile(canonicalCandidate) }
+                guard isRegularReadableFile(at: candidate)
+                else { throw LoadingError.unreadableSwiftVersionFile(canonicalCandidate) }
 
                 do {
                     let data = try Data(contentsOf: candidate)
+
                     let value = String(data: data, encoding: .utf8)
+
                     guard let value else { throw LoadingError.unreadableSwiftVersionFile(canonicalCandidate) }
 
                     return (value.trimmingCharacters(in: .whitespacesAndNewlines), canonicalCandidate)

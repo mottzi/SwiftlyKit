@@ -2,15 +2,15 @@ import Foundation
 
 /// A prepared capability binding operations to one exact toolchain and SDK.
 public struct LocalBuildEnvironment: Sendable {
-    
+
     public let swiftVersion: SwiftVersion
     public let staticLinuxSDK: StaticLinuxSDK
-    
+
     let packageRoot: URL
     let swiftlyExecutableURL: URL
     let sdkBundleURL: URL
     let target: BuildTarget
-    
+
     init(
         swiftVersion: SwiftVersion,
         staticLinuxSDK: StaticLinuxSDK,
@@ -19,6 +19,7 @@ public struct LocalBuildEnvironment: Sendable {
         sdkBundleURL: URL,
         target: BuildTarget
     ) {
+
         self.swiftVersion = swiftVersion
         self.staticLinuxSDK = staticLinuxSDK
         self.packageRoot = packageRoot
@@ -26,5 +27,5 @@ public struct LocalBuildEnvironment: Sendable {
         self.sdkBundleURL = sdkBundleURL
         self.target = target
     }
-    
+
 }

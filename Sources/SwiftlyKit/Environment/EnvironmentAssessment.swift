@@ -2,7 +2,7 @@ import Foundation
 
 /// A read-only description of the exact environment SwiftlyKit will prepare.
 public struct EnvironmentAssessment: Sendable {
-    
+
     public let requiredComponents: [PreparationComponent]
 
     let packageInputs: PackageInputSnapshot
@@ -51,17 +51,18 @@ public struct EnvironmentAssessment: Sendable {
     public var requiresInstallation: Bool {
         !requiredComponents.isEmpty
     }
-    
+
     init(
         packageInputs: PackageInputSnapshot,
         release: OfficialStableRelease,
         requiredComponents: [PreparationComponent],
         target: BuildTarget
     ) {
+
         self.packageInputs = packageInputs
         self.release = release
         self.requiredComponents = requiredComponents
         self.target = target
     }
-    
+
 }

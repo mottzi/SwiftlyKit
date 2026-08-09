@@ -15,8 +15,11 @@ struct SwiftOrgReleaseCatalog: Sendable {
 
         do {
             let response = try await load(Self.releasesURL)
+
             try Task.checkCancellation()
+
             guard response.statusCode == 200 else { throw CatalogError.unexpectedResponse(statusCode: response.statusCode) }
+
             return try Self.parse(response.data)
         } catch is CancellationError {
             throw CancellationError()
@@ -24,6 +27,7 @@ struct SwiftOrgReleaseCatalog: Sendable {
             throw error
         } catch {
             if Task.isCancelled { throw CancellationError() }
+
             throw CatalogError.networkFailure
         }
     }
@@ -81,9 +85,10 @@ extension SwiftOrgReleaseCatalog {
         let identifier = "swift-\(name)-RELEASE_static-linux-\(sdkVersion)"
         let releaseDirectory = "swift-\(name.lowercased())-release"
         let filename = "\(identifier).artifactbundle.tar.gz"
-        guard let downloadURL = URL(
-            string: "https://download.swift.org/\(releaseDirectory)/static-sdk/swift-\(name)-RELEASE/\(filename)"
-        ) else { return nil }
+        let downloadDirectoryURL = "https://download.swift.org/\(releaseDirectory)/static-sdk"
+        let downloadURLString = "\(downloadDirectoryURL)/swift-\(name)-RELEASE/\(filename)"
+
+        guard let downloadURL = URL(string: downloadURLString) else { return nil }
 
         let sdk = OfficialStaticLinuxSDK(
             version: sdkVersion,
@@ -92,6 +97,7 @@ extension SwiftOrgReleaseCatalog {
             checksum: checksum,
             supportedArchitectures: architectures
         )
+
         return OfficialStableRelease(version: version, staticLinuxSDK: sdk)
     }
 

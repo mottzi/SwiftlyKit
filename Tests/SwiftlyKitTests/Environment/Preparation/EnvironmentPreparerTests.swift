@@ -137,10 +137,7 @@ struct EnvironmentPreparerTests {
         )
     }
 
-    private func inventory(
-        includesToolchain: Bool,
-        includesSDK: Bool
-    ) -> InstalledEnvironmentInventory {
+    private func inventory(includesToolchain: Bool, includesSDK: Bool) -> InstalledEnvironmentInventory {
 
         InstalledEnvironmentInventory(
             toolchains: includesToolchain ? [InstalledStableToolchain(version: version)] : [],

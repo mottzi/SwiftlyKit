@@ -52,10 +52,12 @@ struct SwiftPMTests {
                 ]
             )
 
-            #expect(try await SwiftPM(
+            let swiftPM = SwiftPM(
                 runner: runner,
                 validateEnvironment: { _ in }
-            ).build(request, using: environment) == executable)
+            )
+
+            #expect(try await swiftPM.build(request, using: environment) == executable)
             let commands = await runner.commands
             #expect(commands.count == 3)
             let build = commands[1]
@@ -90,11 +92,13 @@ struct SwiftPMTests {
             ])
             let environment = buildEnvironment(in: directory)
             let request = BuildRequest(ExecutableProduct(name: "Tool"))
+            let swiftPM = SwiftPM(
+                runner: runner,
+                validateEnvironment: { _ in }
+            )
+
             await #expect(throws: SwiftPMError.dependencyResolutionRequired) {
-                try await SwiftPM(
-                    runner: runner,
-                    validateEnvironment: { _ in }
-                ).build(request, using: environment)
+                try await swiftPM.build(request, using: environment)
             }
         }
     }
@@ -116,11 +120,13 @@ struct SwiftPMTests {
             ])
             let environment = buildEnvironment(in: directory)
             let request = BuildRequest(ExecutableProduct(name: "Tool"))
+            let swiftPM = SwiftPM(
+                runner: runner,
+                validateEnvironment: { _ in }
+            )
+
             await #expect(throws: SwiftPMError.unsupportedProductResources("Tool")) {
-                try await SwiftPM(
-                    runner: runner,
-                    validateEnvironment: { _ in }
-                ).build(request, using: environment)
+                try await swiftPM.build(request, using: environment)
             }
         }
     }

@@ -32,10 +32,12 @@ struct InstalledEnvironmentInspectorTests {
             )
         ])
 
-        let inventory = try await InstalledEnvironmentInspector(
+        let inspector = InstalledEnvironmentInspector(
             runner: recorder,
             isToolchainUsable: { _ in true }
-        ).inspectAll(swiftly: swiftly)
+        )
+
+        let inventory = try await inspector.inspectAll(swiftly: swiftly)
 
         #expect(inventory.toolchains.map(\.version) == [
             SwiftVersion(major: 6, minor: 3, patch: 0),
@@ -69,10 +71,12 @@ struct InstalledEnvironmentInspectorTests {
             )
         ])
 
-        let state = try await InstalledEnvironmentInspector(
+        let inspector = InstalledEnvironmentInspector(
             runner: recorder,
             isToolchainUsable: { _ in true }
-        ).inspect(
+        )
+
+        let state = try await inspector.inspect(
             swiftly: swiftly,
             selectedToolchain: SwiftVersion(major: 6, minor: 2, patch: 1)
         )
@@ -93,10 +97,12 @@ struct InstalledEnvironmentInspectorTests {
         ])
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
 
-        let state = try await InstalledEnvironmentInspector(
+        let inspector = InstalledEnvironmentInspector(
             runner: recorder,
             isToolchainUsable: { _ in true }
-        ).inspect(
+        )
+
+        let state = try await inspector.inspect(
             swiftly: swiftly,
             selectedToolchain: SwiftVersion(major: 6, minor: 2, patch: 1)
         )
@@ -117,10 +123,12 @@ struct InstalledEnvironmentInspectorTests {
             )
         ])
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
-        let state = try await InstalledEnvironmentInspector(
+        let inspector = InstalledEnvironmentInspector(
             runner: recorder,
             isToolchainUsable: { _ in false }
-        ).inspect(
+        )
+
+        let state = try await inspector.inspect(
             swiftly: swiftly,
             selectedToolchain: SwiftVersion(major: 6, minor: 2, patch: 1)
         )

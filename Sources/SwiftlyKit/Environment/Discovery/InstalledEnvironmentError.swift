@@ -7,7 +7,7 @@ enum InstalledEnvironmentError: Error, Equatable, Sendable {
 }
 
 extension InstalledEnvironmentError {
-    
+
     var swiftlyKitError: SwiftlyKitError {
         switch self {
             case .commandCouldNotRun(let url): .swiftlyInstallationFailed("Could not run \(url.lastPathComponent).")
@@ -15,5 +15,5 @@ extension InstalledEnvironmentError {
             case .invalidOutput: .incompatibleSwiftly
         }
     }
-    
+
 }

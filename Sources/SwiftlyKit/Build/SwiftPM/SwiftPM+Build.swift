@@ -10,12 +10,15 @@ extension SwiftPM {
 
         try validateEnvironment(environment)
 
-        await onEvent?(.progress(OperationProgress(
+        let buildProgress = OperationProgress(
             operation: .building,
             detail: "Building \(request.product.name)."
-        )))
+        )
+
+        await onEvent?(.progress(buildProgress))
 
         let description = try await packageDescription(using: environment)
+
         guard description.products.contains(request.product)
         else { throw SwiftPMError.executableNotFound(request.product.name) }
 
@@ -28,16 +31,14 @@ extension SwiftPM {
                 environment: environment,
                 sdkSearchDirectory: sdkSearchDirectory
             )
-
-            let buildResult = try await runner.run(
-                command(
-                    environment,
-                    swiftArguments: ["build"] + commonArguments,
-                    workingDirectory: environment.packageRoot,
-                    additions: request.environment
-                ),
-                onOutput: CommandOutput.handler(for: onEvent)
+            let buildCommand = command(
+                environment,
+                swiftArguments: ["build"] + commonArguments,
+                workingDirectory: environment.packageRoot,
+                additions: request.environment
             )
+
+            let buildResult = try await runner.run(buildCommand, onOutput: CommandOutput.handler(for: onEvent))
 
             guard buildResult.succeeded else {
                 let diagnostic = boundedDiagnostic(buildResult)
@@ -47,24 +48,26 @@ extension SwiftPM {
                 throw SwiftPMError.commandFailed(operation: .build, diagnostic: diagnostic)
             }
 
-            let pathResult = try await runner.run(
-                command(
-                    environment,
-                    swiftArguments: ["build"] + commonArguments + ["--show-bin-path"],
-                    workingDirectory: environment.packageRoot,
-                    additions: request.environment
-                ),
-                onOutput: nil
+            let pathCommand = command(
+                environment,
+                swiftArguments: ["build"] + commonArguments + ["--show-bin-path"],
+                workingDirectory: environment.packageRoot,
+                additions: request.environment
             )
+
+            let pathResult = try await runner.run(pathCommand, onOutput: nil)
 
             guard pathResult.succeeded
             else { throw SwiftPMError.commandFailed(operation: .locatingBuildOutput, diagnostic: boundedDiagnostic(pathResult)) }
 
             let binaryDirectory = pathResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+
             guard !binaryDirectory.isEmpty else { throw SwiftPMError.executableNotFound(request.product.name) }
 
             let binaryDirectoryURL = URL(filePath: binaryDirectory)
+
             let hasRuntimeResourceBundle = try containsRuntimeResourceBundle(in: binaryDirectoryURL)
+
             guard !hasRuntimeResourceBundle else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
 
             let executable = binaryDirectoryURL.appending(path: request.product.name)
@@ -74,10 +77,13 @@ extension SwiftPM {
             try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
 
             if request.strip {
-                await onEvent?(.progress(OperationProgress(
+                let stripProgress = OperationProgress(
                     operation: .stripping,
                     detail: "Stripping \(request.product.name)."
-                )))
+                )
+
+                await onEvent?(.progress(stripProgress))
+
                 try await strip(
                     executable,
                     for: request,
@@ -87,12 +93,16 @@ extension SwiftPM {
             }
 
             if let output = request.output {
-                await onEvent?(.progress(OperationProgress(
+                let publicationProgress = OperationProgress(
                     operation: .publishing,
                     detail: "Publishing \(request.product.name)."
-                )))
+                )
+
+                await onEvent?(.progress(publicationProgress))
+
                 return try AtomicOutputPublisher.publish(executable, to: output)
             }
+
             return executable
         }
     }
@@ -149,13 +159,17 @@ extension SwiftPM {
     private func containsRuntimeResourceBundle(in directory: URL) throws -> Bool {
 
         do {
-            return try FileManager.default.contentsOfDirectory(
+            let contents = try FileManager.default.contentsOfDirectory(
                 at: directory,
                 includingPropertiesForKeys: [.isDirectoryKey],
                 options: [.skipsHiddenFiles]
-            ).contains { url in
+            )
+
+            return try contents.contains { url in
                 guard url.pathExtension == "resources" else { return false }
-                return try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+
+                let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
+                return resourceValues.isDirectory == true
             }
         } catch let error as SwiftPMError {
             throw error
@@ -171,16 +185,15 @@ extension SwiftPM {
         onOutput: SubprocessOutputHandler?
     ) async throws {
 
-        let result = try await runner.run(
-            command(
-                environment,
-                tool: "llvm-objcopy",
-                toolArguments: ["--strip-all", executable.path],
-                workingDirectory: environment.packageRoot,
-                additions: request.environment
-            ),
-            onOutput: onOutput
+        let stripCommand = command(
+            environment,
+            tool: "llvm-objcopy",
+            toolArguments: ["--strip-all", executable.path],
+            workingDirectory: environment.packageRoot,
+            additions: request.environment
         )
+
+        let result = try await runner.run(stripCommand, onOutput: onOutput)
 
         guard result.succeeded
         else { throw SwiftPMError.commandFailed(operation: .stripping, diagnostic: boundedDiagnostic(result)) }

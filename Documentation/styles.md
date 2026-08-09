@@ -11,6 +11,7 @@ Apply these rules to statement layout.
 - Separate consecutive semantic phases with one blank line.
 - Treat cancellation checks, input construction, operation execution, result validation, and result transformation as separate semantic phases.
 - In a chronological workflow, do not pass a value produced by a multiline initializer directly into another operation. Bind it to a meaningfully named local constant first.
+- Keep a readable one-use expression inline when it is consumed immediately by a `guard`, `switch`, `return`, or non-multiline call. Do not extract it merely to name a Boolean, expose a raw value, isolate a throwing call, or create a semantic-phase boundary. The multiline-initializer, horizontally-long-guard, and nested-fallible-operation rules take precedence when they apply.
 - In chronological workflows, reject invalid states with `guard` so the successful path remains unnested.
 - Prefer one predicate per `guard`.
 - Combine consecutive predicates in one `guard` when and only when their separate `else` blocks would be identical and nontrivial.

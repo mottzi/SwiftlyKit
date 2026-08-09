@@ -2,20 +2,20 @@ import Foundation
 
 /// Canonical installed toolchain and SDK state observed through Swiftly.
 struct InstalledEnvironmentInventory: Equatable, Sendable {
-    
+
     let toolchains: [InstalledStableToolchain]
     let sdks: [InstalledStaticLinuxSDK]
-    
+
     func contains(toolchain version: SwiftVersion) -> Bool {
         toolchains.contains { $0.version == version }
     }
-    
+
     func contains(toolchain version: SwiftVersion, sdk identifier: String) -> Bool {
         contains(toolchain: version) && sdks.contains {
             $0.toolchainVersion == version && $0.identifier == identifier
         }
     }
-    
+
 }
 
 /// An installed stable Swiftly toolchain that may participate in automatic selection.
@@ -74,10 +74,7 @@ struct InstalledStaticLinuxSDK: Hashable, Sendable {
 extension InstalledStaticLinuxSDK {
 
     /// Parses the line-oriented identifiers emitted by `swift sdk list`.
-    static func parseList(
-        _ output: String,
-        toolchainVersion: SwiftVersion
-    ) -> [InstalledStaticLinuxSDK] {
+    static func parseList(_ output: String, toolchainVersion: SwiftVersion) -> [InstalledStaticLinuxSDK] {
 
         Set(output.split(whereSeparator: \Character.isNewline).compactMap { line in
             let identifier = line.trimmingCharacters(in: .whitespacesAndNewlines)

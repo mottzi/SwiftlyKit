@@ -120,9 +120,7 @@ struct SwiftlyKitWorkflowTests {
 
 }
 
-private func withWorkflowTemporaryDirectory<T>(
-    _ body: (URL) async throws -> T
-) async throws -> T {
+private func withWorkflowTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
 
     let directory = FileManager.default.temporaryDirectory
         .appending(path: "SwiftlyKit-Workflow-\(UUID().uuidString)")

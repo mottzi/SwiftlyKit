@@ -14,14 +14,14 @@ enum AtomicOutputPublisher {
         let temporary = destination
             .deletingLastPathComponent()
             .appending(path: ".\(destination.lastPathComponent).swiftlykit-\(UUID().uuidString)")
-        
+
         do { try FileManager.default.copyItem(at: source, to: temporary) }
         catch { throw SwiftPMError.outputPublicationFailed(destination) }
         defer { try? FileManager.default.removeItem(at: temporary) }
 
         let renameStatus = renameatx_np(AT_FDCWD, temporary.path, AT_FDCWD, destination.path, UInt32(RENAME_EXCL))
-        
-        if renameStatus != 0 {
+
+        guard renameStatus == 0 else {
             if errno == EEXIST { throw SwiftPMError.outputAlreadyExists(destination) }
             else { throw SwiftPMError.outputPublicationFailed(destination) }
         }

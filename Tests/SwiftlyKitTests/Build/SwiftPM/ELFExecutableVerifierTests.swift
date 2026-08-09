@@ -43,12 +43,7 @@ struct ELFExecutableVerifierTests {
 
 }
 
-func writeELF(
-    to url: URL,
-    architecture: LinuxArchitecture,
-    secondSegment: UInt32? = nil,
-    dynamicTag: UInt64 = 0
-) throws {
+func writeELF(to url: URL, architecture: LinuxArchitecture, secondSegment: UInt32? = nil, dynamicTag: UInt64 = 0) throws {
 
     let count = secondSegment == nil ? 120 : 192
     var data = Data(repeating: 0, count: count)

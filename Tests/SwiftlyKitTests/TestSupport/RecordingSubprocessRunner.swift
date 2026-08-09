@@ -9,14 +9,14 @@ actor RecordingSubprocessRunner: SubprocessRunning {
         self.pendingResults = results
     }
 
-    func run(
-        _ command: SubprocessCommand,
-        onOutput: SubprocessOutputHandler?
-    ) async throws -> SubprocessResult {
+    func run(_ command: SubprocessCommand, onOutput: SubprocessOutputHandler?) async throws -> SubprocessResult {
 
         commands.append(command)
+
         guard !pendingResults.isEmpty else { throw RecordingSubprocessRunnerError.unexpectedCommand(command) }
+
         let result = pendingResults.removeFirst()
+
         if let onOutput {
             if !result.standardOutput.isEmpty {
                 await onOutput(.standardOutput, result.standardOutput)
@@ -25,6 +25,7 @@ actor RecordingSubprocessRunner: SubprocessRunning {
                 await onOutput(.standardError, result.standardError)
             }
         }
+
         return result
     }
 

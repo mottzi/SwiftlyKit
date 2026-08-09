@@ -38,14 +38,17 @@ enum EnvironmentSelectionPolicy {
         let installedPairs = Set(installedSDKs.map {
             InstalledPair(toolchainVersion: $0.toolchainVersion, sdkIdentifier: $0.identifier)
         })
+
         if let release = releases.first(where: { release in
-            release.version >= toolsVersion
+            let installedPair = InstalledPair(
+                toolchainVersion: release.version,
+                sdkIdentifier: release.staticLinuxSDK.identifier
+            )
+
+            return release.version >= toolsVersion
                 && release.staticLinuxSDK.supports(architecture)
                 && installedVersions.contains(release.version)
-                && installedPairs.contains(InstalledPair(
-                    toolchainVersion: release.version,
-                    sdkIdentifier: release.staticLinuxSDK.identifier
-                ))
+                && installedPairs.contains(installedPair)
         }) {
             return release
         }
@@ -58,6 +61,7 @@ enum EnvironmentSelectionPolicy {
                 architecture: architecture
             )
         }
+
         return release
     }
 
@@ -77,14 +81,13 @@ extension EnvironmentSelectionPolicy {
 
 extension EnvironmentSelectionPolicy {
 
-    private static func canonicalReleases(
-        _ releases: [OfficialStableRelease]
-    ) -> [OfficialStableRelease] {
+    private static func canonicalReleases(_ releases: [OfficialStableRelease]) -> [OfficialStableRelease] {
 
         var releasesByVersion: [SwiftVersion: OfficialStableRelease] = [:]
         for release in releases {
             releasesByVersion[release.version] = release
         }
+
         return releasesByVersion.values.sorted { $0.version > $1.version }
     }
 
@@ -95,12 +98,13 @@ extension EnvironmentSelectionPolicy {
         releases: [OfficialStableRelease]
     ) throws -> OfficialStableRelease {
 
-        let matchingRelease = releases.first(where: { $0.version == version })
-        guard let release = matchingRelease else { throw SelectionError.unavailableRelease(version) }
+        guard let release = releases.first(where: { $0.version == version })
+        else { throw SelectionError.unavailableRelease(version) }
         guard version >= toolsVersion
         else { throw SelectionError.incompatibleToolsVersion(requested: version, required: toolsVersion) }
         guard release.staticLinuxSDK.supports(architecture)
         else { throw SelectionError.unsupportedArchitecture(version: version, architecture: architecture) }
+
         return release
     }
 
@@ -122,5 +126,5 @@ extension EnvironmentSelectionPolicy.SelectionError {
             case .unsupportedArchitecture: .staticLinuxSDKUnavailable
         }
     }
-    
+
 }

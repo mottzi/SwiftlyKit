@@ -3,7 +3,7 @@ import Foundation
 struct SwiftPM: Sendable {
 
     private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
-    
+
     private(set) var validateEnvironment: @Sendable (LocalBuildEnvironment) throws -> Void = {
         try SwiftPM.validate($0)
     }
@@ -25,6 +25,7 @@ extension SwiftPM {
         else { throw SwiftlyKitError.incompatibleSwiftly }
 
         let locatedSDKBundleURL = SDKBundleLocator.locate(identifier: environment.staticLinuxSDK.identifier)
+
         guard locatedSDKBundleURL == environment.sdkBundleURL else { throw SwiftlyKitError.staticLinuxSDKUnavailable }
     }
 

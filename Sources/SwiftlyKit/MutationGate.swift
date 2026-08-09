@@ -8,11 +8,10 @@ actor MutationGate {
     private var cancelledWaiters: Set<UUID> = []
     private var grantedWaiters: Set<UUID> = []
 
-    func withAccess<Result: Sendable>(
-        _ operation: @Sendable () async throws -> Result
-    ) async throws -> Result {
+    func withAccess<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
 
         try await acquire()
+
         do {
             let result = try await operation()
             release()
@@ -26,12 +25,14 @@ actor MutationGate {
     private func acquire() async throws {
 
         try Task.checkCancellation()
+
         guard isOccupied else {
             isOccupied = true
             return
         }
 
         let id = UUID()
+
         let acquired = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 if cancelledWaiters.remove(id) != nil {
@@ -43,8 +44,11 @@ actor MutationGate {
         } onCancel: {
             Task { await self.cancel(id) }
         }
+
         grantedWaiters.remove(id)
+
         guard acquired else { throw CancellationError() }
+
         if Task.isCancelled {
             release()
             throw CancellationError()
@@ -58,7 +62,9 @@ actor MutationGate {
             cancelledWaiters.insert(id)
             return
         }
+
         let waiter = waiters.remove(at: index)
+
         waiter.continuation.resume(returning: false)
     }
 
@@ -66,14 +72,17 @@ actor MutationGate {
 
         while !waiters.isEmpty {
             let waiter = waiters.removeFirst()
+
             if cancelledWaiters.remove(waiter.id) != nil {
                 waiter.continuation.resume(returning: false)
                 continue
             }
+
             grantedWaiters.insert(waiter.id)
             waiter.continuation.resume(returning: true)
             return
         }
+
         isOccupied = false
     }
 

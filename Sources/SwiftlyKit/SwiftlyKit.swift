@@ -104,11 +104,7 @@ public struct SwiftlyKit: Sendable {
 
 extension SwiftlyKit {
 
-    init(
-        assessor: EnvironmentAssessor,
-        preparer: EnvironmentPreparer,
-        swiftPM: SwiftPM
-    ) {
+    init(assessor: EnvironmentAssessor, preparer: EnvironmentPreparer, swiftPM: SwiftPM) {
         self.mutationGate = MutationGate()
         self.assessor = assessor
         self.preparer = preparer

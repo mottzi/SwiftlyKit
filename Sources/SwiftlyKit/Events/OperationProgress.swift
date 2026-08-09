@@ -13,11 +13,7 @@ public struct OperationProgress: Sendable {
         case publishing
     }
 
-    init(
-        operation: Operation,
-        component: PreparationComponent? = nil,
-        detail: String
-    ) {
+    init(operation: Operation, component: PreparationComponent? = nil, detail: String) {
         self.operation = operation
         self.component = component
         self.detail = detail

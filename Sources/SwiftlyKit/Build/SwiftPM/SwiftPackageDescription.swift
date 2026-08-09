@@ -17,11 +17,12 @@ struct SwiftPackageDescription: Sendable {
             guard let name = raw["name"] as? String else { return nil }
             guard let type = raw["type"] as? String else { return nil }
 
-            return (name, Target(
+            let target = Target(
                 type: type,
                 dependencies: Self.referencedTargetNames(in: raw["dependencies"], knownNames: targetNames),
                 hasResources: !((raw["resources"] as? [Any]) ?? []).isEmpty
-            ))
+            )
+            return (name, target)
         })
 
         let explicitProducts: [(name: String, targets: [String])] =
