@@ -165,17 +165,14 @@ extension SwiftlyKit {
     private func selectProduct(named name: String?, from products: [ExecutableProduct]) throws -> ExecutableProduct {
 
         if let name {
-            if let namedProduct = products.first(where: { $0.name == name }) {
-                return namedProduct
-            }
-
-            throw SwiftlyKitError.executableProductNotFound(name)
+            guard let namedProduct = products.first(where: { $0.name == name })
+            else { throw SwiftlyKitError.executableProductNotFound(name) }
+            return namedProduct
         }
 
-        guard products.count == 1, let product = products.first
+        guard products.count == 1, let firstProduct = products.first
         else { throw SwiftlyKitError.executableProductSelectionRequired(products.map(\.name)) }
-
-        return product
+        return firstProduct
     }
 
 }
