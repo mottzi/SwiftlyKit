@@ -9,7 +9,7 @@ enum EnvironmentSelectionPolicy {
         releases: [OfficialStableRelease],
         installedToolchains: [SwiftVersion],
         installedSDKs: [InstalledStaticLinuxSDK]
-    ) throws -> OfficialStableRelease {
+    ) throws(SelectionError) -> OfficialStableRelease {
 
         let releases = canonicalReleases(releases)
         
@@ -84,7 +84,7 @@ extension EnvironmentSelectionPolicy {
         toolsVersion: SwiftVersion,
         architecture: LinuxArchitecture,
         releases: [OfficialStableRelease]
-    ) throws -> OfficialStableRelease {
+    ) throws(SelectionError) -> OfficialStableRelease {
 
         guard let release = releases.first(where: { $0.version == version })
         else { throw SelectionError.unavailableRelease(version) }

@@ -75,10 +75,9 @@ extension SwiftOrgReleaseCatalog {
         guard let platform = payload.platforms?.first(where: { $0.platform == "static-sdk" }) else { return nil }
         guard let sdkVersion = platform.version else { return nil }
         guard SwiftVersion(parsing: sdkVersion) != nil else { return nil }
-        guard let checksum = normalizedChecksum(platform.checksum) else { return nil }
+        guard let checksum = platform.checksum else { return nil }
 
         let architectures = Set((platform.archs ?? []).compactMap(LinuxArchitecture.init(catalogName:)))
-        guard !architectures.isEmpty else { return nil }
 
         let identifier = "swift-\(name)-RELEASE_static-linux-\(sdkVersion)"
         let releaseDirectory = "swift-\(name.lowercased())-release"
@@ -89,26 +88,17 @@ extension SwiftOrgReleaseCatalog {
         guard let downloadURL = URL(string: downloadURLString) else { return nil }
 
         let sdk = StaticLinuxSDK(identifier: identifier, version: sdkVersion)
-        let metadata = StaticLinuxSDKMetadata(
+        guard let metadata = StaticLinuxSDKMetadata(
             downloadURL: downloadURL,
             checksum: checksum,
             supportedArchitectures: architectures
-        )
+        ) else { return nil }
 
         return OfficialStableRelease(
             version: version,
             staticLinuxSDK: sdk,
             staticLinuxSDKMetadata: metadata
         )
-    }
-
-    private static func normalizedChecksum(_ checksum: String?) -> String? {
-
-        guard let checksum else { return nil }
-        guard checksum.utf8.count == 64 else { return nil }
-        guard checksum.isASCIIHexadecimal else { return nil }
-
-        return checksum.lowercased()
     }
 
     private struct ReleasePayload: Decodable {

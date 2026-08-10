@@ -133,7 +133,7 @@ private func selectionRelease(
             downloadURL: URL(string: "https://download.swift.org/\(identifier).tar.gz")!,
             checksum: String(repeating: "a", count: 64),
             supportedArchitectures: architectures
-        )
+        )!
     )
 }
 

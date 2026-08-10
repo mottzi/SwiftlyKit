@@ -139,6 +139,6 @@ private func assessorRelease() -> OfficialStableRelease {
             downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
             checksum: String(repeating: "a", count: 64),
             supportedArchitectures: [.arm64]
-        )
+        )!
     )
 }

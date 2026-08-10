@@ -14,7 +14,7 @@ struct EnvironmentPreparerTests {
         downloadURL: URL(string: "https://download.swift.org/swift-6.2.1/sdk.tar.gz")!,
         checksum: String(repeating: "a", count: 64),
         supportedArchitectures: [.arm64]
-    )
+    )!
 
     @Test("A ready environment inspects once and performs no download or mutation command")
     func readyIsNoOp() async throws {

@@ -27,6 +27,18 @@ struct PackageInputSnapshotTests {
             #expect(throws: SwiftlyKitError.invalidPackageRoot(noManifestRoot)) {
                 try PackageInputSnapshot.capture(at: noManifestRoot)
             }
+
+            let unreadableManifestRoot = temporaryDirectory.appending(path: "unreadable-manifest")
+            try FileManager.default.createDirectory(at: unreadableManifestRoot, withIntermediateDirectories: false)
+            try FileManager.default.createDirectory(
+                at: unreadableManifestRoot.appending(path: "Package.swift"),
+                withIntermediateDirectories: false
+            )
+            let symlinkRoot = temporaryDirectory.appending(path: "unreadable-manifest-link")
+            try FileManager.default.createSymbolicLink(at: symlinkRoot, withDestinationURL: unreadableManifestRoot)
+            #expect(throws: SwiftlyKitError.invalidPackageRoot(unreadableManifestRoot.standardizedFileURL)) {
+                try PackageInputSnapshot.capture(at: symlinkRoot)
+            }
         }
     }
 
@@ -128,7 +140,7 @@ struct PackageInputSnapshotTests {
         }
     }
 
-    @Test("Unchanged inputs revalidate")
+    @Test("Unchanged inputs revalidate and unavailable inputs become stale")
     func unchangedInputsRevalidate() throws {
 
         try withTemporaryDirectory(prefix: "SwiftlyKit-PackageInput") { packageRoot in
@@ -138,6 +150,11 @@ struct PackageInputSnapshotTests {
             let snapshot = try PackageInputSnapshot.capture(at: packageRoot)
 
             try snapshot.validateCurrent()
+
+            try FileManager.default.removeItem(at: packageRoot.appending(path: "Package.swift"))
+            #expect(throws: SwiftlyKitError.staleAssessment) {
+                try snapshot.validateCurrent()
+            }
         }
     }
 

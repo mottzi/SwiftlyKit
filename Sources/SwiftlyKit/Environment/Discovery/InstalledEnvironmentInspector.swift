@@ -45,20 +45,6 @@ extension InstalledEnvironmentInspector {
 
 extension InstalledEnvironmentInspector {
 
-    static func swiftCommand(
-        swiftly: URL,
-        toolchain: SwiftVersion,
-        arguments: [String],
-        workingDirectory: URL? = nil
-    ) -> SubprocessCommand {
-
-        SubprocessCommand(
-            executableURL: swiftly,
-            arguments: ["run", "swift"] + arguments + ["+\(toolchain)"],
-            workingDirectory: workingDirectory
-        )
-    }
-
     /// Decodes `swiftly list --format json`, excluding system, snapshot, and malformed entries.
     static func parseSwiftlyList(_ data: Data) throws -> [SwiftVersion] {
 
@@ -110,8 +96,7 @@ extension InstalledEnvironmentInspector {
         toolchain: SwiftVersion
     ) async throws -> [InstalledStaticLinuxSDK] {
 
-        let command = Self.swiftCommand(
-            swiftly: swiftly.executableURL,
+        let command = swiftly.swiftCommand(
             toolchain: toolchain,
             arguments: ["sdk", "list"]
         )

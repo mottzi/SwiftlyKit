@@ -118,20 +118,14 @@ extension EnvironmentPreparer {
         if !state.contains(toolchain: toolchain, sdk: sdk.identifier) {
             guard assessment.requiredComponents.contains(.staticLinuxSDK)
             else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
-            
-            guard sdkMetadata.downloadURL.scheme?.lowercased() == "https",
-                  sdkMetadata.checksum.count == 64,
-                  sdkMetadata.checksum.allSatisfy(\.isHexDigit)
-            else { throw EnvironmentPreparationError.invalidDownloadURL }
-            
+
             await report(
                 .staticLinuxSDK,
                 "Installing the matching checksummed Static Linux SDK.",
                 to: onEvent
             )
 
-            let installSDKCommand = InstalledEnvironmentInspector.swiftCommand(
-                swiftly: swiftly.executableURL,
+            let installSDKCommand = swiftly.swiftCommand(
                 toolchain: toolchain,
                 arguments: [
                     "sdk", "install", sdkMetadata.downloadURL.absoluteString,
@@ -152,8 +146,6 @@ extension EnvironmentPreparer {
 extension EnvironmentPreparer {
 
     private func bootstrapSwiftly(onEvent: EventHandler?) async throws {
-
-        guard Self.officialPackageURL.scheme == "https" else { throw EnvironmentPreparationError.invalidDownloadURL }
 
         let stagingDirectory = temporaryDirectory.appending(
             path: "SwiftlyKit-\(UUID().uuidString)",

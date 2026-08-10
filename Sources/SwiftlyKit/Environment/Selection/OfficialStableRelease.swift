@@ -20,4 +20,20 @@ struct StaticLinuxSDKMetadata: Hashable, Sendable {
     let checksum: String
     let supportedArchitectures: Set<LinuxArchitecture>
 
+    init?(
+        downloadURL: URL,
+        checksum: String,
+        supportedArchitectures: Set<LinuxArchitecture>
+    ) {
+
+        guard downloadURL.scheme?.lowercased() == "https" else { return nil }
+        guard checksum.utf8.count == 64 else { return nil }
+        guard checksum.isASCIIHexadecimal else { return nil }
+        guard !supportedArchitectures.isEmpty else { return nil }
+
+        self.downloadURL = downloadURL
+        self.checksum = checksum.lowercased()
+        self.supportedArchitectures = supportedArchitectures
+    }
+
 }

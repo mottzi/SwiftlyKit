@@ -77,20 +77,25 @@ extension SwiftlyInstallation {
 
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         let components = trimmed.split(separator: ".", omittingEmptySubsequences: false)
-        
+
         guard components.count == 3 else { return false }
-        guard components.allSatisfy(\.isASCIIDecimal) else { return false }
-        guard let major = UInt(components[0]) else { return false }
-        guard major >= 1 else { return false }
-        guard UInt(components[1]) != nil else { return false }
-        guard UInt(components[2]) != nil else { return false }
-        
-        return true
+        guard let version = SwiftVersion(parsing: trimmed) else { return false }
+
+        return version.major >= 1
     }
 
 }
 
 extension SwiftlyInstallation {
+
+    func swiftCommand(toolchain: SwiftVersion, arguments: [String], workingDirectory: URL? = nil) -> SubprocessCommand {
+
+        SubprocessCommand(
+            executableURL: executableURL,
+            arguments: ["run", "swift"] + arguments + ["+\(toolchain)"],
+            workingDirectory: workingDirectory
+        )
+    }
 
     static func liveVersionProbe(
         at executableURL: URL,

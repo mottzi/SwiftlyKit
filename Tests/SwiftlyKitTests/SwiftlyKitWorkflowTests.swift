@@ -22,7 +22,7 @@ struct SwiftlyKitWorkflowTests {
                         downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
                         checksum: String(repeating: "a", count: 64),
                         supportedArchitectures: [.arm64]
-                    )
+                    )!
                 ),
                 requiredComponents: [],
                 target: .linux(.arm64)
@@ -76,7 +76,7 @@ struct SwiftlyKitWorkflowTests {
                     downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
                     checksum: String(repeating: "a", count: 64),
                     supportedArchitectures: [.arm64]
-                )
+                )!
             )
             let runner = RecordingSubprocessRunner(results: [SubprocessResult(
                 succeeded: true,

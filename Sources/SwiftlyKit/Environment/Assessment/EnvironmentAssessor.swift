@@ -48,12 +48,8 @@ struct EnvironmentAssessor: Sendable {
                 installedToolchains: inventory.toolchains,
                 installedSDKs: inventory.sdks
             )
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as EnvironmentSelectionPolicy.SelectionError {
-            throw error.swiftlyKitError
         } catch {
-            throw SwiftlyKitError.compatibleReleaseUnavailable
+            throw error.swiftlyKitError
         }
 
         let toolchainAvailable = inventory.contains(toolchain: release.version)

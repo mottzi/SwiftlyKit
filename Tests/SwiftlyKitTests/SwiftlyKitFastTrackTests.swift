@@ -140,7 +140,7 @@ private func fastTrackKit(packageRoot: URL, runner: RecordingSubprocessRunner) -
             downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
             checksum: String(repeating: "a", count: 64),
             supportedArchitectures: [.x86_64]
-        )
+        )!
     )
 
     return SwiftlyKit(
