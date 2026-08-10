@@ -94,6 +94,44 @@ extension SwiftPM {
 
 extension SwiftPM {
 
+    private func withExactSDKSearchDirectory<T: Sendable>(
+        _ environment: LocalBuildEnvironment,
+        body: (URL) async throws -> T
+    ) async throws -> T {
+
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "SwiftlyKit-SDK-\(UUID().uuidString)", directoryHint: .isDirectory)
+
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try FileManager.default.createSymbolicLink(
+            at: directory.appending(path: environment.sdkBundleURL.lastPathComponent),
+            withDestinationURL: environment.sdkBundleURL
+        )
+
+        return try await body(directory)
+    }
+
+    private func containsRuntimeResourceBundle(in directory: URL) throws -> Bool {
+
+        do {
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+
+            return try contents.contains { url in
+                guard url.pathExtension == "resources" else { return false }
+                let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
+                return resourceValues.isDirectory == true
+            }
+        } catch {
+            throw SwiftPMError.invalidExecutable("The build output could not be inspected for runtime resources.")
+        }
+    }
+
     private func strip(
         _ executable: URL,
         for request: BuildRequest,
@@ -153,48 +191,6 @@ extension SwiftPM {
         return lowercased.contains("package.resolved")
             || lowercased.contains("automatic resolution is disabled")
             || lowercased.contains("dependencies could not be resolved")
-    }
-
-}
-
-extension SwiftPM {
-
-    private func withExactSDKSearchDirectory<T: Sendable>(
-        _ environment: LocalBuildEnvironment,
-        body: (URL) async throws -> T
-    ) async throws -> T {
-
-        let directory = FileManager.default.temporaryDirectory
-            .appending(path: "SwiftlyKit-SDK-\(UUID().uuidString)", directoryHint: .isDirectory)
-
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: directory) }
-
-        try FileManager.default.createSymbolicLink(
-            at: directory.appending(path: environment.sdkBundleURL.lastPathComponent),
-            withDestinationURL: environment.sdkBundleURL
-        )
-
-        return try await body(directory)
-    }
-
-    private func containsRuntimeResourceBundle(in directory: URL) throws -> Bool {
-
-        do {
-            let contents = try FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            )
-
-            return try contents.contains { url in
-                guard url.pathExtension == "resources" else { return false }
-                let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
-                return resourceValues.isDirectory == true
-            }
-        } catch {
-            throw SwiftPMError.invalidExecutable("The build output could not be inspected for runtime resources.")
-        }
     }
 
 }

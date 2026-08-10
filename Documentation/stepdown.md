@@ -24,7 +24,8 @@ A reader should understand the main behavior before reaching mechanics or consta
 - Do not move the principal behavior into an extension merely to separate state from behavior.
 - Use extensions as semantic chapter boundaries for behavior subordinate or additional to the principal behavior.
 - Keep each semantic chapter homogeneous in role. Do not combine remaining interface, state-dependent instance mechanics, pure static transformations, and live adapters in one extension.
-- Treat access level and static-versus-instance dispatch as evidence of different semantic roles, not as ordering rules by themselves. Declarations may share a chapter only when they jointly implement one coherent layer.
+- Within extensions, group declarations by access level and dispatch kind. By default, do not mix static and instance declarations or declarations with different access levels in one extension.
+- Make an exception only when the declarations jointly implement one inseparable semantic role and separating them would obscure that relationship.
 - When a principal algorithm and its subordinate member helpers share a file, place the helpers in a following extension so the transition from intent to implementation is visible.
 - An extension may contain a single declaration when that declaration forms a meaningful semantic chapter. Do not create one extension per function when multiple functions belong to the same layer.
 - Put access control on individual declarations, never on extensions.

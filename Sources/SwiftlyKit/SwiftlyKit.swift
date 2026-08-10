@@ -66,6 +66,15 @@ public struct SwiftlyKit: Sendable {
         )
     }
 
+    /// Requests Apple's interactive Command Line Tools installer when no usable macOS SDK is active.
+    ///
+    /// This operation returns after macOS accepts the request. The user must finish the system installation and then
+    /// retry assessment or building. If an active Xcode or Command Line Tools SDK is already usable, it returns without
+    /// showing the installer. SwiftlyKit never selects or changes the active developer directory.
+    public static func requestCommandLineToolsInstallation() async throws {
+        try await CommandLineToolsInstallationRequester().request()
+    }
+
     func build(
         _ packageRoot: URL,
         product productName: String?,

@@ -7,6 +7,7 @@ workflow. Both routes use the same three internal workflow components:
 ```mermaid
 flowchart LR
     Consumer --> Facade[SwiftlyKit]
+    Facade -->|request Command Line Tools installer| Requester[CommandLineToolsInstallationRequester]
     Facade -->|assess| Assessor[EnvironmentAssessor]
     Assessor --> Assessment[EnvironmentAssessment]
     Assessment --> Preparer[EnvironmentPreparer]
@@ -17,6 +18,7 @@ flowchart LR
     Gate --> SwiftPM
     Facade -->|executableProducts| SwiftPM
     Assessor --> Process[SubprocessRunning]
+    Requester --> Process
     Preparer --> Process
     SwiftPM --> Process
 ```
@@ -38,6 +40,13 @@ capability containing the exact package, target, Swiftly executable, toolchain,
 and SDK context used by later operations. `BuildRequest` then contains only
 choices for one build.
 
+The static `requestCommandLineToolsInstallation` recovery operation is separate
+from environment preparation. It first reuses host preflight as an idempotency
+check, then invokes Apple's `xcode-select --install` entry point only when a
+usable SDK is unavailable. It returns when macOS accepts the request; it cannot
+observe license acceptance or installation completion. The consumer retries
+assessment after the user finishes the system interaction.
+
 Each `SwiftlyKit` facade instance owns a cancellation-aware FIFO `MutationGate`.
 Preparation, dependency resolution, and builds acquire the gate because they can
 change user, package, scratch, or output state. Read-only assessment and product
@@ -51,7 +60,8 @@ discovery do not acquire it.
 - `Package` canonicalizes the package root, parses the tools version, finds the
   nearest `.swift-version`, and snapshots the input files byte-for-byte.
 - `Environment/Host` rejects unsupported hosts and missing developer tools
-  before environment work proceeds.
+  before environment work proceeds, and owns the explicit adapter that requests
+  Apple's interactive Command Line Tools installer.
 - `Environment/Assessment` coordinates the read-only package, host, release,
   discovery, and selection steps and produces `EnvironmentAssessment`.
 - `Environment/Discovery` detects Swiftly, constructs Swiftly-run commands, and
@@ -76,6 +86,9 @@ discovery do not acquire it.
 
 - Test seams and infrastructure are internal and cannot configure production
   callers.
+- The Command Line Tools installer is requested only through the explicit public
+  recovery operation. It is not part of assessment or preparation, and success
+  means only that macOS accepted the request.
 - Assessment derives its values from one captured `Package.swift` and nearest
   `.swift-version` state. Preparation compares the same inputs byte-for-byte
   before any mutation.

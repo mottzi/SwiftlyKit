@@ -28,7 +28,10 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftlyKitTests",
-            dependencies: ["SwiftlyKit"]
+            dependencies: ["SwiftlyKit"],
+            resources: [
+                .copy("Fixtures/TripleCrossCompilation")
+            ]
         )
     ],
     swiftLanguageModes: [.v6]

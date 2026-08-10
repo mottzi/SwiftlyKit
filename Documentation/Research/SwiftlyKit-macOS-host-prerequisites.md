@@ -4,7 +4,7 @@
 
 **Reference date:** 6 August 2026
 
-**Status:** Decision
+**Status:** Decision, amended 10 August 2026
 
 ## Question
 
@@ -42,10 +42,12 @@ The narrowest honest 0.1.0 resolution is therefore:
    SDK path, matching Swiftly and SwiftPM's own discovery.
    [Swiftly SDK probe](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592da96b7c1de058c360a8f/Sources/MacOSPlatform/MacOS.swift#L49-L75),
    [SwiftPM SDK discovery](https://github.com/swiftlang/swift-package-manager/blob/5f6969f5b083b4415632114d4897c6f820761a7f/Sources/PackageModel/SwiftSDKs/SwiftSDK.swift#L577-L595)
-3. Preserve the existing rule that SwiftlyKit neither invokes
-   `xcode-select --install` nor requests administrator privileges. The user or
-   machine administrator installs/selects Apple developer tools outside
-   SwiftlyKit.
+3. Keep Apple developer-tool installation and selection outside deterministic
+   environment preparation. SwiftlyKit may expose an explicit recovery operation
+   that invokes `xcode-select --install`, returns when macOS accepts the request,
+   and leaves the system dialog, license acceptance, installation completion,
+   and any developer-directory selection to the user. SwiftlyKit does not
+   request administrator privileges.
 4. Do not adopt Triple's Linux VM appliance for 0.1.0. That would remove the
    host SDK dependency, but it would replace the MVP's intentionally lightweight
    native-Swiftly architecture rather than correct its prerequisite statement.
@@ -74,6 +76,7 @@ macOS host-SDK discovery and failure behavior used by 6.3.3.
 | Operation | Host macOS SDK / CLT needed? | Reason |
 |---|---:|---|
 | Load SwiftlyKit; validate paths; read `swift-tools-version` and `.swift-version` as text | No | These are SwiftlyKit file operations and do not compile or execute `Package.swift`. This is also the MVP's specified assessment approach. [MVP: environment assessment](../MVP-0.1.0.md#environment-assessment) |
+| Request Apple's interactive Command Line Tools installer | No | The explicit recovery operation invokes the system-provided `/usr/bin/xcode-select --install` entry point. It only requests the dialog and does not imply that the user completed installation. [Apple: installing the Command Line Tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools) |
 | Locate Swiftly and read its version or installed stable-toolchain state without executing a toolchain | No | Released Swiftly's macOS platform declares no prerequisites for Swiftly itself, and its `list` command reads the Swiftly configuration rather than launching the compiler. [Swiftly 1.1.3: macOS Swiftly prerequisite](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592da96b7c1de058c360a8f/Sources/MacOSPlatform/MacOS.swift#L45-L47), [Swiftly 1.1.3: `list`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592da96b7c1de058c360a8f/Sources/Swiftly/List.swift#L44-L67) |
 | Install the Swiftly package and initialize it with `--skip-install` | No | The official package is installed into the current user's home. Swiftly initialization calls a platform prerequisite that is empty on macOS, and `--skip-install` bypasses toolchain installation. [Swift.org: install Swiftly on macOS](https://www.swift.org/install/macos/swiftly/), [Swiftly 1.1.3: initialization](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592da96b7c1de058c360a8f/Sources/Swiftly/Init.swift#L42-L45), [Swiftly 1.1.3: skip toolchain installation](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592da96b7c1de058c360a8f/Sources/Swiftly/Init.swift#L269-L275) |
 | Install a macOS Swift toolchain with released Swiftly 1.1.3 | Yes in the released implementation | Before downloading, Swiftly calls its platform prerequisite check. On macOS that calls `/usr/bin/xcrun --show-sdk-path --sdk macosx`; the process helper throws on a nonzero result, so an absent SDK aborts the released install path. [Swiftly 1.1.3: install preflight](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592da96b7c1de058c360a8f/Sources/Swiftly/Install.swift#L261-L270), [Swiftly 1.1.3: macOS SDK check](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592da96b7c1de058c360a8f/Sources/MacOSPlatform/MacOS.swift#L49-L75), [Swiftly 1.1.3: nonzero process result throws](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592da96b7c1de058c360a8f/Sources/SwiftlyCore/Platform.swift#L297-L331) |

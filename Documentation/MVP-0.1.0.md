@@ -46,6 +46,10 @@ ownership ledger, log store, package compatibility analyzer, or source watcher.
 Environment assessment is read-only. Installation occurs only when the consumer
 passes an assessment to `prepare(_:)`.
 
+Requesting Apple's interactive Command Line Tools installer is a separate,
+explicit recovery operation. It is never triggered by assessment, preparation,
+or building and does not claim that installation completed.
+
 Dependency resolution is also explicit. An ordinary build must never install
 environment components or resolve package dependencies.
 
@@ -59,9 +63,13 @@ SwiftlyKit must never:
 - modify a shell profile;
 - select or change the user's default Swift toolchain;
 - invoke `swiftly use`;
-- invoke `xcode-select --install`;
 - update or replace an existing Swiftly installation;
 - remove Swiftly, a toolchain, or an SDK.
+
+SwiftlyKit may invoke `xcode-select --install` only from the consumer's explicit
+call to `requestCommandLineToolsInstallation()`. That operation requests Apple's
+system dialog; it does not accept the license, wait for installation, install
+Xcode, or select an active developer directory.
 
 ### Swift concurrency
 
@@ -87,8 +95,10 @@ teardown. The process implementation is not public API.
 SwiftlyKit must return `unsupportedHost` before mutation on an Intel Mac or an
 unsupported macOS release. It must return `developerToolsUnavailable` before
 mutation when `/usr/bin/xcrun --sdk macosx --show-sdk-path` does not identify a
-usable SDK. SwiftlyKit does not invoke `xcode-select --install`; installing or
-selecting Apple developer tools remains the consumer's responsibility.
+usable SDK. The consumer may then explicitly call
+`requestCommandLineToolsInstallation()` to request Apple's interactive installer.
+The user remains responsible for completing installation or selecting existing
+developer tools before retrying assessment.
 
 A package can still have its own host-tool requirements. For example, a package
 plugin or C++ host tool can require Apple developer components. SwiftlyKit does
@@ -549,6 +559,7 @@ It covers at least:
 - invalid package root;
 - unsupported host;
 - unavailable macOS developer tools;
+- failed Command Line Tools installation request;
 - unsupported or malformed tools version;
 - incompatible Swiftly;
 - Swiftly installation failure;
@@ -582,8 +593,10 @@ with the consumer process's user permissions.
 All official downloads use HTTPS. Swiftly installer trust, Swiftly toolchain
 verification, and published Static Linux SDK checksums are mandatory.
 
-SwiftlyKit does not request administrator privileges, Full Disk Access, App
-Sandbox exceptions, or Apple developer-tool installation.
+SwiftlyKit does not request administrator privileges, Full Disk Access, or App
+Sandbox exceptions. Its explicit Command Line Tools recovery operation requests
+Apple's system installer, where the user controls license acceptance and
+installation. SwiftlyKit does not install Xcode or select developer tools.
 
 ## Explicit non-goals for 0.1.0
 
@@ -601,7 +614,7 @@ The release does not include:
 - automatic dependency resolution during build;
 - arbitrary SwiftPM, compiler, or linker arguments;
 - automatic Swiftly upgrades;
-- Apple developer-tool installation or selection;
+- unattended Apple developer-tool installation or any developer-tool selection;
 - shell-profile or default-toolchain changes;
 - private toolchain or SDK installations;
 - toolchain or SDK deletion;
@@ -620,42 +633,46 @@ acceptance fixtures prove all of the following:
 
 1. Assessment of the same unchanged package root is repeatable and read-only.
 2. A missing usable macOS SDK fails with `developerToolsUnavailable` before any
-   mutation or installer invocation.
-3. Automatic selection follows the specified precedence and resolves an exact
+   environment mutation or automatic installer request.
+3. An explicit Command Line Tools installation request invokes only
+   `/usr/bin/xcode-select --install`, returns after the request is accepted, and
+   does not run when the active SDK is already usable.
+4. Automatic selection follows the specified precedence and resolves an exact
    stable toolchain and matching SDK.
-4. Exact selection rejects incompatible releases, snapshots, and SDK mismatches.
-5. A missing Swiftly installation produces an explicit preparation requirement.
-6. Authorized preparation installs official Swiftly without modifying shell
+5. Exact selection rejects incompatible releases, snapshots, and SDK mismatches.
+6. A missing Swiftly installation produces an explicit preparation requirement.
+7. Authorized preparation installs official Swiftly without modifying shell
    profiles or selecting a default toolchain.
-7. Preparation installs and uses only the selected exact toolchain and matching
+8. Preparation installs and uses only the selected exact toolchain and matching
    checksummed SDK.
-8. An existing compatible Local build environment is reused without mutation.
-9. An existing Swiftly release older than 1.0 is rejected without replacement.
-10. A changed `Package.swift` or `.swift-version` makes an assessment stale before
+9. An existing compatible Local build environment is reused without mutation.
+10. An existing Swiftly release older than 1.0 is rejected without replacement.
+11. A changed `Package.swift` or `.swift-version` makes an assessment stale before
    preparation.
-11. Product discovery returns the executable products from the exact prepared
+12. Product discovery returns the executable products from the exact prepared
     toolchain.
-12. A dependency-free package builds without `Package.resolved`.
-13. A package requiring resolution fails with `dependencyResolutionRequired`;
+13. A dependency-free package builds without `Package.resolved`.
+14. A package requiring resolution fails with `dependencyResolutionRequired`;
     explicit resolution followed by build succeeds.
-14. ARM64 and x86-64 fixtures produce verified static ELF64 executables of the
+15. ARM64 and x86-64 fixtures produce verified static ELF64 executables of the
     requested architecture.
-15. The unstripped executable is returned by default in debug and release builds.
-16. Explicit stripping uses the exact toolchain and returns a reverified
+16. The unstripped executable is returned by default in debug and release builds.
+17. Explicit stripping uses the exact toolchain and returns a reverified
     executable; strip failure fails the operation.
-17. A caller-selected output is published atomically, and an existing output is
+18. A caller-selected output is published atomically, and an existing output is
     never replaced.
-18. Products requiring runtime resource bundles are rejected.
-19. Cancellation terminates the full subprocess tree and throws
+19. Products requiring runtime resource bundles are rejected.
+20. Cancellation terminates the full subprocess tree and throws
     `CancellationError`.
-20. Mutating operations on one `SwiftlyKit` instance are serialized.
-21. Events stream without persisted logs, and errors contain only bounded,
+21. Mutating operations on one `SwiftlyKit` instance are serialized.
+22. Events stream without persisted logs, and errors contain only bounded,
     redacted process context.
-22. SwiftlyKit creates no database, ownership journal, retained Build record, or
+23. SwiftlyKit creates no database, ownership journal, retained Build record, or
     Artifact bundle.
 
 ## Upstream references
 
+- [Installing the Command Line Tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools)
 - [Getting Started with the Static Linux SDK](https://www.swift.org/documentation/articles/static-linux-getting-started.html)
 - [Getting Started with Swiftly on macOS](https://www.swift.org/install/macos/swiftly/)
 - [Swiftly](https://github.com/swiftlang/swiftly)

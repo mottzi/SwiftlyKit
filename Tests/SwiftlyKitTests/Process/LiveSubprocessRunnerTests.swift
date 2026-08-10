@@ -29,6 +29,50 @@ struct LiveSubprocessRunnerTests {
         #expect(output[.standardError] == "diagnostic")
     }
 
+    @Test("Preserves line breaks in captured and streamed output")
+    func lineBreaksArePreserved() async throws {
+
+        let recorder = OutputRecorder()
+        let command = SubprocessCommand(
+            executableURL: URL(filePath: "/bin/sh"),
+            arguments: ["-c", "printf 'first\\nsecond\\n'"]
+        )
+
+        let result = try await LiveSubprocessRunner().run(
+            command,
+            onOutput: { stream, text in
+                await recorder.record(stream, text)
+            }
+        )
+
+        let expected = "first\nsecond\n"
+        #expect(result.succeeded)
+        #expect(result.standardOutput == expected)
+        #expect(await recorder.output[.standardOutput] == expected)
+    }
+
+    @Test("Preserves UTF-8 scalars split across output buffers")
+    func splitUTF8ScalarIsPreserved() async throws {
+
+        let recorder = OutputRecorder()
+        let command = SubprocessCommand(
+            executableURL: URL(filePath: "/bin/sh"),
+            arguments: ["-c", "printf '\\303'; sleep 0.05; printf '\\251\\n'"]
+        )
+
+        let result = try await LiveSubprocessRunner().run(
+            command,
+            onOutput: { stream, text in
+                await recorder.record(stream, text)
+            }
+        )
+
+        let expected = "é\n"
+        #expect(result.succeeded)
+        #expect(result.standardOutput == expected)
+        #expect(await recorder.output[.standardOutput] == expected)
+    }
+
     @Test("Bounds retained output without truncating streamed output")
     func boundedCollection() async throws {
 
@@ -48,7 +92,8 @@ struct LiveSubprocessRunnerTests {
 
         let streamed = await recorder.output[.standardOutput] ?? ""
         #expect(result.succeeded)
-        #expect(streamed.utf8.count == 1_200_000)
+        #expect(streamed.utf8.count == 1_200_011)
+        #expect(streamed.utf8.filter { $0 == 0x0A }.count == 11)
         #expect(result.standardOutput.utf8.count <= 1_048_576)
         #expect(streamed.hasSuffix(result.standardOutput))
     }

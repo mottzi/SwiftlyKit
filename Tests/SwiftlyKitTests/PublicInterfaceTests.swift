@@ -20,6 +20,15 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("The documented Command Line Tools recovery compiles without testable access")
+    func commandLineToolsRecoveryCompiles() {
+
+        let recovery: @Sendable () async throws -> Void = {
+            try await SwiftlyKit.requestCommandLineToolsInstallation()
+        }
+        _ = recovery
+    }
+
 }
 
 private func documentedWorkflow(_ packageRoot: URL) async throws -> URL {

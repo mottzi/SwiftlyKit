@@ -5,6 +5,7 @@ public enum SwiftlyKitError: Error, Equatable, Sendable {
     case invalidPackageRoot(URL)
     case unsupportedHost
     case developerToolsUnavailable
+    case commandLineToolsInstallationRequestFailed(String)
     case malformedToolsVersion
     case unsupportedToolsVersion(SwiftVersion)
     case incompatibleSwiftly
@@ -34,6 +35,8 @@ extension SwiftlyKitError: LocalizedError {
             case .invalidPackageRoot: "The package root must be a readable local directory containing Package.swift."
             case .unsupportedHost: "SwiftlyKit requires Apple silicon macOS 13 or later."
             case .developerToolsUnavailable: "A usable macOS SDK is unavailable; install or select Xcode or Command Line Tools."
+            case .commandLineToolsInstallationRequestFailed(let detail):
+                "The Command Line Tools installation could not be requested: \(detail)"
             case .malformedToolsVersion: "Package.swift does not contain a supported swift-tools-version declaration."
             case .unsupportedToolsVersion(let version): "No supported official Swift release is compatible with tools version \(version)."
             case .incompatibleSwiftly: "Swiftly 1.0 or later is required; an existing Swiftly installation is not replaced automatically."

@@ -61,8 +61,32 @@ let package = Package(
 - A trusted local Swift package to build
 
 Swiftly 1.0 or later is also required. SwiftlyKit can install Swiftly when you
-authorize environment preparation. SwiftlyKit does not install or select Xcode
-or Command Line Tools.
+authorize environment preparation. SwiftlyKit does not install Xcode or select
+the active developer directory. It can explicitly request Apple's interactive
+Command Line Tools installer.
+
+### Request missing Command Line Tools
+
+Assessment and building throw `SwiftlyKitError.developerToolsUnavailable` when
+no usable macOS SDK is active. An unsandboxed consumer can respond by requesting
+[Apple's system installer](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools):
+
+```swift
+do {
+    let executable = try await SwiftlyKit.build(packageRoot)
+    print(executable.path)
+} catch SwiftlyKitError.developerToolsUnavailable {
+    try await SwiftlyKit.requestCommandLineToolsInstallation()
+    print("Finish the installation in the macOS dialog, then try again.")
+}
+```
+
+The request returns when macOS accepts it, not when installation finishes. The
+user must click Install, accept Apple's license, and then retry assessment or
+building. The operation is a no-op when an active Xcode or Command Line Tools
+SDK is already usable. It never installs Xcode or changes the active developer
+directory; if developer tools are installed but not selected, the consumer must
+select them outside SwiftlyKit.
 
 ## Quick start
 
@@ -299,7 +323,9 @@ SwiftlyKit does not:
 - run `swiftly use`;
 - update or replace an existing Swiftly installation;
 - remove Swiftly, a toolchain, an SDK, or build scratch storage;
-- install or select Apple developer tools;
+- install Xcode or select Apple developer tools;
+- request the Command Line Tools installer unless the consumer explicitly calls
+  `requestCommandLineToolsInstallation()`;
 - run package tests;
 - sign, archive, deploy, or run the Linux executable; or
 - keep build history, logs, or artifacts.
@@ -321,6 +347,8 @@ Operational failures use `SwiftlyKitError`. It conforms to `LocalizedError` and
 provides a user-facing description. Common control-flow errors include:
 
 - `dependencyResolutionRequired`
+- `developerToolsUnavailable`
+- `commandLineToolsInstallationRequestFailed`
 - `executableProductSelectionRequired`
 - `staleAssessment`
 - `outputAlreadyExists`
@@ -342,7 +370,7 @@ do {
 
 | Type | Purpose |
 | --- | --- |
-| `SwiftlyKit` | Provides the fast track and staged operations. |
+| `SwiftlyKit` | Provides the fast track, staged operations, and explicit Command Line Tools recovery. |
 | `EnvironmentAssessment` | Describes the selected environment and required installations. |
 | `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, and SDK. |
 | `BuildRequest` | Selects one product and its build options. |
@@ -361,9 +389,20 @@ Run the test suite from the repository root:
 swift test
 ```
 
+Run the real-system cross-compilation acceptance test explicitly on a prepared
+host. It uses Triple's dependency-free fixture and never authorizes installation:
+
+```sh
+SWIFTLYKIT_RUN_ACCEPTANCE=1 swift test --filter CrossCompilationAcceptanceTests
+```
+
+The acceptance test requires compatible Swiftly, Swift 6.3.3, and its matching
+Static Linux SDK to already be installed. It builds and verifies both supported
+architectures in temporary scratch storage.
+
 For the internal design, see [Architecture](Documentation/Architecture.md). For
 the complete 0.1.0 release boundary, see [MVP 0.1.0](Documentation/MVP-0.1.0.md).
 
 ## License
 
-This repository does not contain a license file.
+SwiftlyKit is available under the MIT License. See [LICENSE](LICENSE).
