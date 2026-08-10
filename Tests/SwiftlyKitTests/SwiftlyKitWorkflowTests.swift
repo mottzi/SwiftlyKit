@@ -13,9 +13,8 @@ struct SwiftlyKitWorkflowTests {
             let originalManifest = Data("// swift-tools-version: 6.0\n".utf8)
             try originalManifest.write(to: manifestURL)
             let version = SwiftVersion(major: 6, minor: 2, patch: 1)
-            let requirements = try PackageRequirements.load(at: packageRoot)
             let assessment = EnvironmentAssessment(
-                packageInputs: try PackageInputSnapshot.capture(requirements),
+                packageInputs: try PackageInputSnapshot.capture(at: packageRoot),
                 release: OfficialStableRelease(
                     version: version,
                     staticLinuxSDK: OfficialStaticLinuxSDK(

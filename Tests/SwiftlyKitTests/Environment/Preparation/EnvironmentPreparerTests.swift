@@ -34,7 +34,7 @@ struct EnvironmentPreparerTests {
             revalidate: { _ in await validations.increment() }
         )
 
-        let result = try await preparer.prepare(assessment(requires: []))
+        let result = try await preparer.prepare(try assessment(requires: []))
 
         #expect(result.swiftVersion == version)
         #expect(await inspections.value == 1)
@@ -65,7 +65,7 @@ struct EnvironmentPreparerTests {
             revalidate: { _ in }
         )
 
-        _ = try await preparer.prepare(assessment(requires: [.toolchain, .staticLinuxSDK]))
+        _ = try await preparer.prepare(try assessment(requires: [.toolchain, .staticLinuxSDK]))
 
         let recorded = await commands.commands
         #expect(await inspections.callCount == 3)
@@ -97,7 +97,7 @@ struct EnvironmentPreparerTests {
             revalidate: { _ in }
         )
 
-        _ = try await preparer.prepare(assessment(requires: [.toolchain]))
+        _ = try await preparer.prepare(try assessment(requires: [.toolchain]))
 
         #expect(await inspections.callCount == 2)
         #expect(await commands.commands.count == 1)
@@ -123,7 +123,7 @@ struct EnvironmentPreparerTests {
         )
 
         await #expect(throws: EnvironmentPreparationError.unauthorizedMutationRequired) {
-            try await preparer.prepare(assessment(requires: [.staticLinuxSDK]))
+            try await preparer.prepare(try assessment(requires: [.staticLinuxSDK]))
         }
 
         #expect(await inspections.callCount == 2)
@@ -163,7 +163,7 @@ struct EnvironmentPreparerTests {
                 revalidate: { _ in }
             )
 
-            _ = try await preparer.prepare(assessment(requires: [.swiftly]))
+            _ = try await preparer.prepare(try assessment(requires: [.swiftly]))
 
             let recorded = await commands.commands
             #expect(recorded[0].executableURL.path == "/usr/sbin/pkgutil")
@@ -189,7 +189,7 @@ struct EnvironmentPreparerTests {
         )
 
         await #expect(throws: EnvironmentPreparationError.invalidHTTPResponse(503)) {
-            try await preparer.prepare(assessment(requires: [.swiftly]))
+            try await preparer.prepare(try assessment(requires: [.swiftly]))
         }
         #expect(await commands.commands.isEmpty)
     }
@@ -218,7 +218,7 @@ struct EnvironmentPreparerTests {
             )
 
             await #expect(throws: EnvironmentPreparationError.packageSignatureRejected) {
-                try await preparer.prepare(assessment(requires: [.swiftly]))
+                try await preparer.prepare(try assessment(requires: [.swiftly]))
             }
 
             let recorded = await commands.commands
@@ -241,7 +241,7 @@ struct EnvironmentPreparerTests {
         )
 
         await #expect(throws: EnvironmentPreparationError.unauthorizedMutationRequired) {
-            try await preparer.prepare(assessment(requires: []))
+            try await preparer.prepare(try assessment(requires: []))
         }
         #expect(await commands.commands.isEmpty)
     }
@@ -257,7 +257,7 @@ struct EnvironmentPreparerTests {
         )
 
         await #expect(throws: CancellationError.self) {
-            try await preparer.prepare(assessment(requires: [.swiftly]))
+            try await preparer.prepare(try assessment(requires: [.swiftly]))
         }
     }
 
@@ -272,20 +272,17 @@ struct EnvironmentPreparerTests {
         )
     }
 
-    private func assessment(requires components: [PreparationComponent]) -> EnvironmentAssessment {
+    private func assessment(requires components: [PreparationComponent]) throws -> EnvironmentAssessment {
 
-        let requirements = PackageRequirements(
-            packageRoot: URL(filePath: "/tmp/package"),
-            toolsVersion: SwiftVersion(major: 6, minor: 0, patch: 0),
-            swiftVersion: nil,
-            swiftVersionFileURL: nil
-        )
+        let packageRoot = FileManager.default.temporaryDirectory
+            .appending(path: "SwiftlyKit-EnvironmentAssessment-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: packageRoot, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: packageRoot) }
+        try Data("// swift-tools-version: 6.0\n".utf8)
+            .write(to: packageRoot.appending(path: "Package.swift"))
+
         return EnvironmentAssessment(
-            packageInputs: PackageInputSnapshot(
-                requirements: requirements,
-                manifest: Data(),
-                swiftVersionFile: nil
-            ),
+            packageInputs: try PackageInputSnapshot.capture(at: packageRoot),
             release: OfficialStableRelease(version: version, staticLinuxSDK: sdk),
             requiredComponents: components,
             target: .linux(.arm64)
