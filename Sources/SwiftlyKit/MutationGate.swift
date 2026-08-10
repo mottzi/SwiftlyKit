@@ -11,15 +11,9 @@ actor MutationGate {
     func withAccess<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
 
         try await acquire()
+        defer { release() }
 
-        do {
-            let result = try await operation()
-            release()
-            return result
-        } catch {
-            release()
-            throw error
-        }
+        return try await operation()
     }
 
     private func acquire() async throws {

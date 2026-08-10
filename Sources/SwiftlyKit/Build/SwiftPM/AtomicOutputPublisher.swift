@@ -21,9 +21,9 @@ enum AtomicOutputPublisher {
 
         let renameStatus = renameatx_np(AT_FDCWD, temporary.path, AT_FDCWD, destination.path, UInt32(RENAME_EXCL))
 
-        guard renameStatus == 0 else {
+        if renameStatus != 0 {
             if errno == EEXIST { throw SwiftPMError.outputAlreadyExists(destination) }
-            else { throw SwiftPMError.outputPublicationFailed(destination) }
+            throw SwiftPMError.outputPublicationFailed(destination)
         }
 
         return destination
