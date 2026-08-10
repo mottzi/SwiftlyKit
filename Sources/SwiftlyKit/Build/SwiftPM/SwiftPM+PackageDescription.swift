@@ -17,8 +17,7 @@ extension SwiftPM {
                 "--package-path", environment.packageRoot.path,
                 "--disable-automatic-resolution",
                 "dump-package"
-            ],
-            workingDirectory: environment.packageRoot
+            ]
         )
 
         let result = try await runner.run(packageCommand, onOutput: nil)

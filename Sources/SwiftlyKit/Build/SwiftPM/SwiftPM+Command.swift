@@ -5,7 +5,6 @@ extension SwiftPM {
     func command(
         _ environment: LocalBuildEnvironment,
         swiftArguments: [String],
-        workingDirectory: URL,
         additions: [String: String] = [:]
     ) -> SubprocessCommand {
 
@@ -13,7 +12,6 @@ extension SwiftPM {
             environment,
             tool: "swift",
             toolArguments: swiftArguments,
-            workingDirectory: workingDirectory,
             additions: additions
         )
     }
@@ -22,7 +20,6 @@ extension SwiftPM {
         _ environment: LocalBuildEnvironment,
         tool: String,
         toolArguments: [String],
-        workingDirectory: URL,
         additions: [String: String]
     ) -> SubprocessCommand {
 
@@ -47,7 +44,7 @@ extension SwiftPM {
         let command = SubprocessCommand(
             executableURL: environment.swiftlyExecutableURL,
             arguments: ["run", tool] + toolArguments + ["+\(environment.swiftVersion)"],
-            workingDirectory: workingDirectory,
+            workingDirectory: environment.packageRoot,
             environment: processEnvironment
         )
 

@@ -35,7 +35,6 @@ extension SwiftPM {
             let buildCommand = command(
                 environment,
                 swiftArguments: ["build"] + commonArguments,
-                workingDirectory: environment.packageRoot,
                 additions: request.environment
             )
 
@@ -50,7 +49,6 @@ extension SwiftPM {
             let pathCommand = command(
                 environment,
                 swiftArguments: ["build"] + commonArguments + ["--show-bin-path"],
-                workingDirectory: environment.packageRoot,
                 additions: request.environment
             )
 
@@ -171,8 +169,6 @@ extension SwiftPM {
                 let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
                 return resourceValues.isDirectory == true
             }
-        } catch let error as SwiftPMError {
-            throw error
         } catch {
             throw SwiftPMError.invalidExecutable("The build output could not be inspected for runtime resources.")
         }
@@ -189,7 +185,6 @@ extension SwiftPM {
             environment,
             tool: "llvm-objcopy",
             toolArguments: ["--strip-all", executable.path],
-            workingDirectory: environment.packageRoot,
             additions: request.environment
         )
 

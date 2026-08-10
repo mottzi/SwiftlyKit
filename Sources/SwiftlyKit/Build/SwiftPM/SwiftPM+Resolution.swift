@@ -19,8 +19,7 @@ extension SwiftPM {
                 "package",
                 "--package-path", environment.packageRoot.path,
                 "resolve"
-            ],
-            workingDirectory: environment.packageRoot
+            ]
         )
 
         let result = try await runner.run(resolutionCommand, onOutput: CommandOutput.handler(for: onEvent))

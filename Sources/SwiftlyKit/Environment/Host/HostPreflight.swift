@@ -13,9 +13,8 @@ struct HostPreflight: Sendable {
 
 extension HostPreflight {
 
-    @discardableResult
-    /// Validates the host before returning the canonical active SDK directory.
-    func check() async throws -> URL {
+    /// Validates the host and its active SDK.
+    func check() async throws {
 
         try Task.checkCancellation()
 
@@ -40,8 +39,6 @@ extension HostPreflight {
             .standardizedFileURL
         
         guard Self.isUsableSDK(at: canonicalSDKURL) else { throw SwiftlyKitError.developerToolsUnavailable }
-
-        return canonicalSDKURL
     }
 
 }

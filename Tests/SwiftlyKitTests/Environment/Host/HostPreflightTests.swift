@@ -83,8 +83,8 @@ struct HostPreflightTests {
         }
     }
 
-    @Test("A valid SDK path succeeds and canonicalizes symlinks")
-    func validSDKPathCanonicalizes() async throws {
+    @Test("A valid SDK symlink path succeeds")
+    func validSDKPathSucceeds() async throws {
 
         try await withTemporaryDirectory { temporaryDirectory in
             let realSDKURL = temporaryDirectory.appending(path: "MacOSX.sdk")
@@ -96,8 +96,7 @@ struct HostPreflightTests {
                 hostFacts: supportedHostFacts,
                 sdkProbe: { symlinkURL }
             )
-            let result = try await preflight.check()
-            #expect(result == realSDKURL.resolvingSymlinksInPath().standardizedFileURL)
+            try await preflight.check()
         }
     }
 
