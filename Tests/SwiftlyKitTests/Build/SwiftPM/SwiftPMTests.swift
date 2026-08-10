@@ -18,7 +18,6 @@ struct SwiftPMTests {
             (.outputAlreadyExists(output), .outputAlreadyExists(output)),
             (.outputPublicationFailed(output), .outputPublicationFailed(output)),
             (.commandFailed(operation: .build, diagnostic: "build failed"), .buildFailed("build failed")),
-            (.commandFailed(operation: .locatingBuildOutput, diagnostic: "missing output"), .buildFailed("missing output")),
             (.commandFailed(operation: .packageDescription, diagnostic: "invalid manifest"), .packageInspectionFailed("invalid manifest")),
             (.commandFailed(operation: .dependencyResolution, diagnostic: "unresolved"), .dependencyResolutionFailed("unresolved")),
             (.commandFailed(operation: .stripping, diagnostic: "objcopy failed"), .stripFailed("objcopy failed"))

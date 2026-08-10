@@ -75,7 +75,7 @@ struct ELFExecutableVerifierTests {
             let wrongType = directory.appending(path: "wrong-type")
             try writeELF(to: wrongType, architecture: .arm64)
             var wrongTypeData = try Data(contentsOf: wrongType)
-            overwrite(UInt16(1), at: 16, in: &wrongTypeData)
+            writeLittleEndian(UInt16(1), at: 16, into: &wrongTypeData)
             try wrongTypeData.write(to: wrongType)
             #expect(throws: SwiftPMError.invalidExecutable(
                 "The ELF file is not executable."
@@ -86,7 +86,7 @@ struct ELFExecutableVerifierTests {
             let noLoadableSegment = directory.appending(path: "no-loadable-segment")
             try writeELF(to: noLoadableSegment, architecture: .arm64)
             var noLoadData = try Data(contentsOf: noLoadableSegment)
-            overwrite(UInt32(4), at: 64, in: &noLoadData)
+            writeLittleEndian(UInt32(4), at: 64, into: &noLoadData)
             try noLoadData.write(to: noLoadableSegment)
             #expect(throws: SwiftPMError.invalidExecutable(
                 "The ELF program headers are malformed."
@@ -96,10 +96,4 @@ struct ELFExecutableVerifierTests {
         }
     }
 
-}
-
-private func overwrite<T: FixedWidthInteger>(_ value: T, at offset: Int, in data: inout Data) {
-    for index in 0..<MemoryLayout<T>.size {
-        data[offset + index] = UInt8(truncatingIfNeeded: value >> T(index * 8))
-    }
 }

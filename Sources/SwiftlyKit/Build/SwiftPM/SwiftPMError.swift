@@ -13,7 +13,6 @@ enum SwiftPMError: Error, Equatable, Sendable {
 
 enum SwiftPMOperation: Equatable, Sendable {
     case build
-    case locatingBuildOutput
     case packageDescription
     case dependencyResolution
     case stripping
@@ -32,7 +31,7 @@ extension SwiftPMError {
             case .outputPublicationFailed(let url): .outputPublicationFailed(url)
             case .commandFailed(let operation, let diagnostic):
                 switch operation {
-                    case .build, .locatingBuildOutput: .buildFailed(diagnostic)
+                    case .build: .buildFailed(diagnostic)
                     case .packageDescription: .packageInspectionFailed(diagnostic)
                     case .dependencyResolution: .dependencyResolutionFailed(diagnostic)
                     case .stripping: .stripFailed(diagnostic)

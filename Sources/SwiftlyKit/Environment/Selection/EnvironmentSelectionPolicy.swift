@@ -22,20 +22,17 @@ enum EnvironmentSelectionPolicy {
             return try selectExact(version, toolsVersion: toolsVersion, architecture: architecture, releases: releases)
         }
 
-        let installedRelease = releases.first { release in
-            guard release.version >= toolsVersion else { return false }
-            guard release.supports(architecture) else { return false }
+        let compatibleReleases = releases.filter { release in
+            release.version >= toolsVersion && release.supports(architecture)
+        }
 
-            return inventory.contains(toolchain: release.version, sdk: release.staticLinuxSDK.identifier)
+        let installedRelease = compatibleReleases.first { release in
+            inventory.contains(toolchain: release.version, sdk: release.staticLinuxSDK.identifier)
         }
         
         if let installedRelease { return installedRelease }
 
-        let compatibleRelease = releases.first { release in
-            guard release.version >= toolsVersion else { return false }
-            guard release.supports(architecture) else { return false }
-            return true
-        }
+        let compatibleRelease = compatibleReleases.first
 
         if let compatibleRelease { return compatibleRelease }
         

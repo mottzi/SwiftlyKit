@@ -71,7 +71,7 @@ struct SwiftOrgReleaseCatalogTests {
         }
     }
 
-    @Test("Fetching requires a successful HTTP response")
+    @Test("Fetching classifies an unsuccessful HTTP response as a network failure")
     func validatesHTTPResponse() async {
 
         let catalog = SwiftOrgReleaseCatalog { url in
@@ -79,7 +79,7 @@ struct SwiftOrgReleaseCatalogTests {
             return .init(data: Data("[]".utf8), statusCode: 503)
         }
 
-        await #expect(throws: SwiftOrgReleaseCatalog.CatalogError.unexpectedResponse(statusCode: 503)) {
+        await #expect(throws: SwiftOrgReleaseCatalog.CatalogError.networkFailure) {
             try await catalog.stableReleases()
         }
     }

@@ -108,24 +108,19 @@ extension SwiftlyInstallation {
 
         try Task.checkCancellation()
 
-        do {
-            let command = SubprocessCommand(executableURL: executableURL, arguments: ["--version"])
-            let result = try await LiveSubprocessRunner().run(command)
-            
-            try Task.checkCancellation()
-            guard result.succeeded else { throw SwiftlyKitError.incompatibleSwiftly }
-            
-            try Task.checkCancellation()
-            return result.standardOutput
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as SwiftlyKitError {
-            if Task.isCancelled { throw CancellationError() }
-            throw error
-        } catch {
-            if Task.isCancelled { throw CancellationError() }
-            throw SwiftlyKitError.incompatibleSwiftly
-        }
+        let command = SubprocessCommand(executableURL: executableURL, arguments: ["--version"])
+        let result = try await LiveSubprocessRunner().run(command)
+
+        try Task.checkCancellation()
+        guard result.succeeded else { throw VersionProbeError.unsuccessfulExit }
+
+        return result.standardOutput
     }
+
+}
+
+private enum VersionProbeError: Error {
+
+    case unsuccessfulExit
 
 }

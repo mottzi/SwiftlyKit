@@ -51,7 +51,7 @@ extension SwiftPM {
             
             guard pathResult.succeeded else {
                 throw SwiftPMError.commandFailed(
-                    operation: .locatingBuildOutput,
+                    operation: .build,
                     diagnostic: boundedDiagnostic(pathResult)
                 )
             }

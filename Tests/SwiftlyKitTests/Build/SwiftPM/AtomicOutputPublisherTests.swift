@@ -36,7 +36,10 @@ struct AtomicOutputPublisherTests {
             let attempts = await withTaskGroup(of: PublicationAttempt.self) { group in
                 for source in [first, second] {
                     group.addTask {
-                        do { return .published(try AtomicOutputPublisher.publish(source, to: output)) }
+                        do {
+                            _ = try AtomicOutputPublisher.publish(source, to: output)
+                            return .published
+                        }
                         catch let error as SwiftPMError { return .rejected(error) }
                         catch { return .unexpected }
                     }
@@ -59,7 +62,7 @@ struct AtomicOutputPublisherTests {
 }
 
 private enum PublicationAttempt: Sendable {
-    case published(URL)
+    case published
     case rejected(SwiftPMError)
     case unexpected
 

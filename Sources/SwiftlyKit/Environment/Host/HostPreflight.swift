@@ -49,30 +49,20 @@ extension HostPreflight {
 
         try Task.checkCancellation()
 
-        do {
-            let command = SubprocessCommand(
-                executableURL: URL(filePath: "/usr/bin/xcrun"),
-                arguments: ["--sdk", "macosx", "--show-sdk-path"]
-            )
-            let result = try await LiveSubprocessRunner().run(command)
-            
-            try Task.checkCancellation()
-            guard result.succeeded else { throw SwiftlyKitError.developerToolsUnavailable }
+        let command = SubprocessCommand(
+            executableURL: URL(filePath: "/usr/bin/xcrun"),
+            arguments: ["--sdk", "macosx", "--show-sdk-path"]
+        )
+        let result = try await LiveSubprocessRunner().run(command)
 
-            let path = result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard path.hasPrefix("/") else { throw SwiftlyKitError.developerToolsUnavailable }
+        try Task.checkCancellation()
+        guard result.succeeded else { throw SDKProbeError.unsuccessfulExit }
 
-            try Task.checkCancellation()
-            return URL(filePath: path)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as SwiftlyKitError {
-            if Task.isCancelled { throw CancellationError() }
-            throw error
-        } catch {
-            if Task.isCancelled { throw CancellationError() }
-            throw SwiftlyKitError.developerToolsUnavailable
-        }
+        let path = result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard path.hasPrefix("/") else { throw SDKProbeError.invalidOutput }
+
+        try Task.checkCancellation()
+        return URL(filePath: path)
     }
 
     private static func isUsableSDK(at url: URL) -> Bool {
@@ -86,5 +76,12 @@ extension HostPreflight {
 
         return FileManager.default.isReadableFile(atPath: url.path)
     }
+
+}
+
+private enum SDKProbeError: Error {
+
+    case unsuccessfulExit
+    case invalidOutput
 
 }

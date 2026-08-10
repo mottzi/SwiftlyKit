@@ -18,7 +18,7 @@ struct SwiftOrgReleaseCatalog: Sendable {
             try Task.checkCancellation()
 
             guard response.statusCode == 200
-            else { throw CatalogError.unexpectedResponse(statusCode: response.statusCode) }
+            else { throw CatalogError.networkFailure }
 
             return try Self.parse(response.data)
         } catch is CancellationError {
@@ -52,7 +52,6 @@ extension SwiftOrgReleaseCatalog {
 
     enum CatalogError: Error, Equatable, Sendable {
         case networkFailure
-        case unexpectedResponse(statusCode: Int?)
         case invalidPayload
     }
 

@@ -1,60 +1,104 @@
 # SwiftlyKit architecture
 
-SwiftlyKit has one public entrypoint and three internal workflow modules.
+SwiftlyKit exposes one public facade with a convenience fast track and a staged
+workflow. Both routes use the same three internal workflow components:
+`EnvironmentAssessor`, `EnvironmentPreparer`, and `SwiftPM`.
 
 ```mermaid
 flowchart LR
-    Consumer --> SwiftlyKit
-    SwiftlyKit --> Assessor[EnvironmentAssessor]
-    SwiftlyKit --> Preparer[EnvironmentPreparer]
-    SwiftlyKit --> SwiftPM
-    Preparer --> Process[SubprocessRunning]
+    Consumer --> Facade[SwiftlyKit]
+    Facade -->|assess| Assessor[EnvironmentAssessor]
+    Assessor --> Assessment[EnvironmentAssessment]
+    Assessment --> Preparer[EnvironmentPreparer]
+    Preparer --> Environment[LocalBuildEnvironment]
+    Environment --> SwiftPM
+    Facade -->|prepare / resolve / build| Gate[MutationGate]
+    Gate --> Preparer
+    Gate --> SwiftPM
+    Facade -->|executableProducts| SwiftPM
+    Assessor --> Process[SubprocessRunning]
+    Preparer --> Process
     SwiftPM --> Process
-    Assessor --> Inventory[InstalledEnvironmentInventory]
-    Preparer --> Inventory
 ```
 
-## Public workflow
+## Public workflows
 
-`SwiftlyKit.swift` contains the complete task-oriented interface. Assessment
-establishes the package and target. Internally, the assessment retains one exact
-package-input snapshot and selected official release; its public availability
-properties are derived from the required installations. Preparation turns the
-accepted assessment into a `LocalBuildEnvironment`, an immutable capability that
-retains the exact package, target, Swiftly executable, toolchain, and SDK required
-by later calls.
+The static `SwiftlyKit.build` fast track creates a `SwiftlyKit` value and runs the
+staged operations in order: assess, prepare, discover products, select one, and
+build. If the build reports that dependency resolution is required, the fast
+track resolves once and retries the build. It is orchestration over the staged
+API, not a separate build pipeline.
 
-Callers therefore provide package and target identity once. `BuildRequest`
-contains only choices specific to one build.
+The staged API keeps authorization and build choices explicit. Assessment is
+read-only: it captures the canonical package root and package-input bytes,
+observes installed environment state, and retains the target and selected
+official release. Passing that assessment to `prepare` authorizes only its
+`requiredComponents`. Preparation returns an immutable `LocalBuildEnvironment`
+capability containing the exact package, target, Swiftly executable, toolchain,
+and SDK context used by later operations. `BuildRequest` then contains only
+choices for one build.
+
+Each `SwiftlyKit` facade instance owns a cancellation-aware FIFO `MutationGate`.
+Preparation, dependency resolution, and builds acquire the gate because they can
+change user, package, scratch, or output state. Read-only assessment and product
+discovery do not acquire it.
 
 ## Implementation map
 
-- `Environment/Assessment` owns read-only orchestration and produces an
-  `EnvironmentAssessment`.
-- `Environment/Discovery` owns Swiftly discovery and the single authoritative
-  representation of installed toolchains and SDKs.
-- `Environment/Selection` owns pure deterministic release selection.
-- `Environment/Preparation` owns authorized mutation and returns a prepared
-  capability.
-- `Build/SwiftPM` owns product discovery, dependency resolution, build execution,
-  ELF verification, stripping, and atomic publication.
+- `SwiftlyKit.swift` is the public facade, fast-track orchestrator, and boundary
+  that maps internal failures to `SwiftlyKitError`.
+- `MutationGate.swift` serializes the mutating operations of one facade value.
+- `Package` canonicalizes the package root, parses the tools version, finds the
+  nearest `.swift-version`, and snapshots the input files byte-for-byte.
+- `Environment/Host` rejects unsupported hosts and missing developer tools
+  before environment work proceeds.
+- `Environment/Assessment` coordinates the read-only package, host, release,
+  discovery, and selection steps and produces `EnvironmentAssessment`.
+- `Environment/Discovery` detects Swiftly, constructs Swiftly-run commands, and
+  owns `InstalledEnvironmentInventory`, the canonical installed toolchain and
+  SDK representation.
+- `Environment/Selection` deterministically selects one exact official stable
+  release and matching SDK, preferring a compatible installed pair for automatic
+  selection.
+- `Environment/Preparation` revalidates the assessment, performs only authorized
+  installations, refreshes installed inventory after mutations, and returns the
+  prepared capability.
+- `Build` contains the public build value types. `Build/SwiftPM` validates a
+  prepared capability and owns product discovery, explicit dependency
+  resolution, build execution, resource rejection, ELF verification, optional
+  stripping, and atomic publication.
 - `Process` is the only adapter to `swift-subprocess`. Production uses
-  `LiveSubprocessRunner`; tests use one recording adapter through the same seam.
-- `Package` reads the text-only package inputs needed before manifest evaluation.
-- `Events` contains the optional awaited progress and output interface.
-
-`SwiftlyKit` owns the mutation gate because serialization is an instance-level
-promise spanning both preparation and builds. Read-only assessment and product
-discovery do not acquire it.
+  `LiveSubprocessRunner`; tests use the same `SubprocessRunning` seam.
+- `Events` contains the optional awaited progress and output interface. Command
+  output from preparation and SwiftPM is converted through one shared adapter.
 
 ## Invariants
 
-- Test infrastructure is internal and cannot configure production callers.
-- Environment preparation performs only mutations authorized by its assessment.
-- Package inputs are compared byte-for-byte before preparation.
-- Assessment values are derived from one captured package state and selected release.
-- Installed Swiftly state is parsed once into `InstalledEnvironmentInventory`.
-- Internal SwiftPM failures are classified structurally before becoming
-  `SwiftlyKitError` values.
-- Build subprocesses receive the exact prepared toolchain and SDK identity.
-- Output publication never replaces an existing destination.
+- Test seams and infrastructure are internal and cannot configure production
+  callers.
+- Assessment derives its values from one captured `Package.swift` and nearest
+  `.swift-version` state. Preparation compares the same inputs byte-for-byte
+  before any mutation.
+- Preparation installs only components authorized by `requiredComponents` and
+  confirms the selected toolchain and SDK before returning. Swiftly installer
+  downloads require HTTPS and a successful response, the installer must pass
+  signature and Apple-trust checks, and SDK installation uses the published
+  checksum.
+- Installed state has one canonical inventory representation. Automatic
+  selection considers the inventory without allowing installed state to replace
+  the selected official release metadata.
+- Every SwiftPM operation revalidates the package tools version, Swiftly
+  executable, and exact SDK bundle of its `LocalBuildEnvironment`.
+- SwiftPM command construction always selects the prepared toolchain and exposes
+  only the prepared SDK through an isolated SDK search directory. Caller build
+  environment additions cannot replace protected home or Swiftly variables.
+- Product discovery and builds disable automatic dependency resolution. Staged
+  builds surface a structured resolution-required error; only the fast track
+  performs the explicit resolve-and-retry sequence.
+- Internal SwiftPM failures are classified structurally before becoming public
+  `SwiftlyKitError` values. Collected subprocess output and surfaced diagnostics
+  are bounded.
+- A build result must be an executable, static, little-endian ELF64 file for the
+  requested architecture. Stripped results are verified again.
+- Output publication uses an exclusive atomic rename and never replaces an
+  existing destination.
