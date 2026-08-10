@@ -9,23 +9,23 @@ struct EnvironmentSelectionPolicyTests {
     func automaticPrecedence() throws {
 
         let releases = [selectionRelease("6.2.4"), selectionRelease("6.3.3")]
-        let toolchains = [selectionVersion("6.2.4")]
-        let sdks = [InstalledStaticLinuxSDK(
-            toolchainVersion: selectionVersion("6.2.4"),
-            identifier: releases[0].staticLinuxSDK.identifier
-        )]
+        let inventory = InstalledEnvironmentInventory(
+            toolchains: [selectionVersion("6.2.4")],
+            sdks: [InstalledStaticLinuxSDK(
+                toolchainVersion: selectionVersion("6.2.4"),
+                identifier: releases[0].staticLinuxSDK.identifier
+            )]
+        )
 
         let preferred = try select(
             preference: "6.3.3",
             releases: releases,
-            toolchains: toolchains,
-            sdks: sdks
+            inventory: inventory
         )
         let installed = try select(
             preference: nil,
             releases: releases,
-            toolchains: toolchains,
-            sdks: sdks
+            inventory: inventory
         )
         let newest = try select(preference: nil, releases: releases)
 
@@ -42,11 +42,13 @@ struct EnvironmentSelectionPolicyTests {
         let selection = try select(
             preference: nil,
             releases: [older, newer],
-            toolchains: [older.version],
-            sdks: [InstalledStaticLinuxSDK(
-                toolchainVersion: newer.version,
-                identifier: older.staticLinuxSDK.identifier
-            )]
+            inventory: InstalledEnvironmentInventory(
+                toolchains: [older.version],
+                sdks: [InstalledStaticLinuxSDK(
+                    toolchainVersion: newer.version,
+                    identifier: older.staticLinuxSDK.identifier
+                )]
+            )
         )
 
         #expect(selection == newer)
@@ -67,8 +69,7 @@ struct EnvironmentSelectionPolicyTests {
                 swiftVersionPreference: nil,
                 architecture: .x86_64,
                 releases: [release],
-                installedToolchains: [],
-                installedSDKs: []
+                inventory: InstalledEnvironmentInventory(toolchains: [], sdks: [])
             )
         }
 
@@ -82,8 +83,7 @@ struct EnvironmentSelectionPolicyTests {
                 swiftVersionPreference: nil,
                 architecture: .arm64,
                 releases: [release],
-                installedToolchains: [],
-                installedSDKs: []
+                inventory: InstalledEnvironmentInventory(toolchains: [], sdks: [])
             )
         }
     }
@@ -102,8 +102,7 @@ struct EnvironmentSelectionPolicyTests {
     private func select(
         preference: String?,
         releases: [OfficialStableRelease],
-        toolchains: [SwiftVersion] = [],
-        sdks: [InstalledStaticLinuxSDK] = []
+        inventory: InstalledEnvironmentInventory = InstalledEnvironmentInventory(toolchains: [], sdks: [])
     ) throws -> OfficialStableRelease {
 
         try EnvironmentSelectionPolicy.select(
@@ -112,8 +111,7 @@ struct EnvironmentSelectionPolicyTests {
             swiftVersionPreference: preference,
             architecture: .arm64,
             releases: releases,
-            installedToolchains: toolchains,
-            installedSDKs: sdks
+            inventory: inventory
         )
     }
 

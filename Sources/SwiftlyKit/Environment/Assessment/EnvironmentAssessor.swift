@@ -45,8 +45,7 @@ struct EnvironmentAssessor: Sendable {
                 swiftVersionPreference: snapshot.swiftVersion,
                 architecture: target.architecture,
                 releases: releases,
-                installedToolchains: inventory.toolchains,
-                installedSDKs: inventory.sdks
+                inventory: inventory
             )
         } catch {
             throw error.swiftlyKitError

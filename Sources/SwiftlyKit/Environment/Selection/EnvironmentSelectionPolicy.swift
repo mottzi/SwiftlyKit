@@ -7,8 +7,7 @@ enum EnvironmentSelectionPolicy {
         swiftVersionPreference: String?,
         architecture: LinuxArchitecture,
         releases: [OfficialStableRelease],
-        installedToolchains: [SwiftVersion],
-        installedSDKs: [InstalledStaticLinuxSDK]
+        inventory: InstalledEnvironmentInventory
     ) throws(SelectionError) -> OfficialStableRelease {
 
         let releases = canonicalReleases(releases)
@@ -23,20 +22,11 @@ enum EnvironmentSelectionPolicy {
             return try selectExact(version, toolsVersion: toolsVersion, architecture: architecture, releases: releases)
         }
 
-        let installedVersions = Set(installedToolchains)
-        let installedSDKs = Set(installedSDKs)
-
         let installedRelease = releases.first { release in
             guard release.version >= toolsVersion else { return false }
             guard release.supports(architecture) else { return false }
-            guard installedVersions.contains(release.version) else { return false }
 
-            let installedSDK = InstalledStaticLinuxSDK(
-                toolchainVersion: release.version,
-                identifier: release.staticLinuxSDK.identifier
-            )
-
-            return installedSDKs.contains(installedSDK)
+            return inventory.contains(toolchain: release.version, sdk: release.staticLinuxSDK.identifier)
         }
         
         if let installedRelease { return installedRelease }

@@ -12,13 +12,12 @@ extension InstalledEnvironmentInspector {
 
     func inspect(
         swiftly: SwiftlyInstallation,
-        selectedToolchain: SwiftVersion?
+        selectedToolchain: SwiftVersion
     ) async throws -> InstalledEnvironmentInventory {
 
         let toolchains = try await installedToolchains(swiftly: swiftly)
         
-        guard let selectedToolchain,
-              toolchains.contains(selectedToolchain)
+        guard toolchains.contains(selectedToolchain)
         else { return InstalledEnvironmentInventory(toolchains: toolchains, sdks: []) }
         
         let sdks = try await installedSDKs(swiftly: swiftly, toolchain: selectedToolchain)
