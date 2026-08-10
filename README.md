@@ -17,7 +17,7 @@ Add SwiftlyKit to your project with Swift Package Manager.
 In Xcode, select **File > Add Package Dependencies** and enter:
 
 ```text
-https://github.com/mottzi/SwiftlyKit.git
+https://github.com/mottzi/SwiftyKit.git
 ```
 
 Select version `0.1.0` or later. Then add the `SwiftlyKit` library to your target.
@@ -36,7 +36,7 @@ let package = Package(
     ],
     dependencies: [
         .package(
-            url: "https://github.com/mottzi/SwiftlyKit.git",
+            url: "https://github.com/mottzi/SwiftyKit.git",
             from: "0.1.0"
         )
     ],
@@ -44,7 +44,7 @@ let package = Package(
         .executableTarget(
             name: "YourTarget",
             dependencies: [
-                .product(name: "SwiftlyKit", package: "SwiftlyKit")
+                .product(name: "SwiftlyKit", package: "SwiftyKit")
             ]
         )
     ]
