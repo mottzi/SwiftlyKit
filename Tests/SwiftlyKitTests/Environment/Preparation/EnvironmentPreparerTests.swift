@@ -26,7 +26,7 @@ struct EnvironmentPreparerTests {
         let preparer = EnvironmentPreparer(
             runner: commands,
             checkHost: {},
-            downloadPackage: { _, _ in Issue.record("download must not run"); return 200 },
+            downloadPackage: { _, _ in Issue.record("download must not run") },
             detectSwiftly: { swiftly },
             inspect: { _, _ in
                 await inspections.increment()
@@ -60,7 +60,7 @@ struct EnvironmentPreparerTests {
         let preparer = EnvironmentPreparer(
             runner: commands,
             checkHost: {},
-            downloadPackage: { _, _ in 200 },
+            downloadPackage: { _, _ in Issue.record("download must not run") },
             detectSwiftly: { swiftly },
             inspect: { _, _ in try await inspections.next() },
             locateSDK: { _ in URL(filePath: "/tmp/sdk.artifactbundle") },
@@ -153,7 +153,6 @@ struct EnvironmentPreparerTests {
                 downloadPackage: { source, destination in
                     #expect(source == EnvironmentPreparer.officialPackageURL)
                     try Data("package".utf8).write(to: destination)
-                    return 200
                 },
                 detectSwiftly: { try await detection.next() },
                 inspect: { _, _ in self.inventory(includesToolchain: true, includesSDK: true) },
@@ -181,7 +180,7 @@ struct EnvironmentPreparerTests {
         let preparer = EnvironmentPreparer(
             runner: commands,
             checkHost: {},
-            downloadPackage: { _, _ in 503 },
+            downloadPackage: { _, _ in throw EnvironmentPreparationError.invalidHTTPResponse(503) },
             detectSwiftly: { nil },
             revalidate: { _ in }
         )
@@ -190,6 +189,26 @@ struct EnvironmentPreparerTests {
             try await preparer.prepare(try assessment(requires: [.swiftly]))
         }
         #expect(await commands.commands.isEmpty)
+    }
+
+    @Test("Live download rejects a non-success HTTP response before publishing")
+    func liveDownloadRejectsHTTPFailure() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-EnvironmentPreparation") { temporaryDirectory in
+            let source = URL(string: "https://download.swift.org/swiftly.pkg")!
+            let temporaryDownload = temporaryDirectory.appending(path: "download")
+            let destination = temporaryDirectory.appending(path: "swiftly.pkg")
+            try Data("package".utf8).write(to: temporaryDownload)
+
+            await #expect(throws: EnvironmentPreparationError.invalidHTTPResponse(503)) {
+                try await EnvironmentPreparer.liveDownload(source, destination) { requestedSource in
+                    #expect(requestedSource == source)
+                    return (temporaryDownload, 503)
+                }
+            }
+
+            #expect(!FileManager.default.fileExists(atPath: destination.path))
+        }
     }
 
     @Test("Bootstrap rejects an untrusted package before installation")
@@ -205,7 +224,6 @@ struct EnvironmentPreparerTests {
                 checkHost: {},
                 downloadPackage: { _, destination in
                     try Data("package".utf8).write(to: destination)
-                    return 200
                 },
                 detectSwiftly: { nil },
                 revalidate: { _ in }

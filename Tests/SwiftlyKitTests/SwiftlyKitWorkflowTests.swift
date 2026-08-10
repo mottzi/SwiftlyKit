@@ -92,7 +92,7 @@ struct SwiftlyKitWorkflowTests {
                 preparer: EnvironmentPreparer(
                     runner: runner,
                     checkHost: {},
-                    downloadPackage: { _, _ in Issue.record("download must not run"); return 200 },
+                    downloadPackage: { _, _ in Issue.record("download must not run") },
                     detectSwiftly: { swiftly },
                     inspect: { _, _ in inventory },
                     locateSDK: { _ in sdkBundle }

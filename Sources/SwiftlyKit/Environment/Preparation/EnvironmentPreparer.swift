@@ -11,7 +11,9 @@ struct EnvironmentPreparer: Sendable {
         try await HostPreflight().check()
     }
 
-    private(set) var downloadPackage: @Sendable (URL, URL) async throws -> Int = EnvironmentPreparer.liveDownload
+    private(set) var downloadPackage: @Sendable (URL, URL) async throws -> Void = {
+        try await EnvironmentPreparer.liveDownload($0, $1)
+    }
 
     private(set) var detectSwiftly: @Sendable () async throws -> SwiftlyInstallation? = {
         try await SwiftlyInstallation.detect()
@@ -161,17 +163,16 @@ extension EnvironmentPreparer {
 
         await report(.swiftly, "Downloading the official Swiftly installer from Swift.org.", to: onEvent)
 
-        let statusCode: Int
         do {
-            statusCode = try await downloadPackage(Self.officialPackageURL, packageURL)
+            try await downloadPackage(Self.officialPackageURL, packageURL)
         } catch is CancellationError {
             throw CancellationError()
+        } catch let error as EnvironmentPreparationError {
+            throw error
         } catch {
             if Task.isCancelled { throw CancellationError() }
             throw EnvironmentPreparationError.downloadFailed
         }
-
-        guard (200..<300).contains(statusCode) else { throw EnvironmentPreparationError.invalidHTTPResponse(statusCode) }
 
         await report(.swiftly, "Verifying the installer signature and Apple trust.", to: onEvent)
 
@@ -250,18 +251,24 @@ extension EnvironmentPreparer {
         String(value.prefix(8 * 1024))
     }
 
-    static func liveDownload(_ source: URL, _ destination: URL) async throws -> Int {
+    static func liveDownload(
+        _ source: URL,
+        _ destination: URL,
+        transfer: @Sendable (URL) async throws -> (temporaryURL: URL, statusCode: Int?) = { source in
+            let (temporaryURL, response) = try await URLSession.shared.download(from: source)
+            return (temporaryURL, (response as? HTTPURLResponse)?.statusCode)
+        }
+    ) async throws {
 
         guard source.scheme?.lowercased() == "https" else { throw EnvironmentPreparationError.invalidDownloadURL }
 
-        let (temporaryURL, response) = try await URLSession.shared.download(from: source)
+        let download = try await transfer(source)
 
-        guard let response = response as? HTTPURLResponse else { throw EnvironmentPreparationError.invalidHTTPResponse(0) }
-        guard (200..<300).contains(response.statusCode) else { return response.statusCode }
+        guard let statusCode = download.statusCode else { throw EnvironmentPreparationError.invalidHTTPResponse(0) }
+        guard (200..<300).contains(statusCode)
+        else { throw EnvironmentPreparationError.invalidHTTPResponse(statusCode) }
 
-        try FileManager.default.moveItem(at: temporaryURL, to: destination)
-        
-        return response.statusCode
+        try FileManager.default.moveItem(at: download.temporaryURL, to: destination)
     }
 
     static let officialPackageURL = URL(string: "https://download.swift.org/swiftly/darwin/swiftly.pkg")!
