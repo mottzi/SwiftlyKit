@@ -17,12 +17,10 @@ extension SwiftPM {
         locateSDK: (String) -> URL? = { SDKBundleLocator.locate(identifier: $0) }
     ) throws {
 
-        let requirements: PackageRequirements
-        do { requirements = try PackageRequirements.load(at: environment.packageRoot) }
-        catch let error as PackageRequirements.LoadingError { throw error.swiftlyKitError }
+        let packageInputs = try PackageInputSnapshot.capture(at: environment.packageRoot)
 
-        guard requirements.toolsVersion <= environment.swiftVersion
-        else { throw SwiftlyKitError.unsupportedToolsVersion(requirements.toolsVersion) }
+        guard packageInputs.toolsVersion <= environment.swiftVersion
+        else { throw SwiftlyKitError.unsupportedToolsVersion(packageInputs.toolsVersion) }
 
         guard FileManager.default.isExecutableFile(atPath: environment.swiftlyExecutableURL.path)
         else { throw SwiftlyKitError.incompatibleSwiftly }

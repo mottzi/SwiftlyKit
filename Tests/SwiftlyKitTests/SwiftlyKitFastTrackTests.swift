@@ -127,7 +127,7 @@ private func fastTrackKit(packageRoot: URL, runner: RecordingSubprocessRunner) -
     let sdkIdentifier = "swift-6.2.1-RELEASE_static-linux-1.0.0"
     let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
     let inventory = InstalledEnvironmentInventory(
-        toolchains: [InstalledStableToolchain(version: version)],
+        toolchains: [version],
         sdks: [InstalledStaticLinuxSDK(
             toolchainVersion: version,
             identifier: sdkIdentifier

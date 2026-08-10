@@ -18,7 +18,7 @@ extension InstalledEnvironmentInspector {
         let toolchains = try await installedToolchains(swiftly: swiftly)
         
         guard let selectedToolchain,
-              toolchains.contains(where: { $0.version == selectedToolchain })
+              toolchains.contains(selectedToolchain)
         else { return InstalledEnvironmentInventory(toolchains: toolchains, sdks: []) }
         
         let sdks = try await installedSDKs(swiftly: swiftly, toolchain: selectedToolchain)
@@ -33,7 +33,7 @@ extension InstalledEnvironmentInspector {
 
         var sdks: [InstalledStaticLinuxSDK] = []
         for toolchain in toolchains {
-            do { sdks += try await installedSDKs(swiftly: swiftly, toolchain: toolchain.version) }
+            do { sdks += try await installedSDKs(swiftly: swiftly, toolchain: toolchain) }
             catch is CancellationError { throw CancellationError() }
             catch { continue }
         }
@@ -59,7 +59,36 @@ extension InstalledEnvironmentInspector {
         )
     }
 
-    private func installedToolchains(swiftly: SwiftlyInstallation) async throws -> [InstalledStableToolchain] {
+    /// Decodes `swiftly list --format json`, excluding system, snapshot, and malformed entries.
+    static func parseSwiftlyList(_ data: Data) throws -> [SwiftVersion] {
+
+        let payload: ToolchainListPayload
+        do { payload = try JSONDecoder().decode(ToolchainListPayload.self, from: data) }
+        catch { throw InstalledEnvironmentError.invalidOutput }
+
+        let toolchains: Set<SwiftVersion> = Set(payload.toolchains.compactMap { item in
+            guard item.version.type == "stable" else { return nil }
+            return SwiftVersion(parsing: item.version.name)
+        })
+
+        return toolchains.sorted(by: >)
+    }
+
+    /// Parses the line-oriented identifiers emitted by `swift sdk list`.
+    static func parseSDKList(_ output: String, toolchainVersion: SwiftVersion) -> [InstalledStaticLinuxSDK] {
+
+        Set(output.split(whereSeparator: \Character.isNewline).compactMap { line in
+            let identifier = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard identifier.contains("_static-linux-") else { return nil }
+            guard !identifier.contains(where: \Character.isWhitespace) else { return nil }
+
+            return InstalledStaticLinuxSDK(toolchainVersion: toolchainVersion, identifier: identifier)
+        })
+        .sorted { $0.identifier < $1.identifier }
+    }
+
+    private func installedToolchains(swiftly: SwiftlyInstallation) async throws -> [SwiftVersion] {
 
         try Task.checkCancellation()
 
@@ -73,8 +102,7 @@ extension InstalledEnvironmentInspector {
         guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
         guard let data = result.standardOutput.data(using: .utf8) else { throw InstalledEnvironmentError.invalidOutput }
 
-        do { return try InstalledStableToolchain.parseSwiftlyList(data).filter { isToolchainUsable($0.version) } }
-        catch { throw InstalledEnvironmentError.invalidOutput }
+        return try Self.parseSwiftlyList(data).filter(isToolchainUsable)
     }
 
     private func installedSDKs(
@@ -92,7 +120,7 @@ extension InstalledEnvironmentInspector {
 
         guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
 
-        return InstalledStaticLinuxSDK.parseList(result.standardOutput, toolchainVersion: toolchain)
+        return Self.parseSDKList(result.standardOutput, toolchainVersion: toolchain)
     }
 
     private func run(_ command: SubprocessCommand) async throws -> SubprocessResult {
@@ -121,6 +149,29 @@ extension InstalledEnvironmentInspector {
         let executable = toolchainsDirectory.appending(path: "swift-\(version)-RELEASE.xctoolchain/usr/bin/swift")
 
         return FileManager.default.isExecutableFile(atPath: executable.path)
+    }
+
+}
+
+extension InstalledEnvironmentInspector {
+
+    private struct ToolchainListPayload: Decodable {
+
+        let toolchains: [ToolchainPayload]
+
+    }
+
+    private struct ToolchainPayload: Decodable {
+
+        let version: VersionPayload
+
+    }
+
+    private struct VersionPayload: Decodable {
+
+        let name: String
+        let type: String
+
     }
 
 }

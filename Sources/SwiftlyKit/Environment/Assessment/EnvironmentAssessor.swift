@@ -31,8 +31,7 @@ struct EnvironmentAssessor: Sendable {
 
         try await checkHost()
 
-        let requirements = try loadRequirements(at: packageRoot)
-        let snapshot = try PackageInputSnapshot.capture(requirements)
+        let snapshot = try PackageInputSnapshot.capture(at: packageRoot)
 
         let swiftly = try await detectSwiftly()
         let releases = try await officialReleases()
@@ -42,8 +41,8 @@ struct EnvironmentAssessor: Sendable {
         do {
             release = try EnvironmentSelectionPolicy.select(
                 toolchain: toolchain,
-                toolsVersion: requirements.toolsVersion,
-                swiftVersionPreference: requirements.swiftVersion,
+                toolsVersion: snapshot.toolsVersion,
+                swiftVersionPreference: snapshot.swiftVersion,
                 architecture: target.architecture,
                 releases: releases,
                 installedToolchains: inventory.toolchains,
@@ -78,15 +77,6 @@ struct EnvironmentAssessor: Sendable {
 }
 
 extension EnvironmentAssessor {
-
-    private func loadRequirements(at packageRoot: URL) throws -> PackageRequirements {
-        
-        do {
-            return try PackageRequirements.load(at: packageRoot)
-        } catch let error as PackageRequirements.LoadingError {
-            throw error.swiftlyKitError
-        }
-    }
 
     private func officialReleases() async throws -> [OfficialStableRelease] {
 

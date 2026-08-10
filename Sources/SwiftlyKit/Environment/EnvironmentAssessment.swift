@@ -28,12 +28,12 @@ extension EnvironmentAssessment {
     
     /// The canonical package root captured during assessment.
     public var packageRoot: URL {
-        packageInputs.requirements.packageRoot
+        packageInputs.packageRoot
     }
 
     /// The package's declared Swift tools version.
     public var toolsVersion: SwiftVersion {
-        packageInputs.requirements.toolsVersion
+        packageInputs.toolsVersion
     }
 
     /// The exact official Swift release selected for the package.

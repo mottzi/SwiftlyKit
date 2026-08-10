@@ -2,21 +2,21 @@ import Foundation
 import Testing
 @testable import SwiftlyKit
 
-@Suite("Package requirements")
-struct PackageRequirementsTests {
+@Suite("Package input snapshot")
+struct PackageInputSnapshotTests {
 
     @Test("Invalid package roots are rejected")
     func invalidPackageRoots() throws {
 
         let nonFileURL = URL(string: "https://example.com/package")!
-        #expect(throws: PackageRequirements.LoadingError.invalidPackageRoot(nonFileURL)) {
-            try PackageRequirements.load(at: nonFileURL)
+        #expect(throws: SwiftlyKitError.invalidPackageRoot(nonFileURL)) {
+            try PackageInputSnapshot.capture(at: nonFileURL)
         }
 
         try withTemporaryDirectory { temporaryDirectory in
             let missingRoot = temporaryDirectory.appending(path: "missing")
-            #expect(throws: PackageRequirements.LoadingError.invalidPackageRoot(missingRoot)) {
-                try PackageRequirements.load(at: missingRoot)
+            #expect(throws: SwiftlyKitError.invalidPackageRoot(missingRoot)) {
+                try PackageInputSnapshot.capture(at: missingRoot)
             }
 
             try FileManager.default.createDirectory(
@@ -24,8 +24,8 @@ struct PackageRequirementsTests {
                 withIntermediateDirectories: false
             )
             let noManifestRoot = temporaryDirectory.appending(path: "no-manifest")
-            #expect(throws: PackageRequirements.LoadingError.invalidPackageRoot(noManifestRoot)) {
-                try PackageRequirements.load(at: noManifestRoot)
+            #expect(throws: SwiftlyKitError.invalidPackageRoot(noManifestRoot)) {
+                try PackageInputSnapshot.capture(at: noManifestRoot)
             }
         }
     }
@@ -43,12 +43,11 @@ struct PackageRequirementsTests {
 
             let symlinkRoot = temporaryDirectory.appending(path: "link")
             try FileManager.default.createSymbolicLink(at: symlinkRoot, withDestinationURL: realRoot)
-            let requirements = try PackageRequirements.load(at: symlinkRoot)
+            let snapshot = try PackageInputSnapshot.capture(at: symlinkRoot)
 
-            #expect(requirements.packageRoot == realRoot.resolvingSymlinksInPath().standardizedFileURL)
-            #expect(requirements.toolsVersion == SwiftVersion(major: 6, minor: 2, patch: 0))
-            #expect(requirements.swiftVersion == nil)
-            #expect(requirements.swiftVersionFileURL == nil)
+            #expect(snapshot.packageRoot == realRoot.resolvingSymlinksInPath().standardizedFileURL)
+            #expect(snapshot.toolsVersion == SwiftVersion(major: 6, minor: 2, patch: 0))
+            #expect(snapshot.swiftVersion == nil)
         }
     }
 
@@ -58,17 +57,17 @@ struct PackageRequirementsTests {
         try withTemporaryDirectory { temporaryDirectory in
             let manifestURL = temporaryDirectory.appending(path: "Package.swift")
             try write("// swift-tools-version: 5.9\n", to: manifestURL)
-            let requirements = try PackageRequirements.load(at: temporaryDirectory)
-            #expect(requirements.toolsVersion == SwiftVersion(major: 5, minor: 9, patch: 0))
+            let snapshot = try PackageInputSnapshot.capture(at: temporaryDirectory)
+            #expect(snapshot.toolsVersion == SwiftVersion(major: 5, minor: 9, patch: 0))
 
             try write(
                 "// a leading comment\n// swift-tools-version: 5.9\n",
                 to: manifestURL
             )
-            #expect(throws: PackageRequirements.LoadingError.toolsVersionMustBeFirstLine(
+            #expect(throws: SwiftlyKitError.unsupportedToolsVersion(
                 SwiftVersion(major: 5, minor: 9, patch: 0)
             )) {
-                try PackageRequirements.load(at: temporaryDirectory)
+                try PackageInputSnapshot.capture(at: temporaryDirectory)
             }
         }
     }
@@ -84,15 +83,13 @@ struct PackageRequirementsTests {
 
             let parentVersionURL = parent.appending(path: ".swift-version")
             try write("\n\t 6.1.2 \n", to: parentVersionURL)
-            let parentRequirements = try PackageRequirements.load(at: packageRoot)
-            #expect(parentRequirements.swiftVersion == "6.1.2")
-            #expect(parentRequirements.swiftVersionFileURL == parentVersionURL.standardizedFileURL)
+            let parentSnapshot = try PackageInputSnapshot.capture(at: packageRoot)
+            #expect(parentSnapshot.swiftVersion == "6.1.2")
 
             let packageVersionURL = packageRoot.appending(path: ".swift-version")
             try write(" 6.2.0\n", to: packageVersionURL)
-            let packageRequirements = try PackageRequirements.load(at: packageRoot)
-            #expect(packageRequirements.swiftVersion == "6.2.0")
-            #expect(packageRequirements.swiftVersionFileURL == packageVersionURL.standardizedFileURL)
+            let packageSnapshot = try PackageInputSnapshot.capture(at: packageRoot)
+            #expect(packageSnapshot.swiftVersion == "6.2.0")
         }
     }
 
@@ -102,13 +99,13 @@ struct PackageRequirementsTests {
         try withTemporaryDirectory { temporaryDirectory in
             let manifestURL = temporaryDirectory.appending(path: "Package.swift")
             try write("import PackageDescription\n", to: manifestURL)
-            #expect(throws: PackageRequirements.LoadingError.malformedToolsVersion) {
-                try PackageRequirements.load(at: temporaryDirectory)
+            #expect(throws: SwiftlyKitError.malformedToolsVersion) {
+                try PackageInputSnapshot.capture(at: temporaryDirectory)
             }
 
             try write("// swift-tools-version: 6\n", to: manifestURL)
-            #expect(throws: PackageRequirements.LoadingError.malformedToolsVersion) {
-                try PackageRequirements.load(at: temporaryDirectory)
+            #expect(throws: SwiftlyKitError.malformedToolsVersion) {
+                try PackageInputSnapshot.capture(at: temporaryDirectory)
             }
         }
     }
@@ -120,13 +117,68 @@ struct PackageRequirementsTests {
             let manifestRoot = temporaryDirectory.appending(path: "package")
             try FileManager.default.createDirectory(at: manifestRoot, withIntermediateDirectories: false)
             try write("// swift-tools-version: 6.0\n", to: manifestRoot.appending(path: "Package.swift"))
-            let versionDirectory = manifestRoot.appending(path: ".swift-version")
-            try FileManager.default.createDirectory(at: versionDirectory, withIntermediateDirectories: false)
+            try FileManager.default.createDirectory(
+                at: manifestRoot.appending(path: ".swift-version"),
+                withIntermediateDirectories: false
+            )
 
-            #expect(throws: PackageRequirements.LoadingError.unreadableSwiftVersionFile(
-                versionDirectory.resolvingSymlinksInPath().standardizedFileURL
-            )) {
-                try PackageRequirements.load(at: manifestRoot)
+            #expect(throws: SwiftlyKitError.staleAssessment) {
+                try PackageInputSnapshot.capture(at: manifestRoot)
+            }
+        }
+    }
+
+    @Test("Unchanged inputs revalidate")
+    func unchangedInputsRevalidate() throws {
+
+        try withTemporaryDirectory { packageRoot in
+            try write("// swift-tools-version: 6.0\n", to: packageRoot.appending(path: "Package.swift"))
+            try write("6.2.1\n", to: packageRoot.appending(path: ".swift-version"))
+
+            let snapshot = try PackageInputSnapshot.capture(at: packageRoot)
+
+            try snapshot.validateCurrent()
+        }
+    }
+
+    @Test("Semantically equivalent byte changes invalidate a snapshot")
+    func byteChangesInvalidateSnapshot() throws {
+
+        try withTemporaryDirectory { packageRoot in
+            let manifestURL = packageRoot.appending(path: "Package.swift")
+            let swiftVersionURL = packageRoot.appending(path: ".swift-version")
+            try write("// swift-tools-version: 6.0\n", to: manifestURL)
+            try write("6.2.1\n", to: swiftVersionURL)
+
+            let manifestSnapshot = try PackageInputSnapshot.capture(at: packageRoot)
+            try write("// swift-tools-version: 6.0\n// comment\n", to: manifestURL)
+            #expect(throws: SwiftlyKitError.staleAssessment) {
+                try manifestSnapshot.validateCurrent()
+            }
+
+            try write("// swift-tools-version: 6.0\n", to: manifestURL)
+            let versionSnapshot = try PackageInputSnapshot.capture(at: packageRoot)
+            try write(" 6.2.1 \n", to: swiftVersionURL)
+            #expect(throws: SwiftlyKitError.staleAssessment) {
+                try versionSnapshot.validateCurrent()
+            }
+        }
+    }
+
+    @Test("Changing the selected Swift version source invalidates a snapshot")
+    func swiftVersionSourceChangeInvalidatesSnapshot() throws {
+
+        try withTemporaryDirectory { temporaryDirectory in
+            let packageRoot = temporaryDirectory.appending(path: "package")
+            try FileManager.default.createDirectory(at: packageRoot, withIntermediateDirectories: false)
+            try write("// swift-tools-version: 6.0\n", to: packageRoot.appending(path: "Package.swift"))
+            try write("6.2.1\n", to: temporaryDirectory.appending(path: ".swift-version"))
+            let snapshot = try PackageInputSnapshot.capture(at: packageRoot)
+
+            try write("6.2.1\n", to: packageRoot.appending(path: ".swift-version"))
+
+            #expect(throws: SwiftlyKitError.staleAssessment) {
+                try snapshot.validateCurrent()
             }
         }
     }

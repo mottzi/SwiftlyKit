@@ -65,7 +65,7 @@ struct SwiftlyKitWorkflowTests {
                 executableURL: packageRoot.appending(path: "swiftly")
             )
             let inventory = InstalledEnvironmentInventory(
-                toolchains: [InstalledStableToolchain(version: version)],
+                toolchains: [version],
                 sdks: [InstalledStaticLinuxSDK(
                     toolchainVersion: version,
                     identifier: sdkIdentifier

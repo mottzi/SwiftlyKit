@@ -7,7 +7,7 @@ enum EnvironmentSelectionPolicy {
         swiftVersionPreference: String?,
         architecture: LinuxArchitecture,
         releases: [OfficialStableRelease],
-        installedToolchains: [InstalledStableToolchain],
+        installedToolchains: [SwiftVersion],
         installedSDKs: [InstalledStaticLinuxSDK]
     ) throws -> OfficialStableRelease {
 
@@ -23,22 +23,20 @@ enum EnvironmentSelectionPolicy {
             return try selectExact(version, toolsVersion: toolsVersion, architecture: architecture, releases: releases)
         }
 
-        let installedVersions = Set(installedToolchains.map(\.version))
-        let installedPairs = Set(installedSDKs.map {
-            InstalledPair(toolchainVersion: $0.toolchainVersion, sdkIdentifier: $0.identifier)
-        })
+        let installedVersions = Set(installedToolchains)
+        let installedSDKs = Set(installedSDKs)
 
         let installedRelease = releases.first { release in
             guard release.version >= toolsVersion else { return false }
             guard release.staticLinuxSDK.supports(architecture) else { return false }
             guard installedVersions.contains(release.version) else { return false }
 
-            let installedPair = InstalledPair(
+            let installedSDK = InstalledStaticLinuxSDK(
                 toolchainVersion: release.version,
-                sdkIdentifier: release.staticLinuxSDK.identifier
+                identifier: release.staticLinuxSDK.identifier
             )
 
-            return installedPairs.contains(installedPair)
+            return installedSDKs.contains(installedSDK)
         }
         
         if let installedRelease { return installedRelease }
@@ -98,13 +96,6 @@ extension EnvironmentSelectionPolicy {
         else { throw SelectionError.unsupportedArchitecture(version: version, architecture: architecture) }
 
         return release
-    }
-
-    private struct InstalledPair: Hashable {
-
-        let toolchainVersion: SwiftVersion
-        let sdkIdentifier: String
-
     }
 
 }

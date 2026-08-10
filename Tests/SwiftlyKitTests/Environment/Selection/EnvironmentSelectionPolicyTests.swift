@@ -9,7 +9,7 @@ struct EnvironmentSelectionPolicyTests {
     func automaticPrecedence() throws {
 
         let releases = [selectionRelease("6.2.4"), selectionRelease("6.3.3")]
-        let toolchains = [InstalledStableToolchain(version: selectionVersion("6.2.4"))]
+        let toolchains = [selectionVersion("6.2.4")]
         let sdks = [InstalledStaticLinuxSDK(
             toolchainVersion: selectionVersion("6.2.4"),
             identifier: releases[0].staticLinuxSDK.identifier
@@ -42,7 +42,7 @@ struct EnvironmentSelectionPolicyTests {
         let selection = try select(
             preference: nil,
             releases: [older, newer],
-            toolchains: [InstalledStableToolchain(version: older.version)],
+            toolchains: [older.version],
             sdks: [InstalledStaticLinuxSDK(
                 toolchainVersion: newer.version,
                 identifier: older.staticLinuxSDK.identifier
@@ -102,7 +102,7 @@ struct EnvironmentSelectionPolicyTests {
     private func select(
         preference: String?,
         releases: [OfficialStableRelease],
-        toolchains: [InstalledStableToolchain] = [],
+        toolchains: [SwiftVersion] = [],
         sdks: [InstalledStaticLinuxSDK] = []
     ) throws -> OfficialStableRelease {
 
