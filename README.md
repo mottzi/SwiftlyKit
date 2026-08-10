@@ -14,8 +14,27 @@ executable.
 import Foundation
 import SwiftlyKit
 
-let kit = SwiftlyKit()
 let packageRoot = URL(filePath: "/path/to/package")
+
+// Prepares the environment and builds the package's sole executable for x86-64 Linux in release mode.
+let executable = try await SwiftlyKit.build(packageRoot)
+```
+
+Specify a product, target, or configuration only when the defaults do not fit:
+
+```swift
+let executable = try await SwiftlyKit.build(
+    packageRoot,
+    product: "MyTool",
+    for: .linux(.arm64),
+    configuration: .debug
+)
+```
+
+Use the staged API when installations or dependency resolution require separate authorization:
+
+```swift
+let kit = SwiftlyKit()
 
 // Read-only: describes the exact environment and any required installations.
 let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))
@@ -40,9 +59,10 @@ do {
 
 ## Guarantees
 
-- Assessment is read-only; preparation and dependency resolution are explicit.
+- Assessment is read-only; staged preparation and dependency resolution are explicit.
+- The static fast track authorizes required preparation and dependency resolution in one operation.
 - SwiftlyKit uses exact official stable Swift toolchains and matching SDKs.
-- Builds never resolve dependencies automatically.
+- Staged builds never resolve dependencies automatically.
 - Returned executables are verified static ELF64 files for the requested architecture.
 - Mutating operations on one `SwiftlyKit` value are serialized and cancellable.
 - Process, network, filesystem, and test seams remain internal.

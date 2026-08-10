@@ -17,6 +17,7 @@ public enum SwiftlyKitError: Error, Equatable, Sendable {
     case packageInspectionFailed(String)
     case dependencyResolutionRequired
     case dependencyResolutionFailed(String)
+    case executableProductSelectionRequired([String])
     case executableProductNotFound(String)
     case unsupportedProductResources(String)
     case buildFailed(String)
@@ -45,6 +46,8 @@ extension SwiftlyKitError: LocalizedError {
             case .packageInspectionFailed(let detail): "SwiftPM could not inspect the package: \(detail)"
             case .dependencyResolutionRequired: "Package dependencies must be resolved explicitly before building."
             case .dependencyResolutionFailed(let detail): "SwiftPM could not resolve package dependencies: \(detail)"
+            case .executableProductSelectionRequired(let products) where products.isEmpty: "The package does not declare an executable product."
+            case .executableProductSelectionRequired(let products): "The package declares multiple executable products; specify one of: \(products.joined(separator: ", "))."
             case .executableProductNotFound(let product): "SwiftPM did not produce the executable product “\(product)”."
             case .unsupportedProductResources(let product): "The executable product “\(product)” requires runtime resources."
             case .buildFailed(let detail): "SwiftPM could not build the executable: \(detail)"

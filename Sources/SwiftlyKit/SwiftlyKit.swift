@@ -2,10 +2,15 @@ import Foundation
 
 /// Prepares official Swift cross-compilation environments and builds Linux executables.
 ///
-/// Assessing is read-only. Passing the returned assessment to ``prepare(_:onEvent:)``
-/// explicitly authorizes its required installations. The resulting
-/// ``LocalBuildEnvironment`` carries the package, target, toolchain, and SDK context
-/// used by every later operation.
+/// The static fast track prepares everything required and selects the sole executable product.
+///
+/// ```swift
+/// let executable = try await SwiftlyKit.build(packageRoot)
+/// ```
+///
+/// Use the staged API to inspect required installations or select from multiple products.
+/// Assessing is read-only. Passing the returned assessment to ``prepare(_:onEvent:)`` explicitly authorizes its
+/// required installations. The resulting ``LocalBuildEnvironment`` carries the context used by every later operation.
 ///
 /// ```swift
 /// let kit = SwiftlyKit()
@@ -31,7 +36,19 @@ public struct SwiftlyKit: Sendable {
             swiftPM: SwiftPM()
         )
     }
-    
+
+    init(assessor: EnvironmentAssessor, preparer: EnvironmentPreparer, swiftPM: SwiftPM) {
+
+        self.mutationGate = MutationGate()
+        self.assessor = assessor
+        self.preparer = preparer
+        self.swiftPM = swiftPM
+    }
+
+}
+
+extension SwiftlyKit {
+
     /// Assesses the exact environment required by a trusted local package.
     public func assess(
         _ packageRoot: URL,
@@ -102,11 +119,63 @@ public struct SwiftlyKit: Sendable {
 
 extension SwiftlyKit {
 
-    init(assessor: EnvironmentAssessor, preparer: EnvironmentPreparer, swiftPM: SwiftPM) {
-        self.mutationGate = MutationGate()
-        self.assessor = assessor
-        self.preparer = preparer
-        self.swiftPM = swiftPM
+    /// Prepares the required environment and builds an executable product in one operation.
+    ///
+    /// This operation may install Swiftly, a Swift toolchain, or a Static Linux SDK, and may resolve package dependencies.
+    /// When `product` is `nil`, the package must declare exactly one executable product.
+    public static func build(
+        _ packageRoot: URL,
+        product: String? = nil,
+        for target: BuildTarget = .linux(.x86_64),
+        configuration: BuildConfiguration = .release,
+        onEvent: EventHandler? = nil
+    ) async throws -> URL {
+
+        try await SwiftlyKit().build(
+            packageRoot,
+            product: product,
+            for: target,
+            configuration: configuration,
+            onEvent: onEvent
+        )
+    }
+
+    func build(
+        _ packageRoot: URL,
+        product productName: String?,
+        for target: BuildTarget,
+        configuration: BuildConfiguration,
+        onEvent: EventHandler?
+    ) async throws -> URL {
+
+        let assessment = try await assess(packageRoot, for: target)
+        let environment = try await prepare(assessment, onEvent: onEvent)
+        let products = try await executableProducts(using: environment)
+        let product = try selectProduct(named: productName, from: products)
+        let request = BuildRequest(product, configuration: configuration)
+
+        do {
+            return try await build(request, using: environment, onEvent: onEvent)
+        } catch SwiftlyKitError.dependencyResolutionRequired {
+            try await resolveDependencies(using: environment, onEvent: onEvent)
+            return try await build(request, using: environment, onEvent: onEvent)
+        }
+    }
+
+    private func selectProduct(named name: String?, from products: [ExecutableProduct]) throws -> ExecutableProduct {
+
+        if let name {
+            if let namedProduct = products.first(where: { $0.name == name }) {
+                return namedProduct
+            }
+
+            throw SwiftlyKitError.executableProductNotFound(name)
+        }
+
+        guard products.count == 1, let product = products.first
+        else { throw SwiftlyKitError.executableProductSelectionRequired(products.map(\.name)) }
+
+        return product
     }
 
 }

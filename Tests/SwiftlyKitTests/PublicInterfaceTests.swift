@@ -11,6 +11,15 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("The fast-track workflow compiles with every default")
+    func fastTrackWorkflowCompiles() {
+
+        let workflow: @Sendable (URL) async throws -> URL = { packageRoot in
+            try await SwiftlyKit.build(packageRoot)
+        }
+        _ = workflow
+    }
+
 }
 
 private func documentedWorkflow(_ packageRoot: URL) async throws -> URL {
