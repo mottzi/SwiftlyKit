@@ -56,7 +56,7 @@ extension EnvironmentPreparer {
             swiftVersion: assessment.swiftVersion,
             staticLinuxSDK: assessment.staticLinuxSDK,
             packageRoot: assessment.packageRoot,
-            swiftlyExecutableURL: swiftly.executableURL,
+            swiftly: swiftly,
             sdkBundleURL: sdkBundleURL,
             target: assessment.target
         )
@@ -125,7 +125,8 @@ extension EnvironmentPreparer {
                 to: onEvent
             )
 
-            let installSDKCommand = swiftly.swiftCommand(
+            let installSDKCommand = swiftly.command(
+                tool: "swift",
                 toolchain: toolchain,
                 arguments: [
                     "sdk", "install", sdkMetadata.downloadURL.absoluteString,

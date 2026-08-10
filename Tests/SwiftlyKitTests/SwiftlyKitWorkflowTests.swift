@@ -135,7 +135,7 @@ struct SwiftlyKitWorkflowTests {
                 swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
                 staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
                 packageRoot: packageRoot,
-                swiftlyExecutableURL: URL(filePath: "/swiftly"),
+                swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
                 sdkBundleURL: packageRoot.appending(path: "sdk.artifactbundle"),
                 target: .linux(.arm64)
             )

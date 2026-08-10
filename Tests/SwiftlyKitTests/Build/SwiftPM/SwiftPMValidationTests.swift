@@ -35,7 +35,7 @@ struct SwiftPMValidationTests {
             let valid = try validationEnvironment(in: directory, toolsVersion: "6.0")
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o644],
-                ofItemAtPath: valid.swiftlyExecutableURL.path
+                ofItemAtPath: valid.swiftly.executableURL.path
             )
             #expect(throws: SwiftlyKitError.incompatibleSwiftly) {
                 try SwiftPM.validate(valid, locateSDK: { _ in valid.sdkBundleURL })
@@ -43,7 +43,7 @@ struct SwiftPMValidationTests {
 
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o755],
-                ofItemAtPath: valid.swiftlyExecutableURL.path
+                ofItemAtPath: valid.swiftly.executableURL.path
             )
             #expect(throws: SwiftlyKitError.staticLinuxSDKUnavailable) {
                 try SwiftPM.validate(valid, locateSDK: { _ in directory.appending(path: "another-sdk") })
@@ -68,7 +68,7 @@ private func validationEnvironment(in directory: URL, toolsVersion: String) thro
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
         staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
         packageRoot: directory,
-        swiftlyExecutableURL: swiftly,
+        swiftly: SwiftlyInstallation(executableURL: swiftly),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64)
     )

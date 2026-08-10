@@ -22,7 +22,7 @@ extension SwiftPM {
         guard packageInputs.toolsVersion <= environment.swiftVersion
         else { throw SwiftlyKitError.unsupportedToolsVersion(packageInputs.toolsVersion) }
 
-        guard FileManager.default.isExecutableFile(atPath: environment.swiftlyExecutableURL.path)
+        guard FileManager.default.isExecutableFile(atPath: environment.swiftly.executableURL.path)
         else { throw SwiftlyKitError.incompatibleSwiftly }
 
         let locatedSDKBundleURL = locateSDK(environment.staticLinuxSDK.identifier)

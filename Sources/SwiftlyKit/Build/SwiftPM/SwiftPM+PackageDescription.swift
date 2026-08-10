@@ -14,7 +14,6 @@ extension SwiftPM {
             environment,
             swiftArguments: [
                 "package",
-                "--package-path", environment.packageRoot.path,
                 "--disable-automatic-resolution",
                 "dump-package"
             ]

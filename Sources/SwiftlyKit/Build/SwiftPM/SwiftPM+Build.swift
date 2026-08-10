@@ -131,7 +131,6 @@ extension SwiftPM {
     ) -> [String] {
 
         var arguments = [
-            "--package-path", environment.packageRoot.path,
             "--disable-automatic-resolution",
             "--swift-sdks-path", sdkSearchDirectory.path,
             "--swift-sdk", environment.target.architecture.swiftSDKSelector,

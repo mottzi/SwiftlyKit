@@ -88,12 +88,19 @@ extension SwiftlyInstallation {
 
 extension SwiftlyInstallation {
 
-    func swiftCommand(toolchain: SwiftVersion, arguments: [String], workingDirectory: URL? = nil) -> SubprocessCommand {
+    func command(
+        tool: String,
+        toolchain: SwiftVersion,
+        arguments: [String],
+        workingDirectory: URL? = nil,
+        environment: [String: String]? = nil
+    ) -> SubprocessCommand {
 
         SubprocessCommand(
             executableURL: executableURL,
-            arguments: ["run", "swift"] + arguments + ["+\(toolchain)"],
-            workingDirectory: workingDirectory
+            arguments: ["run", tool] + arguments + ["+\(toolchain)"],
+            workingDirectory: workingDirectory,
+            environment: environment
         )
     }
 

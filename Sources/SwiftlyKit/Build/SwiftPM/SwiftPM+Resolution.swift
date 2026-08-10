@@ -17,7 +17,6 @@ extension SwiftPM {
             environment,
             swiftArguments: [
                 "package",
-                "--package-path", environment.packageRoot.path,
                 "resolve"
             ]
         )

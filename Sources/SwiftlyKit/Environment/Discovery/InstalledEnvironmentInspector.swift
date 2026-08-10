@@ -95,7 +95,8 @@ extension InstalledEnvironmentInspector {
         toolchain: SwiftVersion
     ) async throws -> [InstalledStaticLinuxSDK] {
 
-        let command = swiftly.swiftCommand(
+        let command = swiftly.command(
+            tool: "swift",
             toolchain: toolchain,
             arguments: ["sdk", "list"]
         )

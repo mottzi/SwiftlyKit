@@ -64,6 +64,7 @@ struct SwiftPMTests {
             #expect(try await swiftPM.build(request, using: environment) == executable)
             let commands = await runner.commands
             #expect(commands.count == 3)
+            #expect(commands.allSatisfy { $0.workingDirectory == directory })
             let build = commands[1]
             #expect(build.arguments.prefix(3) == ["run", "swift", "build"])
             #expect(build.arguments.suffix(1) == ["+6.2.1"])
@@ -151,9 +152,9 @@ struct SwiftPMTests {
             let commands = await runner.commands
             #expect(commands.count == 1)
             #expect(commands[0].arguments == [
-                "run", "swift", "package", "--package-path", directory.path,
-                "resolve", "+6.2.1"
+                "run", "swift", "package", "resolve", "+6.2.1"
             ])
+            #expect(commands[0].workingDirectory == directory)
             #expect(await events.operations == [.resolvingDependencies])
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "resolved"),
@@ -238,7 +239,7 @@ private func buildEnvironment(in directory: URL) -> LocalBuildEnvironment {
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
         staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
         packageRoot: directory,
-        swiftlyExecutableURL: URL(filePath: "/swiftly"),
+        swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64)
     )

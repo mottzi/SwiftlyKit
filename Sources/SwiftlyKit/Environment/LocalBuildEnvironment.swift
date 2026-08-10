@@ -7,7 +7,7 @@ public struct LocalBuildEnvironment: Sendable {
     public let staticLinuxSDK: StaticLinuxSDK
 
     let packageRoot: URL
-    let swiftlyExecutableURL: URL
+    let swiftly: SwiftlyInstallation
     let sdkBundleURL: URL
     let target: BuildTarget
 
@@ -15,14 +15,14 @@ public struct LocalBuildEnvironment: Sendable {
         swiftVersion: SwiftVersion,
         staticLinuxSDK: StaticLinuxSDK,
         packageRoot: URL,
-        swiftlyExecutableURL: URL,
+        swiftly: SwiftlyInstallation,
         sdkBundleURL: URL,
         target: BuildTarget
     ) {
         self.swiftVersion = swiftVersion
         self.staticLinuxSDK = staticLinuxSDK
         self.packageRoot = packageRoot
-        self.swiftlyExecutableURL = swiftlyExecutableURL
+        self.swiftly = swiftly
         self.sdkBundleURL = sdkBundleURL
         self.target = target
     }

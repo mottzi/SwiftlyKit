@@ -39,16 +39,15 @@ extension SwiftPM {
             processEnvironment[protectedKey] = inheritedEnvironment[protectedKey]
         }
 
-        processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftlyExecutableURL.deletingLastPathComponent().path
-        
-        let command = SubprocessCommand(
-            executableURL: environment.swiftlyExecutableURL,
-            arguments: ["run", tool] + toolArguments + ["+\(environment.swiftVersion)"],
+        processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftly.executableURL.deletingLastPathComponent().path
+
+        return environment.swiftly.command(
+            tool: tool,
+            toolchain: environment.swiftVersion,
+            arguments: toolArguments,
             workingDirectory: environment.packageRoot,
             environment: processEnvironment
         )
-
-        return command
     }
 
     func boundedDiagnostic(_ result: SubprocessResult) -> String {
