@@ -8,7 +8,7 @@ struct SDKBundleLocatorTests {
     @Test("Locates canonical SDK directories in both official SwiftPM locations")
     func officialLocations() throws {
 
-        try withSDKLocatorTemporaryDirectory { home in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-SDKLocator") { home in
             let identifier = "swift-6.3.3-RELEASE_static-linux-0.1.0"
             let bundleName = "\(identifier).artifactbundle"
             let modernParent = home.appending(path: "Library/org.swift.swiftpm/swift-sdks")
@@ -30,13 +30,4 @@ struct SDKBundleLocatorTests {
         }
     }
 
-}
-
-private func withSDKLocatorTemporaryDirectory<T>(_ body: (URL) throws -> T) throws -> T {
-
-    let directory = FileManager.default.temporaryDirectory
-        .appending(path: "SwiftlyKit-SDKLocator-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    return try body(directory)
 }

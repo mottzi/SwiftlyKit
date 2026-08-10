@@ -8,7 +8,7 @@ struct AtomicOutputPublisherTests {
     @Test("Publishes bytes and refuses replacement")
     func publishNoReplace() throws {
 
-        try withSwiftPMTemporaryDirectory { directory in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let source = directory.appending(path: "source")
             let output = directory.appending(path: "output")
             try Data("first".utf8).write(to: source)
@@ -26,7 +26,7 @@ struct AtomicOutputPublisherTests {
     @Test("Concurrent publishers cannot replace the winning output")
     func concurrentPublication() async throws {
 
-        try await withSwiftPMTemporaryDirectory { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let first = directory.appending(path: "first")
             let second = directory.appending(path: "second")
             let output = directory.appending(path: "output")
@@ -43,7 +43,9 @@ struct AtomicOutputPublisherTests {
                 }
 
                 var attempts: [PublicationAttempt] = []
-                for await attempt in group { attempts.append(attempt) }
+                for await attempt in group {
+                    attempts.append(attempt)
+                }
                 return attempts
             }
 

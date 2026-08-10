@@ -13,7 +13,7 @@ struct PackageInputSnapshotTests {
             try PackageInputSnapshot.capture(at: nonFileURL)
         }
 
-        try withTemporaryDirectory { temporaryDirectory in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-PackageInput") { temporaryDirectory in
             let missingRoot = temporaryDirectory.appending(path: "missing")
             #expect(throws: SwiftlyKitError.invalidPackageRoot(missingRoot)) {
                 try PackageInputSnapshot.capture(at: missingRoot)
@@ -33,7 +33,7 @@ struct PackageInputSnapshotTests {
     @Test("Package roots are canonicalized and two-component tools versions normalize")
     func canonicalRootAndToolsVersion() throws {
 
-        try withTemporaryDirectory { temporaryDirectory in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-PackageInput") { temporaryDirectory in
             let realRoot = temporaryDirectory.appending(path: "real")
             try FileManager.default.createDirectory(at: realRoot, withIntermediateDirectories: false)
             try write(
@@ -54,7 +54,7 @@ struct PackageInputSnapshotTests {
     @Test("Pre-six later directives require the first non-whitespace line")
     func preSixDirectivePlacement() throws {
 
-        try withTemporaryDirectory { temporaryDirectory in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-PackageInput") { temporaryDirectory in
             let manifestURL = temporaryDirectory.appending(path: "Package.swift")
             try write("// swift-tools-version: 5.9\n", to: manifestURL)
             let snapshot = try PackageInputSnapshot.capture(at: temporaryDirectory)
@@ -75,7 +75,7 @@ struct PackageInputSnapshotTests {
     @Test("Nearest parent Swift version files are trimmed and package files override them")
     func swiftVersionLookup() throws {
 
-        try withTemporaryDirectory { temporaryDirectory in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-PackageInput") { temporaryDirectory in
             let parent = temporaryDirectory.appending(path: "parent")
             let packageRoot = parent.appending(path: "package")
             try FileManager.default.createDirectory(at: packageRoot, withIntermediateDirectories: true)
@@ -96,7 +96,7 @@ struct PackageInputSnapshotTests {
     @Test("Missing and malformed tools directives are rejected")
     func malformedToolsVersion() throws {
 
-        try withTemporaryDirectory { temporaryDirectory in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-PackageInput") { temporaryDirectory in
             let manifestURL = temporaryDirectory.appending(path: "Package.swift")
             try write("import PackageDescription\n", to: manifestURL)
             #expect(throws: SwiftlyKitError.malformedToolsVersion) {
@@ -113,7 +113,7 @@ struct PackageInputSnapshotTests {
     @Test("A non-regular Swift version entry is rejected")
     func nonRegularSwiftVersionFile() throws {
 
-        try withTemporaryDirectory { temporaryDirectory in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-PackageInput") { temporaryDirectory in
             let manifestRoot = temporaryDirectory.appending(path: "package")
             try FileManager.default.createDirectory(at: manifestRoot, withIntermediateDirectories: false)
             try write("// swift-tools-version: 6.0\n", to: manifestRoot.appending(path: "Package.swift"))
@@ -131,7 +131,7 @@ struct PackageInputSnapshotTests {
     @Test("Unchanged inputs revalidate")
     func unchangedInputsRevalidate() throws {
 
-        try withTemporaryDirectory { packageRoot in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-PackageInput") { packageRoot in
             try write("// swift-tools-version: 6.0\n", to: packageRoot.appending(path: "Package.swift"))
             try write("6.2.1\n", to: packageRoot.appending(path: ".swift-version"))
 
@@ -144,7 +144,7 @@ struct PackageInputSnapshotTests {
     @Test("Semantically equivalent byte changes invalidate a snapshot")
     func byteChangesInvalidateSnapshot() throws {
 
-        try withTemporaryDirectory { packageRoot in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-PackageInput") { packageRoot in
             let manifestURL = packageRoot.appending(path: "Package.swift")
             let swiftVersionURL = packageRoot.appending(path: ".swift-version")
             try write("// swift-tools-version: 6.0\n", to: manifestURL)
@@ -168,7 +168,7 @@ struct PackageInputSnapshotTests {
     @Test("Changing the selected Swift version source invalidates a snapshot")
     func swiftVersionSourceChangeInvalidatesSnapshot() throws {
 
-        try withTemporaryDirectory { temporaryDirectory in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-PackageInput") { temporaryDirectory in
             let packageRoot = temporaryDirectory.appending(path: "package")
             try FileManager.default.createDirectory(at: packageRoot, withIntermediateDirectories: false)
             try write("// swift-tools-version: 6.0\n", to: packageRoot.appending(path: "Package.swift"))
@@ -207,15 +207,6 @@ func strictSwiftVersionParsing() {
     for value in values {
         #expect(SwiftVersion(parsing: value) == nil)
     }
-}
-
-private func withTemporaryDirectory<T>(_ body: (URL) throws -> T) throws -> T {
-
-    let directory = FileManager.default.temporaryDirectory
-        .appending(path: "SwiftlyKit-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    return try body(directory)
 }
 
 private func write(_ value: String, to url: URL) throws {

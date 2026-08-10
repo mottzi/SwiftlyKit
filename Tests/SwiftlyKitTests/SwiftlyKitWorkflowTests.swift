@@ -8,7 +8,7 @@ struct SwiftlyKitWorkflowTests {
     @Test("Preparation rejects package inputs changed after assessment")
     func staleAssessment() async throws {
 
-        try await withWorkflowTemporaryDirectory { packageRoot in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in
             let manifestURL = packageRoot.appending(path: "Package.swift")
             let originalManifest = Data("// swift-tools-version: 6.0\n".utf8)
             try originalManifest.write(to: manifestURL)
@@ -52,7 +52,7 @@ struct SwiftlyKitWorkflowTests {
     @Test("A prepared capability carries package and target context into product discovery")
     func capabilityDrivenProductDiscovery() async throws {
 
-        try await withWorkflowTemporaryDirectory { packageRoot in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in
             try Data("// swift-tools-version: 6.0\n".utf8).write(
                 to: packageRoot.appending(path: "Package.swift")
             )
@@ -80,10 +80,7 @@ struct SwiftlyKitWorkflowTests {
             )
             let runner = RecordingSubprocessRunner(results: [SubprocessResult(
                 succeeded: true,
-                standardOutput: """
-                    {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
-                     "targets":[{"name":"Tool","type":"executable","dependencies":[],"resources":[]}]}
-                    """,
+                standardOutput: try packageDescriptionJSON(executableProducts: ["Tool"]),
                 standardError: ""
             )])
             let kit = SwiftlyKit(
@@ -124,7 +121,7 @@ struct SwiftlyKitWorkflowTests {
     @Test("Public mutating workflows share one instance-level gate")
     func mutatingWorkflowsAreSerialized() async throws {
 
-        try await withWorkflowTemporaryDirectory { packageRoot in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in
             let executable = packageRoot.appending(path: "Tool")
             try writeELF(to: executable, architecture: .arm64)
             let runner = WorkflowMutationRunner(binaryDirectory: packageRoot)
@@ -159,15 +156,6 @@ struct SwiftlyKitWorkflowTests {
 
 }
 
-private func withWorkflowTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
-
-    let directory = FileManager.default.temporaryDirectory
-        .appending(path: "SwiftlyKit-Workflow-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    return try await body(directory)
-}
-
 private actor WorkflowMutationRunner: SubprocessRunning {
 
     private let binaryDirectory: URL
@@ -191,10 +179,7 @@ private actor WorkflowMutationRunner: SubprocessRunning {
         if command.arguments.contains("dump-package") {
             return SubprocessResult(
                 succeeded: true,
-                standardOutput: """
-                    {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
-                     "targets":[{"name":"Tool","type":"executable","dependencies":[],"resources":[]}]}
-                    """,
+                standardOutput: try packageDescriptionJSON(executableProducts: ["Tool"]),
                 standardError: ""
             )
         }

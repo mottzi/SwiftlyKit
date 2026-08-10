@@ -56,28 +56,26 @@ struct LiveSubprocessRunnerTests {
     @Test("Cancellation terminates child processes in the subprocess group")
     func cancellationTerminatesProcessGroup() async throws {
 
-        let directory = FileManager.default.temporaryDirectory
-            .appending(path: "SwiftlyKit-Subprocess-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let sentinel = directory.appending(path: "child-survived")
-        let command = SubprocessCommand(
-            executableURL: URL(filePath: "/bin/sh"),
-            arguments: [
-                "-c",
-                "(sleep 0.4; /usr/bin/touch '\(sentinel.path)') & wait"
-            ]
-        )
-        let task = Task { try await LiveSubprocessRunner().run(command, onOutput: nil) }
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Subprocess") { directory in
+            let sentinel = directory.appending(path: "child-survived")
+            let command = SubprocessCommand(
+                executableURL: URL(filePath: "/bin/sh"),
+                arguments: [
+                    "-c",
+                    "(sleep 0.4; /usr/bin/touch '\(sentinel.path)') & wait"
+                ]
+            )
+            let task = Task { try await LiveSubprocessRunner().run(command, onOutput: nil) }
 
-        try await Task.sleep(for: .milliseconds(50))
-        task.cancel()
+            try await Task.sleep(for: .milliseconds(50))
+            task.cancel()
 
-        await #expect(throws: CancellationError.self) {
-            try await task.value
+            await #expect(throws: CancellationError.self) {
+                try await task.value
+            }
+            try await Task.sleep(for: .milliseconds(500))
+            #expect(!FileManager.default.fileExists(atPath: sentinel.path))
         }
-        try await Task.sleep(for: .milliseconds(500))
-        #expect(!FileManager.default.fileExists(atPath: sentinel.path))
     }
 
 }

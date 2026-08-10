@@ -8,7 +8,7 @@ struct SwiftPMValidationTests {
     @Test("A compatible package, Swiftly executable, and exact SDK validate")
     func acceptsExactEnvironment() throws {
 
-        try withSwiftPMTemporaryDirectory { directory in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let environment = try validationEnvironment(in: directory, toolsVersion: "6.0")
 
             try SwiftPM.validate(environment, locateSDK: { identifier in
@@ -21,7 +21,7 @@ struct SwiftPMValidationTests {
     @Test("Validation rejects incompatible package inputs, Swiftly, and SDK state")
     func rejectsInvalidEnvironmentState() throws {
 
-        try withSwiftPMTemporaryDirectory { directory in
+        try withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let incompatiblePackage = try validationEnvironment(in: directory, toolsVersion: "6.3")
             #expect(throws: SwiftlyKitError.unsupportedToolsVersion(
                 SwiftVersion(major: 6, minor: 3, patch: 0)
@@ -53,14 +53,11 @@ struct SwiftPMValidationTests {
 
 }
 
-private func validationEnvironment(
-    in directory: URL,
-    toolsVersion: String
-) throws -> LocalBuildEnvironment {
+private func validationEnvironment(in directory: URL, toolsVersion: String) throws -> LocalBuildEnvironment {
 
-    try Data("// swift-tools-version: \(toolsVersion)\n".utf8).write(
-        to: directory.appending(path: "Package.swift")
-    )
+    try Data("// swift-tools-version: \(toolsVersion)\n".utf8)
+        .write(to: directory.appending(path: "Package.swift"))
+
     let swiftly = directory.appending(path: "swiftly")
     if !FileManager.default.fileExists(atPath: swiftly.path) {
         try Data("#!/bin/sh\nexit 0\n".utf8).write(to: swiftly)

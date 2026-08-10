@@ -135,7 +135,7 @@ struct EnvironmentPreparerTests {
     @Test("Bootstrap validates trust and uses exact safe installer and init flags")
     func bootstrapCommands() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-EnvironmentPreparation") { temporaryDirectory in
             let installed = SwiftlyInstallation(
                 executableURL: temporaryDirectory.appending(path: "home/.swiftly/bin/swiftly")
             )
@@ -199,7 +199,7 @@ struct EnvironmentPreparerTests {
     @Test("Bootstrap rejects an untrusted package before installation")
     func bootstrapRejectsUntrustedPackage() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-EnvironmentPreparation") { temporaryDirectory in
             let commands = RecordingSubprocessRunner(results: [
                 SubprocessResult(
                     succeeded: true,
@@ -276,23 +276,21 @@ struct EnvironmentPreparerTests {
 
     private func assessment(requires components: [PreparationComponent]) throws -> EnvironmentAssessment {
 
-        let packageRoot = FileManager.default.temporaryDirectory
-            .appending(path: "SwiftlyKit-EnvironmentAssessment-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: packageRoot, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: packageRoot) }
-        try Data("// swift-tools-version: 6.0\n".utf8)
-            .write(to: packageRoot.appending(path: "Package.swift"))
+        try withTemporaryDirectory(prefix: "SwiftlyKit-EnvironmentAssessment") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8)
+                .write(to: packageRoot.appending(path: "Package.swift"))
 
-        return EnvironmentAssessment(
-            packageInputs: try PackageInputSnapshot.capture(at: packageRoot),
-            release: OfficialStableRelease(
-                version: version,
-                staticLinuxSDK: sdk,
-                staticLinuxSDKMetadata: sdkMetadata
-            ),
-            requiredComponents: components,
-            target: .linux(.arm64)
-        )
+            return EnvironmentAssessment(
+                packageInputs: try PackageInputSnapshot.capture(at: packageRoot),
+                release: OfficialStableRelease(
+                    version: version,
+                    staticLinuxSDK: sdk,
+                    staticLinuxSDKMetadata: sdkMetadata
+                ),
+                requiredComponents: components,
+                target: .linux(.arm64)
+            )
+        }
     }
 
 }
@@ -339,13 +337,4 @@ private actor DetectionSequence {
 
 private enum PreparationTestFailure: Error {
     case missingFixture
-}
-
-private func withTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
-
-    let directory = FileManager.default.temporaryDirectory
-        .appending(path: "SwiftlyKit-EnvironmentPreparation-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    return try await body(directory)
 }

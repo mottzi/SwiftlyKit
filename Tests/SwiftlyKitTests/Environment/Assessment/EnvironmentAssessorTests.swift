@@ -8,7 +8,7 @@ struct EnvironmentAssessorTests {
     @Test("Missing Swiftly describes every required installation without inspecting installed state")
     func missingSwiftlyRequirements() async throws {
 
-        try await withAssessorTemporaryDirectory { packageRoot in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
             try Data("// swift-tools-version: 6.0\n".utf8).write(
                 to: packageRoot.appending(path: "Package.swift")
             )
@@ -62,7 +62,7 @@ struct EnvironmentAssessorTests {
     @Test("Catalog integrity and availability failures remain distinct public errors")
     func catalogErrorMapping() async throws {
 
-        try await withAssessorTemporaryDirectory { packageRoot in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
             try Data("// swift-tools-version: 6.0\n".utf8).write(
                 to: packageRoot.appending(path: "Package.swift")
             )
@@ -102,7 +102,7 @@ struct EnvironmentAssessorTests {
     @Test("Unreadable installed state makes an existing Swiftly installation incompatible")
     func inventoryFailureMapping() async throws {
 
-        try await withAssessorTemporaryDirectory { packageRoot in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
             try Data("// swift-tools-version: 6.0\n".utf8).write(
                 to: packageRoot.appending(path: "Package.swift")
             )
@@ -141,15 +141,4 @@ private func assessorRelease() -> OfficialStableRelease {
             supportedArchitectures: [.arm64]
         )
     )
-}
-
-private func withAssessorTemporaryDirectory<T>(
-    _ body: (URL) async throws -> T
-) async throws -> T {
-
-    let directory = FileManager.default.temporaryDirectory
-        .appending(path: "SwiftlyKit-Assessor-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    return try await body(directory)
 }

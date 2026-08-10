@@ -17,26 +17,11 @@ struct SwiftPMTests {
             (.invalidExecutable("invalid"), .executableVerificationFailed("invalid")),
             (.outputAlreadyExists(output), .outputAlreadyExists(output)),
             (.outputPublicationFailed(output), .outputPublicationFailed(output)),
-            (
-                .commandFailed(operation: .build, diagnostic: "build failed"),
-                .buildFailed("build failed")
-            ),
-            (
-                .commandFailed(operation: .locatingBuildOutput, diagnostic: "missing output"),
-                .buildFailed("missing output")
-            ),
-            (
-                .commandFailed(operation: .packageDescription, diagnostic: "invalid manifest"),
-                .packageInspectionFailed("invalid manifest")
-            ),
-            (
-                .commandFailed(operation: .dependencyResolution, diagnostic: "unresolved"),
-                .dependencyResolutionFailed("unresolved")
-            ),
-            (
-                .commandFailed(operation: .stripping, diagnostic: "objcopy failed"),
-                .stripFailed("objcopy failed")
-            )
+            (.commandFailed(operation: .build, diagnostic: "build failed"), .buildFailed("build failed")),
+            (.commandFailed(operation: .locatingBuildOutput, diagnostic: "missing output"), .buildFailed("missing output")),
+            (.commandFailed(operation: .packageDescription, diagnostic: "invalid manifest"), .packageInspectionFailed("invalid manifest")),
+            (.commandFailed(operation: .dependencyResolution, diagnostic: "unresolved"), .dependencyResolutionFailed("unresolved")),
+            (.commandFailed(operation: .stripping, diagnostic: "objcopy failed"), .stripFailed("objcopy failed"))
         ]
 
         for (internalError, publicError) in mappings {
@@ -47,13 +32,10 @@ struct SwiftPMTests {
     @Test("Build uses exact toolchain, SDK, product, configuration, scratch, and disables resolution")
     func exactBuildCommand() async throws {
 
-        try await withSwiftPMTemporaryDirectory { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
             try writeELF(to: executable, architecture: .arm64)
-            let packageJSON = """
-                {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
-                 "targets":[{"name":"Tool","type":"executable","dependencies":[],"resources":[]}]}
-                """
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
                 .init(succeeded: true, standardOutput: "built", standardError: ""),
@@ -103,11 +85,8 @@ struct SwiftPMTests {
     @Test("Build maps disabled resolution diagnostics to the dedicated internal error")
     func resolutionRequired() async throws {
 
-        try await withSwiftPMTemporaryDirectory { directory in
-            let packageJSON = """
-                {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
-                 "targets":[{"name":"Tool","type":"executable","dependencies":[],"resources":[]}]}
-                """
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
                 .init(succeeded: false, standardOutput: "", standardError: "automatic resolution is disabled")
@@ -128,11 +107,8 @@ struct SwiftPMTests {
     @Test("Build rejects runtime resource bundles emitted by dependency products")
     func transitiveResources() async throws {
 
-        try await withSwiftPMTemporaryDirectory { directory in
-            let packageJSON = """
-                {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
-                 "targets":[{"name":"Tool","type":"executable","dependencies":[],"resources":[]}]}
-                """
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let resources = directory.appending(path: "Dependency_Assets.resources")
             try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
             let runner = RecordingSubprocessRunner(results: [
@@ -156,7 +132,7 @@ struct SwiftPMTests {
     @Test("Dependency resolution uses the exact toolchain and forwards progress and command output")
     func dependencyResolutionCommandAndEvents() async throws {
 
-        try await withSwiftPMTemporaryDirectory { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: "resolved", standardError: "warning")
             ])
@@ -189,7 +165,7 @@ struct SwiftPMTests {
     @Test("Dependency resolution failure retains a bounded diagnostic and operation")
     func dependencyResolutionFailure() async throws {
 
-        try await withSwiftPMTemporaryDirectory { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: false, standardOutput: "context", standardError: "resolution failed")
             ])
@@ -210,14 +186,11 @@ struct SwiftPMTests {
     @Test("Explicit stripping is reverified and the result is published without replacement")
     func stripAndPublish() async throws {
 
-        try await withSwiftPMTemporaryDirectory { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
             let output = directory.appending(path: "PublishedTool")
             try writeELF(to: executable, architecture: .arm64)
-            let packageJSON = """
-                {"products":[{"name":"Tool","targets":["Tool"],"type":{"executable":null}}],
-                 "targets":[{"name":"Tool","type":"executable","dependencies":[],"resources":[]}]}
-                """
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
                 .init(succeeded: true, standardOutput: "built", standardError: ""),

@@ -8,7 +8,7 @@ struct SwiftlyInstallationTests {
     @Test("Configured Swiftly takes priority and canonicalizes its executable")
     func configuredBinPriority() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftlyInstallation") { temporaryDirectory in
             let configuredTarget = temporaryDirectory.appending(path: "configured-target")
             let configuredBin = temporaryDirectory.appending(path: "configured-bin")
             let homeDirectory = temporaryDirectory.appending(path: "home")
@@ -34,7 +34,7 @@ struct SwiftlyInstallationTests {
     @Test("The official home location is used when no bin override is set")
     func homeFallback() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftlyInstallation") { temporaryDirectory in
             let homeDirectory = temporaryDirectory.appending(path: "home")
             let executable = homeDirectory.appending(path: ".swiftly/bin/swiftly")
             try FileManager.default.createDirectory(
@@ -56,7 +56,7 @@ struct SwiftlyInstallationTests {
     @Test("No qualifying executable returns nil without probing")
     func noExecutableReturnsNil() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftlyInstallation") { temporaryDirectory in
             let result = try await SwiftlyInstallation.detect(
                 environment: ["SWIFTLY_BIN_DIR": temporaryDirectory.appending(path: "configured").path],
                 homeDirectory: temporaryDirectory.appending(path: "home"),
@@ -69,7 +69,7 @@ struct SwiftlyInstallationTests {
     @Test("Non-regular and non-executable candidates are ignored")
     func invalidCandidatesAreIgnored() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftlyInstallation") { temporaryDirectory in
             let configuredBin = temporaryDirectory.appending(path: "configured")
             let homeBin = temporaryDirectory.appending(path: "home/.swiftly/bin")
             try FileManager.default.createDirectory(at: configuredBin, withIntermediateDirectories: true)
@@ -92,7 +92,7 @@ struct SwiftlyInstallationTests {
     @Test("Incompatible version output and probe failure map to incompatibleSwiftly")
     func incompatibleVersionOutput() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftlyInstallation") { temporaryDirectory in
             let executable = temporaryDirectory.appending(path: "swiftly")
             try makeExecutable(at: executable)
             let environment = ["SWIFTLY_BIN_DIR": temporaryDirectory.path]
@@ -127,7 +127,7 @@ struct SwiftlyInstallationTests {
     @Test("A selected candidate failure does not fall through to the home candidate")
     func selectedCandidateFailureDoesNotFallThrough() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftlyInstallation") { temporaryDirectory in
             let configuredBin = temporaryDirectory.appending(path: "configured")
             let configuredExecutable = configuredBin.appending(path: "swiftly")
             let homeDirectory = temporaryDirectory.appending(path: "home")
@@ -159,7 +159,7 @@ struct SwiftlyInstallationTests {
     @Test("Cancellation remains CancellationError")
     func cancellationPreserved() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftlyInstallation") { temporaryDirectory in
             let executable = temporaryDirectory.appending(path: "swiftly")
             try makeExecutable(at: executable)
 
@@ -176,7 +176,7 @@ struct SwiftlyInstallationTests {
     @Test("Live probe invokes an executable with --version and parses its output")
     func liveVersionProbe() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftlyInstallation") { temporaryDirectory in
             let executable = temporaryDirectory.appending(path: "swiftly")
             try write(
                 "#!/bin/sh\nif [ \"$1\" != \"--version\" ]; then exit 2; fi\nprintf ' 1.2.3\\n'\n",
@@ -194,15 +194,6 @@ struct SwiftlyInstallationTests {
         }
     }
 
-}
-
-private func withTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
-
-    let directory = FileManager.default.temporaryDirectory
-        .appending(path: "SwiftlyKit-SwiftlyInstallation-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    return try await body(directory)
 }
 
 private actor ProbeRecorder {

@@ -11,7 +11,7 @@ struct SwiftlyKitFastTrackTests {
         try await withFastTrackTemporaryDirectory { packageRoot in
             let executable = packageRoot.appending(path: "Tool")
             try writeELF(to: executable, architecture: .x86_64)
-            let packageJSON = packageDescription(products: ["Tool"])
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
@@ -40,7 +40,7 @@ struct SwiftlyKitFastTrackTests {
     func ambiguousProduct() async throws {
 
         try await withFastTrackTemporaryDirectory { packageRoot in
-            let packageJSON = packageDescription(products: ["First", "Second"])
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["First", "Second"])
             let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: packageJSON, standardError: "")
             ])
@@ -64,7 +64,7 @@ struct SwiftlyKitFastTrackTests {
         try await withFastTrackTemporaryDirectory { packageRoot in
             let executable = packageRoot.appending(path: "Second")
             try writeELF(to: executable, architecture: .x86_64)
-            let packageJSON = packageDescription(products: ["First", "Second"])
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["First", "Second"])
             let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
@@ -92,7 +92,7 @@ struct SwiftlyKitFastTrackTests {
         try await withFastTrackTemporaryDirectory { packageRoot in
             let executable = packageRoot.appending(path: "Tool")
             try writeELF(to: executable, architecture: .x86_64)
-            let packageJSON = packageDescription(products: ["Tool"])
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
                 .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
@@ -166,25 +166,10 @@ private func fastTrackKit(packageRoot: URL, runner: RecordingSubprocessRunner) -
     )
 }
 
-private func packageDescription(products: [String]) -> String {
-
-    let productDescriptions = products.map { name in
-        "{\"name\":\"\(name)\",\"targets\":[\"\(name)\"],\"type\":{\"executable\":null}}"
-    }
-    let targetDescriptions = products.map { name in
-        "{\"name\":\"\(name)\",\"type\":\"executable\",\"dependencies\":[],\"resources\":[]}"
-    }
-
-    return "{\"products\":[\(productDescriptions.joined(separator: ","))],"
-        + "\"targets\":[\(targetDescriptions.joined(separator: ","))]}"
-}
-
 private func withFastTrackTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
 
-    let directory = FileManager.default.temporaryDirectory
-        .appending(path: "SwiftlyKit-FastTrack-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    try Data("// swift-tools-version: 6.0\n".utf8).write(to: directory.appending(path: "Package.swift"))
-    return try await body(directory)
+    try await withTemporaryDirectory(prefix: "SwiftlyKit-FastTrack") { directory in
+        try Data("// swift-tools-version: 6.0\n".utf8).write(to: directory.appending(path: "Package.swift"))
+        return try await body(directory)
+    }
 }

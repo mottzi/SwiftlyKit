@@ -48,7 +48,7 @@ struct HostPreflightTests {
             try await remotePreflight.check()
         }
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-HostPreflight") { temporaryDirectory in
             let missingURL = temporaryDirectory.appending(path: "missing-sdk")
             let missingPreflight = HostPreflight(
                 hostFacts: supportedHostFacts,
@@ -86,7 +86,7 @@ struct HostPreflightTests {
     @Test("A valid SDK symlink path succeeds")
     func validSDKPathSucceeds() async throws {
 
-        try await withTemporaryDirectory { temporaryDirectory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-HostPreflight") { temporaryDirectory in
             let realSDKURL = temporaryDirectory.appending(path: "MacOSX.sdk")
             try FileManager.default.createDirectory(at: realSDKURL, withIntermediateDirectories: false)
             let symlinkURL = temporaryDirectory.appending(path: "active-sdk")
@@ -119,12 +119,3 @@ private let supportedHostFacts = HostFacts(
     isAppleSilicon: true,
     operatingSystemVersion: OperatingSystemVersion(majorVersion: 13, minorVersion: 0, patchVersion: 0)
 )
-
-private func withTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
-
-    let directory = FileManager.default.temporaryDirectory
-        .appending(path: "SwiftlyKit-HostPreflight-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    return try await body(directory)
-}
