@@ -44,8 +44,7 @@ extension EnvironmentPreparer {
         try await revalidate(assessment)
         try Task.checkCancellation()
 
-        let swiftly = try await installRequiredComponents(assessment, onEvent: onEvent)
-        let inventory = try await inspect(swiftly, assessment.swiftVersion)
+        let (swiftly, inventory) = try await installRequiredComponents(assessment, onEvent: onEvent)
 
         guard inventory.contains(toolchain: assessment.swiftVersion, sdk: assessment.staticLinuxSDK.identifier)
         else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
@@ -66,7 +65,10 @@ extension EnvironmentPreparer {
     private func installRequiredComponents(
         _ assessment: EnvironmentAssessment,
         onEvent: EventHandler?
-    ) async throws -> SwiftlyInstallation {
+    ) async throws -> (
+        swiftly: SwiftlyInstallation,
+        inventory: InstalledEnvironmentInventory
+    ) {
 
         var swiftly = try await detectSwiftly()
         
@@ -138,9 +140,10 @@ extension EnvironmentPreparer {
             )
 
             try await checkedRun(installSDKCommand, onEvent: onEvent)
+            state = try await inspect(swiftly, toolchain)
         }
 
-        return swiftly
+        return (swiftly, state)
     }
 
 }

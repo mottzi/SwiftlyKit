@@ -14,18 +14,22 @@ struct EnvironmentPreparerTests {
         supportedArchitectures: [.arm64]
     )
 
-    @Test("A ready environment performs no download or mutation command")
+    @Test("A ready environment inspects once and performs no download or mutation command")
     func readyIsNoOp() async throws {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let commands = RecordingSubprocessRunner(results: [])
+        let inspections = Counter()
         let validations = Counter()
         let preparer = EnvironmentPreparer(
             runner: commands,
             checkHost: {},
             downloadPackage: { _, _ in Issue.record("download must not run"); return 200 },
             detectSwiftly: { swiftly },
-            inspect: { _, _ in self.inventory(includesToolchain: true, includesSDK: true) },
+            inspect: { _, _ in
+                await inspections.increment()
+                return self.inventory(includesToolchain: true, includesSDK: true)
+            },
             locateSDK: { _ in URL(filePath: "/tmp/sdk.artifactbundle") },
             revalidate: { _ in await validations.increment() }
         )
@@ -33,6 +37,7 @@ struct EnvironmentPreparerTests {
         let result = try await preparer.prepare(assessment(requires: []))
 
         #expect(result.swiftVersion == version)
+        #expect(await inspections.value == 1)
         #expect(await validations.value == 1)
         #expect(await commands.commands.isEmpty)
     }
@@ -63,12 +68,66 @@ struct EnvironmentPreparerTests {
         _ = try await preparer.prepare(assessment(requires: [.toolchain, .staticLinuxSDK]))
 
         let recorded = await commands.commands
+        #expect(await inspections.callCount == 3)
         #expect(recorded[0].arguments == ["install", "6.2.1", "--verify", "--assume-yes"])
         #expect(!recorded[0].arguments.contains("--use"))
         #expect(recorded[1].arguments == [
             "run", "swift", "sdk", "install", sdk.downloadURL.absoluteString,
             "--checksum", sdk.checksum, "+6.2.1"
         ])
+    }
+
+    @Test("Toolchain-only preparation reuses the post-install inventory")
+    func toolchainOnlyReusesFinalInventory() async throws {
+
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+        let commands = RecordingSubprocessRunner(results: [
+            SubprocessResult(succeeded: true, standardOutput: "", standardError: "")
+        ])
+        let inspections = InventorySequence(inventories: [
+            inventory(includesToolchain: false, includesSDK: false),
+            inventory(includesToolchain: true, includesSDK: true)
+        ])
+        let preparer = EnvironmentPreparer(
+            runner: commands,
+            checkHost: {},
+            detectSwiftly: { swiftly },
+            inspect: { _, _ in try await inspections.next() },
+            locateSDK: { _ in URL(filePath: "/tmp/sdk.artifactbundle") },
+            revalidate: { _ in }
+        )
+
+        _ = try await preparer.prepare(assessment(requires: [.toolchain]))
+
+        #expect(await inspections.callCount == 2)
+        #expect(await commands.commands.count == 1)
+    }
+
+    @Test("SDK installation refreshes inventory before validating preparation")
+    func sdkInstallationRefreshesInventory() async throws {
+
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+        let commands = RecordingSubprocessRunner(results: [
+            SubprocessResult(succeeded: true, standardOutput: "", standardError: "")
+        ])
+        let inspections = InventorySequence(inventories: [
+            inventory(includesToolchain: true, includesSDK: false),
+            inventory(includesToolchain: true, includesSDK: false)
+        ])
+        let preparer = EnvironmentPreparer(
+            runner: commands,
+            checkHost: {},
+            detectSwiftly: { swiftly },
+            inspect: { _, _ in try await inspections.next() },
+            revalidate: { _ in }
+        )
+
+        await #expect(throws: EnvironmentPreparationError.unauthorizedMutationRequired) {
+            try await preparer.prepare(assessment(requires: [.staticLinuxSDK]))
+        }
+
+        #expect(await inspections.callCount == 2)
+        #expect(await commands.commands.count == 1)
     }
 
     @Test("Bootstrap validates trust and uses exact safe installer and init flags")
@@ -246,12 +305,14 @@ private actor Counter {
 private actor InventorySequence {
 
     var inventories: [InstalledEnvironmentInventory]
+    private(set) var callCount = 0
 
     init(inventories: [InstalledEnvironmentInventory]) {
         self.inventories = inventories
     }
 
     func next() throws -> InstalledEnvironmentInventory {
+        callCount += 1
         guard !inventories.isEmpty else { throw PreparationTestFailure.missingFixture }
         return inventories.removeFirst()
     }
