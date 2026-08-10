@@ -11,10 +11,16 @@ struct SwiftPackageDescription: Sendable {
         else { throw SwiftPMError.malformedPackageDescription }
 
         let rawTargets = root["targets"] as? [[String: Any]] ?? []
-        let targetNames = Set(rawTargets.compactMap { $0["name"] as? String })
+        let targetNames = Set(rawTargets.compactMap { raw -> String? in
+            guard let name = raw["name"] as? String else { return nil }
+            guard !name.isEmpty else { return nil }
+
+            return name
+        })
 
         let targets = Dictionary(uniqueKeysWithValues: rawTargets.compactMap { raw -> (String, Target)? in
             guard let name = raw["name"] as? String else { return nil }
+            guard !name.isEmpty else { return nil }
             guard let type = raw["type"] as? String else { return nil }
 
             let target = Target(
@@ -31,6 +37,7 @@ struct SwiftPackageDescription: Sendable {
                 guard let type = raw["type"] as? [String: Any] else { return nil }
                 guard type.keys.contains("executable") else { return nil }
                 guard let name = raw["name"] as? String else { return nil }
+                guard !name.isEmpty else { return nil }
 
                 return (name, raw["targets"] as? [String] ?? [])
             }

@@ -5,7 +5,7 @@ import Testing
 @Suite("Swift package description")
 struct PackageDescriptionTests {
 
-    @Test("Discovers explicit and implicit executable products in stable order")
+    @Test("Discovers named explicit and implicit executable products in stable order")
     func discoversExecutables() throws {
 
         let description = try SwiftPackageDescription(data: Data(json.utf8))
@@ -19,9 +19,11 @@ struct PackageDescriptionTests {
         {
           "products": [
             {"name":"Library","targets":["Library"],"type":{"library":["automatic"]}},
+            {"name":"","targets":["Main"],"type":{"executable":null}},
             {"name":"Explicit","targets":["Main"],"type":{"executable":null}}
           ],
           "targets": [
+            {"name":"","type":"executable","dependencies":[],"resources":[]},
             {"name":"Main","type":"executable","dependencies":[{"target":["Resources",null]}],"resources":[]},
             {"name":"Resources","type":"regular","dependencies":[],"resources":[{"rule":{"process":{}},"path":"asset.txt"}]},
             {"name":"Implicit","type":"executable","dependencies":[],"resources":[]},

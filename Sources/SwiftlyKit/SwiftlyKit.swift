@@ -104,9 +104,6 @@ extension SwiftlyKit {
     ) async throws -> URL {
         
         try await mutationGate.withAccess {
-            guard !request.product.name.isEmpty
-            else { throw SwiftlyKitError.executableProductNotFound(request.product.name) }
-            
             do { return try await swiftPM.build(request, using: environment, onEvent: onEvent) }
             catch is CancellationError { throw CancellationError() }
             catch let error as SwiftlyKitError { throw error }
