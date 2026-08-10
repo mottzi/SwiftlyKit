@@ -16,7 +16,10 @@ A reader should understand the main behavior before reaching mechanics or consta
 
 ## Rules
 
-- Use extensions as semantic chapters, not as one-function containers.
+- Use extensions as semantic chapter boundaries.
+- When a main algorithm and its subordinate member helpers share a file, place the helpers in a following extension so the transition from intent to implementation is visible.
+- A semantic chapter may contain only one declaration. Avoid one-extension-per-function layouts when the functions belong to the same semantic layer.
+- Put access control on individual declarations, never on extensions.
 - Declare every stored instance property at the top of the primary type declaration, before initializers, computed properties, and methods.
 - Put callers before the functions they call, unless a larger behavioral layer deserves priority.
 - Give behavior more weight than passive declarations. Swift does not require definitions before use.

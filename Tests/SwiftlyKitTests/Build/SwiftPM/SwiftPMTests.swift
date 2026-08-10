@@ -29,8 +29,16 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Build uses exact toolchain, SDK, product, configuration, scratch, and disables resolution")
-    func exactBuildCommand() async throws {
+    @Test(
+        "Build uses exact toolchain, SDK, product, configuration, scratch, and disables resolution",
+        arguments: [
+            (configuration: BuildConfiguration.debug, argument: "debug"),
+            (configuration: BuildConfiguration.release, argument: "release")
+        ]
+    )
+    func exactBuildCommand(
+        mapping: (configuration: BuildConfiguration, argument: String)
+    ) async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
@@ -45,7 +53,7 @@ struct SwiftPMTests {
             let scratch = directory.appending(path: "scratch")
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
-                configuration: .release,
+                configuration: mapping.configuration,
                 scratchDirectory: scratch,
                 environment: [
                     "CUSTOM": "value",
@@ -72,7 +80,8 @@ struct SwiftPMTests {
             #expect(build.arguments.contains("--swift-sdks-path"))
             #expect(build.arguments.contains("aarch64-swift-linux-musl"))
             #expect(build.arguments.contains("Tool"))
-            #expect(build.arguments.contains("release"))
+            let configurationIndex = try #require(build.arguments.firstIndex(of: "--configuration"))
+            #expect(build.arguments.dropFirst(configurationIndex + 1).first == mapping.argument)
             #expect(build.arguments.contains(scratch.path))
             #expect(build.environment?["CUSTOM"] == "value")
             #expect(build.environment?["HOME"] == ProcessInfo.processInfo.environment["HOME"])

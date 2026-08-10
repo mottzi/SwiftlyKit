@@ -1,25 +1,25 @@
 import Foundation
 
 extension SwiftPM {
-
+    
     func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
         onEvent: EventHandler? = nil
     ) async throws -> URL {
-
+        
         try validateEnvironment(environment)
-
+        
         await report(.building, detail: "Building \(request.product.name).", to: onEvent)
-
+        
         let description = try await packageDescription(using: environment)
-
+        
         guard description.products.contains(request.product)
         else { throw SwiftPMError.executableNotFound(request.product.name) }
-
+        
         guard !description.requiresResources(request.product.name)
         else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
-
+        
         return try await withExactSDKSearchDirectory(environment) { sdkSearchDirectory in
             let commonArguments = buildArguments(
                 request,
@@ -32,21 +32,21 @@ extension SwiftPM {
                 swiftArguments: ["build"] + commonArguments,
                 additions: request.environment
             )
-
+            
             let buildResult = try await runner.run(buildCommand, onOutput: CommandOutput.handler(for: onEvent))
-
+            
             guard buildResult.succeeded else {
                 let diagnostic = boundedDiagnostic(buildResult)
                 if indicatesRequiredResolution(diagnostic) { throw SwiftPMError.dependencyResolutionRequired }
                 else { throw SwiftPMError.commandFailed(operation: .build, diagnostic: diagnostic) }
             }
-
+            
             let pathCommand = command(
                 environment,
                 swiftArguments: ["build"] + commonArguments + ["--show-bin-path"],
                 additions: request.environment
             )
-
+            
             let pathResult = try await runner.run(pathCommand, onOutput: nil)
             
             guard pathResult.succeeded else {
@@ -55,23 +55,23 @@ extension SwiftPM {
                     diagnostic: boundedDiagnostic(pathResult)
                 )
             }
-
+            
             let binaryDirectory = pathResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !binaryDirectory.isEmpty else { throw SwiftPMError.executableNotFound(request.product.name) }
-
+            
             let binaryDirectoryURL = URL(filePath: binaryDirectory)
             let hasRuntimeResourceBundle = try containsRuntimeResourceBundle(in: binaryDirectoryURL)
             guard !hasRuntimeResourceBundle else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
-
+            
             let executable = binaryDirectoryURL.appending(path: request.product.name)
             guard FileManager.default.fileExists(atPath: executable.path)
             else { throw SwiftPMError.executableNotFound(request.product.name) }
-
+            
             try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
-
+            
             if request.strip {
                 await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
-
+                
                 try await strip(
                     executable,
                     for: request,
@@ -79,16 +79,20 @@ extension SwiftPM {
                     onOutput: CommandOutput.handler(for: onEvent)
                 )
             }
-
+            
             if let output = request.output {
                 await report(.publishing, detail: "Publishing \(request.product.name).", to: onEvent)
-
+                
                 return try AtomicOutputPublisher.publish(executable, to: output)
             }
-
+            
             return executable
         }
     }
+    
+}
+
+extension SwiftPM {
 
     private func withExactSDKSearchDirectory<T: Sendable>(
         _ environment: LocalBuildEnvironment,
@@ -115,12 +119,17 @@ extension SwiftPM {
         sdkSearchDirectory: URL
     ) -> [String] {
 
+        let configurationArgument = switch request.configuration {
+            case .debug: "debug"
+            case .release: "release"
+        }
+
         var arguments = [
             "--disable-automatic-resolution",
             "--swift-sdks-path", sdkSearchDirectory.path,
             "--swift-sdk", environment.target.architecture.swiftSDKSelector,
             "--product", request.product.name,
-            "--configuration", request.configuration.runtimeName
+            "--configuration", configurationArgument
         ]
 
         if let scratchDirectory = request.scratchDirectory {
@@ -178,17 +187,6 @@ extension SwiftPM {
         else { throw SwiftPMError.commandFailed(operation: .stripping, diagnostic: boundedDiagnostic(result)) }
 
         try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
-    }
-
-}
-
-private extension BuildConfiguration {
-
-    var runtimeName: String {
-        switch self {
-            case .debug: "debug"
-            case .release: "release"
-        }
     }
 
 }

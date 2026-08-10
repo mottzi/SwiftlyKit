@@ -24,7 +24,8 @@ extension SwiftPM {
         guard result.succeeded
         else { throw SwiftPMError.commandFailed(operation: .packageDescription, diagnostic: boundedDiagnostic(result)) }
 
-        guard let data = result.standardOutput.data(using: .utf8) else { throw SwiftPMError.malformedPackageDescription }
+        guard let data = result.standardOutput.data(using: .utf8)
+        else { throw SwiftPMError.malformedPackageDescription }
 
         return try SwiftPackageDescription(data: data)
     }
