@@ -9,8 +9,6 @@ struct LiveSubprocessRunner: SubprocessRunning {
 
         try Task.checkCancellation()
 
-        let sink = SubprocessOutputSink(handler: onOutput)
-
         do {
             let result = try await Subprocess.run(
                 .path(FilePath(command.executableURL.path)),
@@ -22,8 +20,8 @@ struct LiveSubprocessRunner: SubprocessRunning {
                 output: .sequence,
                 error: .sequence
             ) { execution in
-                async let standardOutput = collect(execution.standardOutput, stream: .standardOutput, sink: sink)
-                async let standardError = collect(execution.standardError, stream: .standardError, sink: sink)
+                async let standardOutput = collect(execution.standardOutput, stream: .standardOutput, handler: onOutput)
+                async let standardError = collect(execution.standardError, stream: .standardError, handler: onOutput)
                 return try await (standardOutput, standardError)
             }
 
@@ -58,7 +56,7 @@ extension LiveSubprocessRunner {
     private func collect(
         _ sequence: SubprocessOutputSequence,
         stream: SubprocessOutput,
-        sink: SubprocessOutputSink
+        handler: SubprocessOutputHandler?
     ) async throws -> String {
 
         var collected = ""
@@ -72,7 +70,7 @@ extension LiveSubprocessRunner {
                 collected = String(collected.suffix(Self.outputLimit / 2))
             }
 
-            await sink.emit(stream, chunk)
+            await handler?(stream, chunk)
         }
 
         return collected
@@ -92,19 +90,5 @@ extension LiveSubprocessRunner {
     }()
 
     static let outputLimit = 1_048_576
-
-}
-
-private actor SubprocessOutputSink {
-
-    let handler: SubprocessOutputHandler?
-
-    init(handler: SubprocessOutputHandler?) {
-        self.handler = handler
-    }
-
-    func emit(_ stream: SubprocessOutput, _ text: String) async {
-        await handler?(stream, text)
-    }
 
 }
