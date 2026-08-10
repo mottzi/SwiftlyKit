@@ -58,20 +58,9 @@ extension PackageInputSnapshot {
         )
     }
 
-    private static func isDirectory(at url: URL) -> Bool {
-        var isDirectory: ObjCBool = false
-        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
-    }
+}
 
-    private static func isRegularReadableFile(at url: URL) -> Bool {
-
-        guard FileManager.default.fileExists(atPath: url.path) else { return false }
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return false }
-        guard let type = attributes[.type] as? FileAttributeType else { return false }
-        guard type == .typeRegular else { return false }
-
-        return FileManager.default.isReadableFile(atPath: url.path)
-    }
+extension PackageInputSnapshot {
 
     private static func parseToolsVersion(from manifest: String) throws(SwiftlyKitError) -> SwiftVersion {
 
@@ -126,6 +115,25 @@ extension PackageInputSnapshot {
 
     private static func isHorizontalWhitespace(_ character: Character) -> Bool {
         character.isWhitespace && !character.isNewline
+    }
+
+}
+
+extension PackageInputSnapshot {
+
+    private static func isDirectory(at url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+    }
+
+    private static func isRegularReadableFile(at url: URL) -> Bool {
+
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return false }
+        guard let type = attributes[.type] as? FileAttributeType else { return false }
+        guard type == .typeRegular else { return false }
+
+        return FileManager.default.isReadableFile(atPath: url.path)
     }
 
     private static func nearestSwiftVersionFile(

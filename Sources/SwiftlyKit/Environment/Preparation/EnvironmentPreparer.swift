@@ -12,7 +12,7 @@ struct EnvironmentPreparer: Sendable {
     }
 
     private(set) var downloadPackage: @Sendable (URL, URL) async throws -> Void = {
-        try await EnvironmentPreparer.liveDownload($0, $1)
+        try await HTTPPackageDownloader().download(from: $0, to: $1)
     }
 
     private(set) var detectSwiftly: @Sendable () async throws -> SwiftlyInstallation? = {
@@ -34,10 +34,6 @@ struct EnvironmentPreparer: Sendable {
     private(set) var revalidate: @Sendable (EnvironmentAssessment) async throws -> Void = {
         try $0.packageInputs.validateCurrent()
     }
-
-}
-
-extension EnvironmentPreparer {
 
     /// Revalidates first, then performs only the mutations authorized by the assessment.
     func prepare(_ assessment: EnvironmentAssessment, onEvent: EventHandler? = nil) async throws -> LocalBuildEnvironment {
@@ -63,6 +59,10 @@ extension EnvironmentPreparer {
             target: assessment.target
         )
     }
+
+}
+
+extension EnvironmentPreparer {
 
     private func installRequiredComponents(
         _ assessment: EnvironmentAssessment,
@@ -247,18 +247,29 @@ extension EnvironmentPreparer {
         await handler?(.progress(progress))
     }
 
+}
+
+extension EnvironmentPreparer {
+
     private static func bounded(_ value: String) -> String {
         String(value.prefix(8 * 1024))
     }
 
-    static func liveDownload(
-        _ source: URL,
-        _ destination: URL,
-        transfer: @Sendable (URL) async throws -> (temporaryURL: URL, statusCode: Int?) = { source in
-            let (temporaryURL, response) = try await URLSession.shared.download(from: source)
-            return (temporaryURL, (response as? HTTPURLResponse)?.statusCode)
-        }
-    ) async throws {
+}
+
+extension EnvironmentPreparer {
+
+    private static let officialPackageURL = URL(string: "https://download.swift.org/swiftly/darwin/swiftly.pkg")!
+
+}
+
+struct HTTPPackageDownloader: Sendable {
+
+    private(set) var transfer: @Sendable (URL) async throws -> (temporaryURL: URL, statusCode: Int?) = { source in
+        try await HTTPPackageDownloader.liveTransfer(source)
+    }
+
+    func download(from source: URL, to destination: URL) async throws {
 
         guard source.scheme?.lowercased() == "https" else { throw EnvironmentPreparationError.invalidDownloadURL }
 
@@ -271,6 +282,15 @@ extension EnvironmentPreparer {
         try FileManager.default.moveItem(at: download.temporaryURL, to: destination)
     }
 
-    static let officialPackageURL = URL(string: "https://download.swift.org/swiftly/darwin/swiftly.pkg")!
+}
+
+extension HTTPPackageDownloader {
+
+    private static func liveTransfer(_ source: URL) async throws -> (temporaryURL: URL, statusCode: Int?) {
+
+        let (temporaryURL, response) = try await URLSession.shared.download(from: source)
+
+        return (temporaryURL, (response as? HTTPURLResponse)?.statusCode)
+    }
 
 }

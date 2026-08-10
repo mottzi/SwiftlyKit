@@ -11,13 +11,6 @@ enum SwiftPMError: Error, Equatable, Sendable {
     case outputPublicationFailed(URL)
 }
 
-enum SwiftPMOperation: Equatable, Sendable {
-    case build
-    case packageDescription
-    case dependencyResolution
-    case stripping
-}
-
 extension SwiftPMError {
 
     var swiftlyKitError: SwiftlyKitError {
@@ -39,4 +32,11 @@ extension SwiftPMError {
         }
     }
 
+}
+
+enum SwiftPMOperation: Equatable, Sendable {
+    case build
+    case packageDescription
+    case dependencyResolution
+    case stripping
 }

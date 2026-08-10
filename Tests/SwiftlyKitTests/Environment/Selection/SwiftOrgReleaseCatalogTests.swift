@@ -6,7 +6,7 @@ import Testing
 struct SwiftOrgReleaseCatalogTests {
 
     @Test("Official static SDK metadata produces exact identities and URLs")
-    func parsesOfficialMetadata() throws {
+    func parsesOfficialMetadata() async throws {
 
         let data = Data("""
             [
@@ -33,7 +33,10 @@ struct SwiftOrgReleaseCatalogTests {
             ]
             """.utf8)
 
-        let releases = try SwiftOrgReleaseCatalog.parse(data)
+        let catalog = SwiftOrgReleaseCatalog { _ in
+            .init(data: data, statusCode: 200)
+        }
+        let releases = try await catalog.stableReleases()
 
         #expect(releases.map(\.version) == [swiftVersion("6.3"), swiftVersion("6.3.3")])
         #expect(releases[0].staticLinuxSDK.identifier == "swift-6.3-RELEASE_static-linux-0.1.0")
@@ -46,7 +49,7 @@ struct SwiftOrgReleaseCatalogTests {
     }
 
     @Test("Malformed and non-SDK releases are excluded without poisoning valid releases")
-    func filtersUnusableEntries() throws {
+    func filtersUnusableEntries() async throws {
 
         let checksum = String(repeating: "a", count: 64)
         let data = Data("""
@@ -60,14 +63,22 @@ struct SwiftOrgReleaseCatalogTests {
             ]
             """.utf8)
 
-        let releases = try SwiftOrgReleaseCatalog.parse(data)
+        let catalog = SwiftOrgReleaseCatalog { _ in
+            .init(data: data, statusCode: 200)
+        }
+        let releases = try await catalog.stableReleases()
         #expect(releases.map(\.version) == [swiftVersion("6.2")])
     }
 
     @Test("Invalid JSON is a catalog payload error")
-    func rejectsInvalidJSON() {
-        #expect(throws: SwiftOrgReleaseCatalog.CatalogError.invalidPayload) {
-            try SwiftOrgReleaseCatalog.parse(Data("not json".utf8))
+    func rejectsInvalidJSON() async {
+
+        let catalog = SwiftOrgReleaseCatalog { _ in
+            .init(data: Data("not json".utf8), statusCode: 200)
+        }
+
+        await #expect(throws: SwiftOrgReleaseCatalog.CatalogError.invalidPayload) {
+            try await catalog.stableReleases()
         }
     }
 
@@ -75,7 +86,7 @@ struct SwiftOrgReleaseCatalogTests {
     func validatesHTTPResponse() async {
 
         let catalog = SwiftOrgReleaseCatalog { url in
-            #expect(url == SwiftOrgReleaseCatalog.releasesURL)
+            #expect(url.absoluteString == "https://www.swift.org/api/v1/install/releases.json")
             return .init(data: Data("[]".utf8), statusCode: 503)
         }
 

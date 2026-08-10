@@ -1,26 +1,92 @@
 # SwiftlyKit
 
-SwiftlyKit is a lightweight Swift library for building statically linked Linux
-executables from a local Swift package on Apple-silicon macOS.
+SwiftlyKit is a lightweight Swift library that builds statically linked Linux
+executables from local Swift packages on Apple silicon macOS.
 
-It delegates package behavior to SwiftPM and toolchain management to Swiftly.
-SwiftlyKit adds the orchestration needed to select and prepare an exact official
-Swift toolchain and Static Linux SDK, run the build, and verify the resulting ELF
-executable.
+SwiftlyKit uses SwiftPM for package operations and Swiftly for toolchain
+management. It selects an official Swift toolchain and its matching Static Linux
+SDK. It then builds one executable and verifies the result as a static ELF64 file.
 
-## Usage
+Use one `async` function for the common case. Use the staged API when your app
+must inspect and authorize installations, select a product, or control the build.
+
+## Installation
+
+Add SwiftlyKit to your project with Swift Package Manager.
+
+In Xcode, select **File > Add Package Dependencies** and enter:
+
+```text
+https://github.com/mottzi/SwiftlyKit.git
+```
+
+Select version `0.1.0` or later. Then add the `SwiftlyKit` library to your target.
+
+To add SwiftlyKit in `Package.swift`, add the package and product dependencies:
+
+```swift
+// swift-tools-version: 6.3
+
+import PackageDescription
+
+let package = Package(
+    name: "YourPackage",
+    platforms: [
+        .macOS(.v13)
+    ],
+    dependencies: [
+        .package(
+            url: "https://github.com/mottzi/SwiftlyKit.git",
+            from: "0.1.0"
+        )
+    ],
+    targets: [
+        .executableTarget(
+            name: "YourTarget",
+            dependencies: [
+                .product(name: "SwiftlyKit", package: "SwiftlyKit")
+            ]
+        )
+    ]
+)
+```
+
+### Requirements
+
+- Apple silicon Mac
+- macOS 13 or later
+- Swift 6.3 or later for the app or tool that imports SwiftlyKit
+- An active macOS SDK from Xcode or Command Line Tools
+- An unsandboxed app or command-line tool
+- A trusted local Swift package to build
+
+Swiftly 1.0 or later is also required. SwiftlyKit can install Swiftly when you
+authorize environment preparation. SwiftlyKit does not install or select Xcode
+or Command Line Tools.
+
+## Quick start
+
+Import SwiftlyKit and pass the root of a local Swift package to `build(_:)`:
 
 ```swift
 import Foundation
 import SwiftlyKit
 
 let packageRoot = URL(filePath: "/path/to/package")
-
-// Prepares the environment and builds the package's sole executable for x86-64 Linux in release mode.
 let executable = try await SwiftlyKit.build(packageRoot)
+
+print(executable.path)
 ```
 
-Specify a product, target, or configuration only when the defaults do not fit:
+This fast track uses these defaults:
+
+- The package must have exactly one executable product.
+- The target is x86-64 Linux.
+- The build configuration is release.
+- SwiftlyKit selects the toolchain automatically.
+- The executable stays in SwiftPM scratch storage.
+
+Specify a product, target, or configuration when you need a different result:
 
 ```swift
 let executable = try await SwiftlyKit.build(
@@ -31,50 +97,273 @@ let executable = try await SwiftlyKit.build(
 )
 ```
 
-Use the staged API when installations or dependency resolution require separate authorization:
+> [!IMPORTANT]
+> The fast track authorizes SwiftlyKit to install required environment
+> components. It also authorizes dependency resolution when SwiftPM requires it.
+> Use the staged API when your app must request authorization before these
+> changes.
+
+## Staged workflow
+
+The staged API separates read-only assessment from operations that can change
+the environment or package. One `LocalBuildEnvironment` binds all later
+operations to the assessed package, target, toolchain, and SDK.
+
+### 1. Assess the environment
+
+`assess(_:for:toolchain:)` validates the host and package. It selects an exact
+official Swift release and Static Linux SDK. It does not install components or
+resolve package dependencies.
 
 ```swift
 let kit = SwiftlyKit()
+let assessment = try await kit.assess(
+    packageRoot,
+    for: .linux(.arm64)
+)
 
-// Read-only: describes the exact environment and any required installations.
-let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))
+print("Swift tools version: \(assessment.toolsVersion)")
+print("Selected Swift version: \(assessment.swiftVersion)")
+print("Selected SDK: \(assessment.staticLinuxSDK.identifier)")
 
-// Explicitly authorizes only the installations described by the assessment.
-// This call is still required when assessment.requiresInstallation is false.
-let environment = try await kit.prepare(assessment) { event in
-    // Update a UI or write command output.
-}
-
-// The prepared capability already carries the package and target context.
-let products = try await kit.executableProducts(using: environment)
-let request = BuildRequest(products[0], configuration: .release)
-
-do {
-    let executable = try await kit.build(request, using: environment)
-} catch SwiftlyKitError.dependencyResolutionRequired {
-    try await kit.resolveDependencies(using: environment)
-    let executable = try await kit.build(request, using: environment)
+if assessment.requiresInstallation {
+    print("Required components: \(assessment.requiredComponents)")
 }
 ```
 
-## Guarantees
+Use the properties of `EnvironmentAssessment` to show the proposed changes to
+the user. The assessment reports whether Swiftly, the toolchain, and the SDK are
+available.
 
-- Assessment is read-only; staged preparation and dependency resolution are explicit.
-- The static fast track authorizes required preparation and dependency resolution in one operation.
-- SwiftlyKit uses exact official stable Swift toolchains and matching SDKs.
-- Staged builds never resolve dependencies automatically.
-- Returned executables are verified static ELF64 files for the requested architecture.
-- Mutating operations on one `SwiftlyKit` value are serialized and cancellable.
-- Process, network, filesystem, and test seams remain internal.
+### 2. Prepare the environment
 
-Build-specific environment values are passed through, except SwiftlyKit protects
-the home and Swiftly installation variables needed to preserve the prepared
-toolchain. An explicit output destination is published atomically and is never
-allowed to replace an existing item.
+Pass the accepted assessment to `prepare(_:)`. This call authorizes only the
+components in `requiredComponents`.
 
-SwiftlyKit 0.1.0 requires Apple-silicon macOS 13 or later, Swiftly 1.0 or later
-(installed automatically only with authorization), and an active macOS SDK from
-Xcode or Command Line Tools.
+```swift
+let environment = try await kit.prepare(assessment)
+```
 
-For implementation structure, see [Architecture](Documentation/Architecture.md).
-The complete release contract is [MVP 0.1.0](Documentation/MVP-0.1.0.md).
+You must call `prepare(_:)` even when `requiresInstallation` is `false`. The
+returned environment is the capability that the other staged operations need.
+
+If `Package.swift` or the applicable `.swift-version` file changes after
+assessment, preparation throws `SwiftlyKitError.staleAssessment`. Run assessment
+again before you continue.
+
+### 3. Select an executable product
+
+SwiftlyKit asks SwiftPM for the executable products in the prepared package:
+
+```swift
+let products = try await kit.executableProducts(using: environment)
+
+guard let product = products.first(where: { $0.name == "MyTool" }) else {
+    throw SwiftlyKitError.executableProductNotFound("MyTool")
+}
+```
+
+Product discovery does not resolve package dependencies.
+
+### 4. Build the product
+
+Create a `BuildRequest` and use the prepared environment:
+
+```swift
+let output = URL(filePath: "/path/to/output/MyTool")
+let request = BuildRequest(
+    product,
+    configuration: .release,
+    output: output,
+    strip: true
+)
+
+let executable: URL
+
+do {
+    executable = try await kit.build(request, using: environment)
+} catch SwiftlyKitError.dependencyResolutionRequired {
+    try await kit.resolveDependencies(using: environment)
+    executable = try await kit.build(request, using: environment)
+}
+```
+
+A staged build never resolves dependencies automatically. The separate
+`resolveDependencies(using:)` call can access the network and can update
+`Package.resolved`.
+
+### Build request options
+
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `configuration` | `.debug` | Selects the SwiftPM debug or release configuration. |
+| `scratchDirectory` | `nil` | Uses the package `.build` directory. A supplied directory is not removed by SwiftlyKit. |
+| `output` | `nil` | Returns the executable in scratch storage. A supplied destination receives an atomic copy. |
+| `strip` | `false` | Uses the selected toolchain to strip the executable, and then verifies it again. |
+| `environment` | `[:]` | Adds or replaces values in the build subprocess environment. SwiftlyKit keeps values that protect the prepared toolchain and SDK. |
+
+The parent directory of `output` must exist. SwiftlyKit never replaces an
+existing item at the output URL. It throws `SwiftlyKitError.outputAlreadyExists`
+if the destination exists.
+
+## Toolchain selection
+
+The default `.automatic` policy selects a toolchain in this order:
+
+1. The compatible official stable version in the nearest `.swift-version` file.
+2. The newest compatible installed toolchain and matching SDK.
+3. The newest compatible official stable toolchain and matching SDK.
+
+The selected version must support the package's `swift-tools-version` and the
+requested architecture.
+
+Use `.exact` when your app must select one official stable release:
+
+```swift
+let assessment = try await kit.assess(
+    packageRoot,
+    for: .linux(.x86_64),
+    toolchain: .exact(
+        SwiftVersion(major: 6, minor: 2, patch: 1)
+    )
+)
+```
+
+SwiftlyKit does not use snapshot toolchains, development branches, custom SDKs,
+or arbitrary Swiftly selectors.
+
+## Progress and command output
+
+Pass one event handler to a mutating operation. SwiftlyKit awaits the handler, so
+the handler provides backpressure. SwiftlyKit does not keep an event log.
+
+```swift
+let onEvent: EventHandler = { event in
+    switch event {
+    case .progress(let progress):
+        print(progress.detail)
+
+    case .output(let output):
+        let stream = output.stream == .standardError ? "stderr" : "stdout"
+        print("[\(stream)] \(output.text)", terminator: "")
+
+    @unknown default:
+        break
+    }
+}
+
+let environment = try await kit.prepare(
+    assessment,
+    onEvent: onEvent
+)
+```
+
+The handler can receive:
+
+- `SwiftlyKitEvent.progress` for preparation, dependency resolution, build,
+  strip, and publication activities.
+- `SwiftlyKitEvent.output` for bounded standard output and standard error chunks
+  from delegated commands.
+
+SwiftlyKit reports activity text. It does not report a percentage when the
+underlying tool cannot supply a trustworthy value.
+
+## Supported output
+
+SwiftlyKit 0.1.0 builds one executable product for one of these targets:
+
+- ARM64 Linux Musl: `.linux(.arm64)`
+- x86-64 Linux Musl: `.linux(.x86_64)`
+
+Before SwiftlyKit returns a URL, it verifies that the result:
+
+- is a regular file with executable permissions;
+- is a little-endian ELF64 executable for the requested architecture;
+- has a loadable segment;
+- has no dynamic interpreter; and
+- declares no required dynamic libraries.
+
+SwiftlyKit rejects an executable product that needs a SwiftPM runtime resource
+bundle. The package and all its dependencies must support the selected Linux
+Musl target.
+
+## Environment behavior
+
+SwiftlyKit uses official tools in the current user's normal Swiftly and SwiftPM
+locations. It does not create a private tool installation.
+
+SwiftlyKit does not:
+
+- modify a shell profile;
+- change the default Swift toolchain;
+- run `swiftly use`;
+- update or replace an existing Swiftly installation;
+- remove Swiftly, a toolchain, an SDK, or build scratch storage;
+- install or select Apple developer tools;
+- run package tests;
+- sign, archive, deploy, or run the Linux executable; or
+- keep build history, logs, or artifacts.
+
+SwiftlyKit is not a package sandbox. Supply only a package that you trust.
+SwiftPM evaluates `Package.swift` and can run package plugins with the current
+user's permissions.
+
+## Concurrency, cancellation, and errors
+
+All long operations use Swift concurrency and are `async throws` functions. One
+`SwiftlyKit` value serializes preparation, dependency resolution, and builds.
+Read-only assessment and product discovery can run concurrently.
+
+Cancel the calling task to cancel the complete subprocess group. SwiftlyKit then
+removes its temporary files and throws Swift's standard `CancellationError`.
+
+Operational failures use `SwiftlyKitError`. It conforms to `LocalizedError` and
+provides a user-facing description. Common control-flow errors include:
+
+- `dependencyResolutionRequired`
+- `executableProductSelectionRequired`
+- `staleAssessment`
+- `outputAlreadyExists`
+
+Handle cancellation separately when your app must show different status:
+
+```swift
+do {
+    let executable = try await SwiftlyKit.build(packageRoot)
+    print(executable.path)
+} catch is CancellationError {
+    print("Build cancelled.")
+} catch let error as SwiftlyKitError {
+    print(error.localizedDescription)
+}
+```
+
+## API overview
+
+| Type | Purpose |
+| --- | --- |
+| `SwiftlyKit` | Provides the fast track and staged operations. |
+| `EnvironmentAssessment` | Describes the selected environment and required installations. |
+| `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, and SDK. |
+| `BuildRequest` | Selects one product and its build options. |
+| `BuildTarget`, `LinuxArchitecture` | Select the Linux architecture. |
+| `BuildConfiguration` | Selects a debug or release build. |
+| `ToolchainSelection`, `SwiftVersion` | Select an automatic or exact official stable Swift release. |
+| `ExecutableProduct` | Identifies an executable product reported by SwiftPM. |
+| `SwiftlyKitEvent`, `EventHandler` | Report progress and delegated command output. |
+| `SwiftlyKitError` | Reports typed operational failures. |
+
+## Development
+
+Run the test suite from the repository root:
+
+```sh
+swift test
+```
+
+For the internal design, see [Architecture](Documentation/Architecture.md). For
+the complete 0.1.0 release boundary, see [MVP 0.1.0](Documentation/MVP-0.1.0.md).
+
+## License
+
+This repository does not contain a license file.

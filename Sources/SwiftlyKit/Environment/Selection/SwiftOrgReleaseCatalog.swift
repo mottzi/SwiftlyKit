@@ -4,9 +4,7 @@ import Foundation
 struct SwiftOrgReleaseCatalog: Sendable {
 
     private(set) var load: @Sendable (URL) async throws -> Response = { url in
-        let (data, response) = try await URLSession.shared.data(from: url)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode
-        return Response(data: data, statusCode: statusCode)
+        try await SwiftOrgReleaseCatalog.liveLoad(url)
     }
 
     func stableReleases() async throws -> [OfficialStableRelease] {
@@ -31,16 +29,6 @@ struct SwiftOrgReleaseCatalog: Sendable {
         }
     }
 
-    /// Narrows Swift.org's evolving public schema to exact stable toolchain and SDK pairs.
-    static func parse(_ data: Data) throws -> [OfficialStableRelease] {
-
-        let payloads: [ReleasePayload]
-        do { payloads = try JSONDecoder().decode([ReleasePayload].self, from: data) }
-        catch { throw CatalogError.invalidPayload }
-
-        return payloads.compactMap(release(from:))
-    }
-
 }
 
 extension SwiftOrgReleaseCatalog {
@@ -58,6 +46,16 @@ extension SwiftOrgReleaseCatalog {
 }
 
 extension SwiftOrgReleaseCatalog {
+
+    /// Narrows Swift.org's evolving public schema to exact stable toolchain and SDK pairs.
+    private static func parse(_ data: Data) throws -> [OfficialStableRelease] {
+
+        let payloads: [ReleasePayload]
+        do { payloads = try JSONDecoder().decode([ReleasePayload].self, from: data) }
+        catch { throw CatalogError.invalidPayload }
+
+        return payloads.compactMap(release(from:))
+    }
 
     private static func release(from payload: ReleasePayload) -> OfficialStableRelease? {
 
@@ -94,6 +92,35 @@ extension SwiftOrgReleaseCatalog {
         )
     }
 
+}
+
+extension LinuxArchitecture {
+
+    fileprivate init?(catalogName: String) {
+
+        switch catalogName {
+            case "arm64": self = .arm64
+            case "x86_64": self = .x86_64
+            default: return nil
+        }
+    }
+
+}
+
+extension SwiftOrgReleaseCatalog {
+
+    private static func liveLoad(_ url: URL) async throws -> Response {
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+        let statusCode = (response as? HTTPURLResponse)?.statusCode
+
+        return Response(data: data, statusCode: statusCode)
+    }
+
+}
+
+extension SwiftOrgReleaseCatalog {
+
     private struct ReleasePayload: Decodable {
 
         let name: String?
@@ -113,21 +140,8 @@ extension SwiftOrgReleaseCatalog {
 
 }
 
-extension LinuxArchitecture {
-
-    fileprivate init?(catalogName: String) {
-
-        switch catalogName {
-            case "arm64": self = .arm64
-            case "x86_64": self = .x86_64
-            default: return nil
-        }
-    }
-
-}
-
 extension SwiftOrgReleaseCatalog {
 
-    static let releasesURL = URL(string: "https://www.swift.org/api/v1/install/releases.json")!
+    private static let releasesURL = URL(string: "https://www.swift.org/api/v1/install/releases.json")!
 
 }

@@ -11,7 +11,7 @@ struct SwiftPMValidationTests {
         try withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let environment = try validationEnvironment(in: directory, toolsVersion: "6.0")
 
-            try SwiftPM.validate(environment, locateSDK: { identifier in
+            try SwiftPMEnvironmentValidator.validate(environment, locateSDK: { identifier in
                 #expect(identifier == environment.staticLinuxSDK.identifier)
                 return environment.sdkBundleURL
             })
@@ -26,7 +26,10 @@ struct SwiftPMValidationTests {
             #expect(throws: SwiftlyKitError.unsupportedToolsVersion(
                 SwiftVersion(major: 6, minor: 3, patch: 0)
             )) {
-                try SwiftPM.validate(incompatiblePackage, locateSDK: { _ in incompatiblePackage.sdkBundleURL })
+                try SwiftPMEnvironmentValidator.validate(
+                    incompatiblePackage,
+                    locateSDK: { _ in incompatiblePackage.sdkBundleURL }
+                )
             }
 
             try Data("// swift-tools-version: 6.0\n".utf8).write(
@@ -38,7 +41,7 @@ struct SwiftPMValidationTests {
                 ofItemAtPath: valid.swiftly.executableURL.path
             )
             #expect(throws: SwiftlyKitError.incompatibleSwiftly) {
-                try SwiftPM.validate(valid, locateSDK: { _ in valid.sdkBundleURL })
+                try SwiftPMEnvironmentValidator.validate(valid, locateSDK: { _ in valid.sdkBundleURL })
             }
 
             try FileManager.default.setAttributes(
@@ -46,7 +49,10 @@ struct SwiftPMValidationTests {
                 ofItemAtPath: valid.swiftly.executableURL.path
             )
             #expect(throws: SwiftlyKitError.staticLinuxSDKUnavailable) {
-                try SwiftPM.validate(valid, locateSDK: { _ in directory.appending(path: "another-sdk") })
+                try SwiftPMEnvironmentValidator.validate(
+                    valid,
+                    locateSDK: { _ in directory.appending(path: "another-sdk") }
+                )
             }
         }
     }

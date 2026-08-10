@@ -114,9 +114,9 @@ struct InstalledEnvironmentInspectorTests {
     }
 
     @Test("Swiftly inventory retains unique stable semantic versions only")
-    func parsesStableToolchains() throws {
+    func parsesStableToolchains() async throws {
 
-        let data = Data("""
+        let recorder = RecordingSubprocessRunner(results: [.success(output: """
             {
               "toolchains": [
                 {"inUse":false,"isDefault":false,"version":{"name":"xcode","type":"system"}},
@@ -126,34 +126,60 @@ struct InstalledEnvironmentInspectorTests {
                 {"inUse":false,"isDefault":false,"version":{"name":"main-snapshot","type":"snapshot"}}
               ]
             }
-            """.utf8)
+            """)])
+        let inspector = InstalledEnvironmentInspector(
+            runner: recorder,
+            isToolchainUsable: { _ in true }
+        )
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
 
-        let toolchains = try InstalledEnvironmentInspector.parseSwiftlyList(data)
-        #expect(toolchains == [inspectorVersion("6.3"), inspectorVersion("6.2.4")])
+        let inventory = try await inspector.inspect(
+            swiftly: swiftly,
+            selectedToolchain: inspectorVersion("9.9.9")
+        )
+
+        #expect(inventory.toolchains == [inspectorVersion("6.3"), inspectorVersion("6.2.4")])
     }
 
     @Test("Malformed Swiftly JSON is rejected")
-    func rejectsMalformedToolchainInventory() {
-        #expect(throws: InstalledEnvironmentError.invalidOutput) {
-            try InstalledEnvironmentInspector.parseSwiftlyList(Data("{}".utf8))
+    func rejectsMalformedToolchainInventory() async {
+
+        let inspector = InstalledEnvironmentInspector(
+            runner: RecordingSubprocessRunner(results: [.success(output: "{}")]),
+            isToolchainUsable: { _ in true }
+        )
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+
+        await #expect(throws: InstalledEnvironmentError.invalidOutput) {
+            try await inspector.inspect(
+                swiftly: swiftly,
+                selectedToolchain: inspectorVersion("6.3")
+            )
         }
     }
 
     @Test("SDK inventory is scoped to the toolchain used to list it")
-    func parsesStaticSDKs() {
+    func parsesStaticSDKs() async throws {
 
         let toolchain = inspectorVersion("6.3.3")
-        let sdks = InstalledEnvironmentInspector.parseSDKList(
-            """
+        let recorder = RecordingSubprocessRunner(results: [
+            .success(output: #"{"toolchains":[{"version":{"name":"6.3.3","type":"stable"}}]}"#),
+            .success(output: """
             swift-6.3.3-RELEASE_static-linux-0.1.0
             custom-sdk
             swift-6.3.3-RELEASE_static-linux-0.1.0
             warning: static-linux-sdk unavailable
-            """,
-            toolchainVersion: toolchain
+            """)
+        ])
+        let inspector = InstalledEnvironmentInspector(
+            runner: recorder,
+            isToolchainUsable: { _ in true }
         )
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
 
-        #expect(sdks == [InstalledStaticLinuxSDK(
+        let inventory = try await inspector.inspect(swiftly: swiftly, selectedToolchain: toolchain)
+
+        #expect(inventory.sdks == [InstalledStaticLinuxSDK(
             toolchainVersion: toolchain,
             identifier: "swift-6.3.3-RELEASE_static-linux-0.1.0"
         )])

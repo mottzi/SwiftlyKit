@@ -21,7 +21,7 @@ extension SwiftPM {
         else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
         
         return try await withExactSDKSearchDirectory(environment) { sdkSearchDirectory in
-            let commonArguments = buildArguments(
+            let commonArguments = Self.buildArguments(
                 request,
                 environment: environment,
                 sdkSearchDirectory: sdkSearchDirectory
@@ -37,7 +37,7 @@ extension SwiftPM {
             
             guard buildResult.succeeded else {
                 let diagnostic = boundedDiagnostic(buildResult)
-                if indicatesRequiredResolution(diagnostic) { throw SwiftPMError.dependencyResolutionRequired }
+                if Self.indicatesRequiredResolution(diagnostic) { throw SwiftPMError.dependencyResolutionRequired }
                 else { throw SwiftPMError.commandFailed(operation: .build, diagnostic: diagnostic) }
             }
             
@@ -94,26 +94,33 @@ extension SwiftPM {
 
 extension SwiftPM {
 
-    private func withExactSDKSearchDirectory<T: Sendable>(
-        _ environment: LocalBuildEnvironment,
-        body: (URL) async throws -> T
-    ) async throws -> T {
+    private func strip(
+        _ executable: URL,
+        for request: BuildRequest,
+        using environment: LocalBuildEnvironment,
+        onOutput: SubprocessOutputHandler?
+    ) async throws {
 
-        let directory = FileManager.default.temporaryDirectory
-            .appending(path: "SwiftlyKit-SDK-\(UUID().uuidString)", directoryHint: .isDirectory)
-
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: directory) }
-
-        try FileManager.default.createSymbolicLink(
-            at: directory.appending(path: environment.sdkBundleURL.lastPathComponent),
-            withDestinationURL: environment.sdkBundleURL
+        let stripCommand = command(
+            environment,
+            tool: "llvm-objcopy",
+            toolArguments: ["--strip-all", executable.path],
+            additions: request.environment
         )
 
-        return try await body(directory)
+        let result = try await runner.run(stripCommand, onOutput: onOutput)
+
+        guard result.succeeded
+        else { throw SwiftPMError.commandFailed(operation: .stripping, diagnostic: boundedDiagnostic(result)) }
+
+        try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
     }
 
-    private func buildArguments(
+}
+
+extension SwiftPM {
+
+    private static func buildArguments(
         _ request: BuildRequest,
         environment: LocalBuildEnvironment,
         sdkSearchDirectory: URL
@@ -139,13 +146,36 @@ extension SwiftPM {
         return arguments
     }
 
-    private func indicatesRequiredResolution(_ diagnostic: String) -> Bool {
+    private static func indicatesRequiredResolution(_ diagnostic: String) -> Bool {
 
         let lowercased = diagnostic.lowercased()
         
         return lowercased.contains("package.resolved")
             || lowercased.contains("automatic resolution is disabled")
             || lowercased.contains("dependencies could not be resolved")
+    }
+
+}
+
+extension SwiftPM {
+
+    private func withExactSDKSearchDirectory<T: Sendable>(
+        _ environment: LocalBuildEnvironment,
+        body: (URL) async throws -> T
+    ) async throws -> T {
+
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "SwiftlyKit-SDK-\(UUID().uuidString)", directoryHint: .isDirectory)
+
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try FileManager.default.createSymbolicLink(
+            at: directory.appending(path: environment.sdkBundleURL.lastPathComponent),
+            withDestinationURL: environment.sdkBundleURL
+        )
+
+        return try await body(directory)
     }
 
     private func containsRuntimeResourceBundle(in directory: URL) throws -> Bool {
@@ -165,28 +195,6 @@ extension SwiftPM {
         } catch {
             throw SwiftPMError.invalidExecutable("The build output could not be inspected for runtime resources.")
         }
-    }
-
-    private func strip(
-        _ executable: URL,
-        for request: BuildRequest,
-        using environment: LocalBuildEnvironment,
-        onOutput: SubprocessOutputHandler?
-    ) async throws {
-
-        let stripCommand = command(
-            environment,
-            tool: "llvm-objcopy",
-            toolArguments: ["--strip-all", executable.path],
-            additions: request.environment
-        )
-
-        let result = try await runner.run(stripCommand, onOutput: onOutput)
-        
-        guard result.succeeded
-        else { throw SwiftPMError.commandFailed(operation: .stripping, diagnostic: boundedDiagnostic(result)) }
-
-        try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
     }
 
 }

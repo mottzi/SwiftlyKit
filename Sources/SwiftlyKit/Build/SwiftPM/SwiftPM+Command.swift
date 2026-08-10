@@ -2,6 +2,15 @@ import Foundation
 
 extension SwiftPM {
 
+    func boundedDiagnostic(_ result: SubprocessResult) -> String {
+        String((result.standardError + "\n" + result.standardOutput).suffix(16_384))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+}
+
+extension SwiftPM {
+
     func command(
         _ environment: LocalBuildEnvironment,
         swiftArguments: [String],
@@ -48,11 +57,6 @@ extension SwiftPM {
             workingDirectory: environment.packageRoot,
             environment: processEnvironment
         )
-    }
-
-    func boundedDiagnostic(_ result: SubprocessResult) -> String {
-        String((result.standardError + "\n" + result.standardOutput).suffix(16_384))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
 }

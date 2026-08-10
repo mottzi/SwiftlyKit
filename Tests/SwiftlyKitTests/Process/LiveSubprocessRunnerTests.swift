@@ -49,7 +49,7 @@ struct LiveSubprocessRunnerTests {
         let streamed = await recorder.output[.standardOutput] ?? ""
         #expect(result.succeeded)
         #expect(streamed.utf8.count == 1_200_000)
-        #expect(result.standardOutput.utf8.count <= LiveSubprocessRunner.outputLimit)
+        #expect(result.standardOutput.utf8.count <= 1_048_576)
         #expect(streamed.hasSuffix(result.standardOutput))
     }
 

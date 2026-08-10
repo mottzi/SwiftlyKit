@@ -8,6 +8,10 @@ extension SwiftPM {
         return package.products
     }
 
+}
+
+extension SwiftPM {
+
     func packageDescription(using environment: LocalBuildEnvironment) async throws -> SwiftPackageDescription {
 
         let packageCommand = command(

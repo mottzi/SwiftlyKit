@@ -13,7 +13,7 @@ struct LiveSubprocessRunner: SubprocessRunning {
             let result = try await Subprocess.run(
                 .path(FilePath(command.executableURL.path)),
                 arguments: Arguments(command.arguments),
-                environment: processEnvironment(command.environment),
+                environment: Self.processEnvironment(command.environment),
                 workingDirectory: command.workingDirectory.map { FilePath($0.path) },
                 platformOptions: Self.processPlatformOptions,
                 input: .none,
@@ -44,7 +44,7 @@ struct LiveSubprocessRunner: SubprocessRunning {
 
 extension LiveSubprocessRunner {
 
-    private func processEnvironment(_ environment: [String: String]?) -> Environment {
+    private static func processEnvironment(_ environment: [String: String]?) -> Environment {
 
         guard let environment else { return .inherit }
 
@@ -52,6 +52,10 @@ extension LiveSubprocessRunner {
             Array("\(key)=\(value)\0".utf8)
         })
     }
+
+}
+
+extension LiveSubprocessRunner {
 
     private func collect(
         _ sequence: SubprocessOutputSequence,
@@ -89,6 +93,6 @@ extension LiveSubprocessRunner {
         return options
     }()
 
-    static let outputLimit = 1_048_576
+    private static let outputLimit = 1_048_576
 
 }

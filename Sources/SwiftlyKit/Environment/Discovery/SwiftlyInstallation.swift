@@ -5,10 +5,6 @@ struct SwiftlyInstallation: Equatable, Sendable {
 
     let executableURL: URL
 
-}
-
-extension SwiftlyInstallation {
-
     static func detect(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
@@ -37,6 +33,30 @@ extension SwiftlyInstallation {
 
         return SwiftlyInstallation(executableURL: executableURL)
     }
+
+}
+
+extension SwiftlyInstallation {
+
+    func command(
+        tool: String,
+        toolchain: SwiftVersion,
+        arguments: [String],
+        workingDirectory: URL? = nil,
+        environment: [String: String]? = nil
+    ) -> SubprocessCommand {
+
+        SubprocessCommand(
+            executableURL: executableURL,
+            arguments: ["run", tool] + arguments + ["+\(toolchain)"],
+            workingDirectory: workingDirectory,
+            environment: environment
+        )
+    }
+
+}
+
+extension SwiftlyInstallation {
 
     private static func candidateURLs(environment: [String: String], homeDirectory: URL) -> [URL] {
 
@@ -88,23 +108,7 @@ extension SwiftlyInstallation {
 
 extension SwiftlyInstallation {
 
-    func command(
-        tool: String,
-        toolchain: SwiftVersion,
-        arguments: [String],
-        workingDirectory: URL? = nil,
-        environment: [String: String]? = nil
-    ) -> SubprocessCommand {
-
-        SubprocessCommand(
-            executableURL: executableURL,
-            arguments: ["run", tool] + arguments + ["+\(toolchain)"],
-            workingDirectory: workingDirectory,
-            environment: environment
-        )
-    }
-
-    static func liveVersionProbe(at executableURL: URL) async throws -> String {
+    private static func liveVersionProbe(at executableURL: URL) async throws -> String {
 
         try Task.checkCancellation()
 
@@ -112,15 +116,9 @@ extension SwiftlyInstallation {
         let result = try await LiveSubprocessRunner().run(command)
 
         try Task.checkCancellation()
-        guard result.succeeded else { throw VersionProbeError.unsuccessfulExit }
+        guard result.succeeded else { throw SwiftlyKitError.incompatibleSwiftly }
 
         return result.standardOutput
     }
-
-}
-
-private enum VersionProbeError: Error {
-
-    case unsuccessfulExit
 
 }

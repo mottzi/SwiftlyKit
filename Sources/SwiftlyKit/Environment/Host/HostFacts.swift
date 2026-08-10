@@ -7,20 +7,3 @@ struct HostFacts: Sendable {
     let operatingSystemVersion: OperatingSystemVersion
 
 }
-
-extension HostFacts {
-
-    static var live: HostFacts {
-        #if arch(arm64)
-            let isAppleSilicon = true
-        #else
-            let isAppleSilicon = false
-        #endif
-
-        return HostFacts(
-            isAppleSilicon: isAppleSilicon,
-            operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersion
-        )
-    }
-
-}

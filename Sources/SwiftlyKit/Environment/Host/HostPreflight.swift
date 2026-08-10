@@ -3,15 +3,11 @@ import Foundation
 /// Read-only validation of the host and its active macOS SDK.
 struct HostPreflight: Sendable {
 
-    private(set) var hostFacts: HostFacts = .live
+    private(set) var hostFacts: HostFacts = Self.liveHostFacts
 
     private(set) var sdkProbe: @Sendable () async throws -> URL = {
         try await HostPreflight.liveSDKProbe()
     }
-
-}
-
-extension HostPreflight {
 
     /// Validates the host and its active SDK.
     func check() async throws {
@@ -45,26 +41,6 @@ extension HostPreflight {
 
 extension HostPreflight {
 
-    static func liveSDKProbe() async throws -> URL {
-
-        try Task.checkCancellation()
-
-        let command = SubprocessCommand(
-            executableURL: URL(filePath: "/usr/bin/xcrun"),
-            arguments: ["--sdk", "macosx", "--show-sdk-path"]
-        )
-        let result = try await LiveSubprocessRunner().run(command)
-
-        try Task.checkCancellation()
-        guard result.succeeded else { throw SDKProbeError.unsuccessfulExit }
-
-        let path = result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard path.hasPrefix("/") else { throw SDKProbeError.invalidOutput }
-
-        try Task.checkCancellation()
-        return URL(filePath: path)
-    }
-
     private static func isUsableSDK(at url: URL) -> Bool {
 
         guard url.isFileURL else { return false }
@@ -79,9 +55,39 @@ extension HostPreflight {
 
 }
 
-private enum SDKProbeError: Error {
+extension HostPreflight {
 
-    case unsuccessfulExit
-    case invalidOutput
+    private static var liveHostFacts: HostFacts {
+        #if arch(arm64)
+            let isAppleSilicon = true
+        #else
+            let isAppleSilicon = false
+        #endif
+
+        return HostFacts(
+            isAppleSilicon: isAppleSilicon,
+            operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersion
+        )
+    }
+
+    private static func liveSDKProbe() async throws -> URL {
+
+        try Task.checkCancellation()
+
+        let command = SubprocessCommand(
+            executableURL: URL(filePath: "/usr/bin/xcrun"),
+            arguments: ["--sdk", "macosx", "--show-sdk-path"]
+        )
+        let result = try await LiveSubprocessRunner().run(command)
+
+        try Task.checkCancellation()
+        guard result.succeeded else { throw SwiftlyKitError.developerToolsUnavailable }
+
+        let path = result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard path.hasPrefix("/") else { throw SwiftlyKitError.developerToolsUnavailable }
+
+        try Task.checkCancellation()
+        return URL(filePath: path)
+    }
 
 }

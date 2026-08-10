@@ -4,10 +4,14 @@ public struct CommandOutput: Sendable {
     public let stream: Stream
     public let text: String
 
-    init(stream: Stream, text: String) {
+    private init(stream: Stream, text: String) {
         self.stream = stream
         self.text = text
     }
+
+}
+
+extension CommandOutput {
 
     static func handler(for eventHandler: EventHandler?) -> SubprocessOutputHandler? {
 
