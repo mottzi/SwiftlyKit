@@ -31,6 +31,18 @@ actor RecordingSubprocessRunner: SubprocessRunning {
 
 }
 
+extension SubprocessResult {
+
+    static func success(output: String = "", standardError: String = "") -> SubprocessResult {
+        SubprocessResult(succeeded: true, standardOutput: output, standardError: standardError)
+    }
+
+    static func failure(output: String = "", standardError: String = "") -> SubprocessResult {
+        SubprocessResult(succeeded: false, standardOutput: output, standardError: standardError)
+    }
+
+}
+
 private enum RecordingSubprocessRunnerError: Error {
     case unexpectedCommand(SubprocessCommand)
 }

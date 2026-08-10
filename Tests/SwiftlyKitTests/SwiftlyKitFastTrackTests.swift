@@ -13,10 +13,10 @@ struct SwiftlyKitFastTrackTests {
             try writeELF(to: executable, architecture: .x86_64)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: true, standardOutput: "built", standardError: ""),
-                .init(succeeded: true, standardOutput: packageRoot.path + "\n", standardError: "")
+                .success(output: packageJSON),
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: packageRoot.path + "\n")
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
 
@@ -42,7 +42,7 @@ struct SwiftlyKitFastTrackTests {
         try await withFastTrackTemporaryDirectory { packageRoot in
             let packageJSON = try packageDescriptionJSON(executableProducts: ["First", "Second"])
             let runner = RecordingSubprocessRunner(results: [
-                .init(succeeded: true, standardOutput: packageJSON, standardError: "")
+                .success(output: packageJSON)
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
 
@@ -66,10 +66,10 @@ struct SwiftlyKitFastTrackTests {
             try writeELF(to: executable, architecture: .x86_64)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["First", "Second"])
             let runner = RecordingSubprocessRunner(results: [
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: true, standardOutput: "built", standardError: ""),
-                .init(succeeded: true, standardOutput: packageRoot.path + "\n", standardError: "")
+                .success(output: packageJSON),
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: packageRoot.path + "\n")
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
 
@@ -94,13 +94,13 @@ struct SwiftlyKitFastTrackTests {
             try writeELF(to: executable, architecture: .x86_64)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: false, standardOutput: "", standardError: "automatic resolution is disabled"),
-                .init(succeeded: true, standardOutput: "resolved", standardError: ""),
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: true, standardOutput: "built", standardError: ""),
-                .init(succeeded: true, standardOutput: packageRoot.path + "\n", standardError: "")
+                .success(output: packageJSON),
+                .success(output: packageJSON),
+                .failure(standardError: "automatic resolution is disabled"),
+                .success(output: "resolved"),
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: packageRoot.path + "\n")
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
 

@@ -10,26 +10,14 @@ struct InstalledEnvironmentInspectorTests {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let recorder = RecordingSubprocessRunner(results: [
-            SubprocessResult(
-                succeeded: true,
-                standardOutput: """
+            .success(output: """
                     {"toolchains":[
                         {"version":{"name":"6.2.1","type":"stable"}},
                         {"version":{"name":"6.3.0","type":"stable"}}
                     ]}
-                    """,
-                standardError: ""
-            ),
-            SubprocessResult(
-                succeeded: true,
-                standardOutput: "swift-6.3.0-RELEASE_static-linux-0.0.1\n",
-                standardError: ""
-            ),
-            SubprocessResult(
-                succeeded: true,
-                standardOutput: "swift-6.2.1-RELEASE_static-linux-0.0.1\n",
-                standardError: ""
-            )
+                    """),
+            .success(output: "swift-6.3.0-RELEASE_static-linux-0.0.1\n"),
+            .success(output: "swift-6.2.1-RELEASE_static-linux-0.0.1\n")
         ])
 
         let inspector = InstalledEnvironmentInspector(
@@ -54,21 +42,13 @@ struct InstalledEnvironmentInspectorTests {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let recorder = RecordingSubprocessRunner(results: [
-            SubprocessResult(
-                succeeded: true,
-                standardOutput: """
+            .success(output: """
                     {"toolchains":[
                         {"version":{"name":"6.2.1","type":"stable"}},
                         {"version":{"name":"main-snapshot","type":"snapshot"}}
                     ]}
-                    """,
-                standardError: ""
-            ),
-            SubprocessResult(
-                succeeded: true,
-                standardOutput: "swift-6.2.1-RELEASE_static-linux-0.0.1\n",
-                standardError: ""
-            )
+                    """),
+            .success(output: "swift-6.2.1-RELEASE_static-linux-0.0.1\n")
         ])
 
         let inspector = InstalledEnvironmentInspector(
@@ -93,7 +73,7 @@ struct InstalledEnvironmentInspectorTests {
     func absentToolchainSkipsSDKProbe() async throws {
 
         let recorder = RecordingSubprocessRunner(results: [
-            SubprocessResult(succeeded: true, standardOutput: #"{"toolchains":[]}"#, standardError: "")
+            .success(output: #"{"toolchains":[]}"#)
         ])
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
 
@@ -116,11 +96,7 @@ struct InstalledEnvironmentInspectorTests {
     func staleRegistryEntry() async throws {
 
         let recorder = RecordingSubprocessRunner(results: [
-            SubprocessResult(
-                succeeded: true,
-                standardOutput: #"{"toolchains":[{"version":{"name":"6.2.1","type":"stable"}}]}"#,
-                standardError: ""
-            )
+            .success(output: #"{"toolchains":[{"version":{"name":"6.2.1","type":"stable"}}]}"#)
         ])
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let inspector = InstalledEnvironmentInspector(

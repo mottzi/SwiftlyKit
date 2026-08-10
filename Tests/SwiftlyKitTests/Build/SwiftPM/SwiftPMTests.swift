@@ -37,9 +37,9 @@ struct SwiftPMTests {
             try writeELF(to: executable, architecture: .arm64)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: true, standardOutput: "built", standardError: ""),
-                .init(succeeded: true, standardOutput: directory.path + "\n", standardError: "")
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: directory.path + "\n")
             ])
             let environment = buildEnvironment(in: directory)
             let scratch = directory.appending(path: "scratch")
@@ -88,8 +88,8 @@ struct SwiftPMTests {
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: false, standardOutput: "", standardError: "automatic resolution is disabled")
+                .success(output: packageJSON),
+                .failure(standardError: "automatic resolution is disabled")
             ])
             let environment = buildEnvironment(in: directory)
             let request = BuildRequest(ExecutableProduct(name: "Tool"))
@@ -112,9 +112,9 @@ struct SwiftPMTests {
             let resources = directory.appending(path: "Dependency_Assets.resources")
             try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
             let runner = RecordingSubprocessRunner(results: [
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: true, standardOutput: "built", standardError: ""),
-                .init(succeeded: true, standardOutput: directory.path + "\n", standardError: "")
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: directory.path + "\n")
             ])
             let environment = buildEnvironment(in: directory)
             let request = BuildRequest(ExecutableProduct(name: "Tool"))
@@ -134,7 +134,7 @@ struct SwiftPMTests {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let runner = RecordingSubprocessRunner(results: [
-                .init(succeeded: true, standardOutput: "resolved", standardError: "warning")
+                .success(output: "resolved", standardError: "warning")
             ])
             let events = SwiftPMEventRecorder()
             let environment = buildEnvironment(in: directory)
@@ -167,7 +167,7 @@ struct SwiftPMTests {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let runner = RecordingSubprocessRunner(results: [
-                .init(succeeded: false, standardOutput: "context", standardError: "resolution failed")
+                .failure(output: "context", standardError: "resolution failed")
             ])
             let swiftPM = SwiftPM(
                 runner: runner,
@@ -192,10 +192,10 @@ struct SwiftPMTests {
             try writeELF(to: executable, architecture: .arm64)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
-                .init(succeeded: true, standardOutput: packageJSON, standardError: ""),
-                .init(succeeded: true, standardOutput: "built", standardError: ""),
-                .init(succeeded: true, standardOutput: directory.path + "\n", standardError: ""),
-                .init(succeeded: true, standardOutput: "stripped", standardError: "")
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: directory.path + "\n"),
+                .success(output: "stripped")
             ])
             let events = SwiftPMEventRecorder()
             let request = BuildRequest(

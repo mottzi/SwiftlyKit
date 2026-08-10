@@ -49,8 +49,8 @@ struct EnvironmentPreparerTests {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let commands = RecordingSubprocessRunner(results: [
-            SubprocessResult(succeeded: true, standardOutput: "", standardError: ""),
-            SubprocessResult(succeeded: true, standardOutput: "", standardError: "")
+            .success(),
+            .success()
         ])
         let inspections = InventorySequence(inventories: [
             inventory(includesToolchain: false, includesSDK: false),
@@ -84,7 +84,7 @@ struct EnvironmentPreparerTests {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let commands = RecordingSubprocessRunner(results: [
-            SubprocessResult(succeeded: true, standardOutput: "", standardError: "")
+            .success()
         ])
         let inspections = InventorySequence(inventories: [
             inventory(includesToolchain: false, includesSDK: false),
@@ -110,7 +110,7 @@ struct EnvironmentPreparerTests {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let commands = RecordingSubprocessRunner(results: [
-            SubprocessResult(succeeded: true, standardOutput: "", standardError: "")
+            .success()
         ])
         let inspections = InventorySequence(inventories: [
             inventory(includesToolchain: true, includesSDK: false),
@@ -141,13 +141,9 @@ struct EnvironmentPreparerTests {
             )
             let detection = DetectionSequence(values: [nil, installed])
             let commands = RecordingSubprocessRunner(results: [
-                SubprocessResult(
-                    succeeded: true,
-                    standardOutput: "Developer ID Installer: Swift Open Source; trusted by the Apple notary service",
-                    standardError: ""
-                ),
-                SubprocessResult(succeeded: true, standardOutput: "", standardError: ""),
-                SubprocessResult(succeeded: true, standardOutput: "", standardError: "")
+                .success(output: "Developer ID Installer: Swift Open Source; trusted by the Apple notary service"),
+                .success(),
+                .success()
             ])
             let preparer = EnvironmentPreparer(
                 homeDirectory: temporaryDirectory.appending(path: "home"),
@@ -201,11 +197,7 @@ struct EnvironmentPreparerTests {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-EnvironmentPreparation") { temporaryDirectory in
             let commands = RecordingSubprocessRunner(results: [
-                SubprocessResult(
-                    succeeded: true,
-                    standardOutput: "Developer ID Installer: Unrelated Vendor; trusted by macOS",
-                    standardError: ""
-                )
+                .success(output: "Developer ID Installer: Unrelated Vendor; trusted by macOS")
             ])
             let preparer = EnvironmentPreparer(
                 temporaryDirectory: temporaryDirectory,

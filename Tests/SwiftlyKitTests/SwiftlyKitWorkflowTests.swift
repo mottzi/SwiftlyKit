@@ -78,11 +78,9 @@ struct SwiftlyKitWorkflowTests {
                     supportedArchitectures: [.arm64]
                 )!
             )
-            let runner = RecordingSubprocessRunner(results: [SubprocessResult(
-                succeeded: true,
-                standardOutput: try packageDescriptionJSON(executableProducts: ["Tool"]),
-                standardError: ""
-            )])
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
+            ])
             let kit = SwiftlyKit(
                 assessor: EnvironmentAssessor(
                     checkHost: {},
@@ -177,21 +175,13 @@ private actor WorkflowMutationRunner: SubprocessRunning {
         try await Task.sleep(for: .milliseconds(5))
 
         if command.arguments.contains("dump-package") {
-            return SubprocessResult(
-                succeeded: true,
-                standardOutput: try packageDescriptionJSON(executableProducts: ["Tool"]),
-                standardError: ""
-            )
+            return .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
         }
         if command.arguments.contains("--show-bin-path") {
-            return SubprocessResult(
-                succeeded: true,
-                standardOutput: binaryDirectory.path + "\n",
-                standardError: ""
-            )
+            return .success(output: binaryDirectory.path + "\n")
         }
 
-        return SubprocessResult(succeeded: true, standardOutput: "", standardError: "")
+        return .success()
     }
 
 }
