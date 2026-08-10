@@ -10,6 +10,7 @@ struct SwiftPMTests {
 
         let output = URL(filePath: "/tmp/output")
         let mappings: [(SwiftPMError, SwiftlyKitError)] = [
+            (.sdkSearchPathPreparationFailed("unavailable"), .buildFailed("unavailable")),
             (.malformedPackageDescription, .packageInspectionFailed("SwiftPM returned malformed package metadata.")),
             (.dependencyResolutionRequired, .dependencyResolutionRequired),
             (.executableNotFound("Tool"), .executableProductNotFound("Tool")),
@@ -88,6 +89,82 @@ struct SwiftPMTests {
             #expect(build.environment?["SWIFTLY_TOOLCHAINS_DIR"] == ProcessInfo.processInfo.environment["SWIFTLY_TOOLCHAINS_DIR"])
             #expect(build.environment?["SWIFTLY_BIN_DIR"] == "/")
             #expect(commands[2].arguments.contains("--show-bin-path"))
+        }
+    }
+
+    @Test("Consecutive builds reuse one scratch-scoped SDK search path")
+    func consecutiveBuildSDKSearchPath() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let runner = RecordingSubprocessRunner(
+                results: [
+                    .success(output: packageJSON),
+                    .success(output: "first build"),
+                    .success(output: directory.path + "\n"),
+                    .success(output: packageJSON),
+                    .success(output: "second build"),
+                    .success(output: directory.path + "\n")
+                ]
+            )
+            let scratch = directory.appending(path: "scratch", directoryHint: .isDirectory)
+            let request = BuildRequest(
+                ExecutableProduct(name: "Tool"),
+                configuration: .release,
+                scratchDirectory: scratch
+            )
+            let swiftPM = SwiftPM(
+                runner: runner,
+                validateEnvironment: { _ in }
+            )
+            let environment = buildEnvironment(in: directory)
+
+            _ = try await swiftPM.build(request, using: environment)
+            _ = try await swiftPM.build(request, using: environment)
+
+            let commands = await runner.commands
+            #expect(commands.count == 6)
+            let firstBuild = commands[1]
+            let firstPath = try argument(after: "--swift-sdks-path", in: firstBuild.arguments)
+            let secondBuild = commands[4]
+
+            #expect(firstPath == (try argument(after: "--swift-sdks-path", in: commands[2].arguments)))
+            #expect(firstPath == (try argument(after: "--swift-sdks-path", in: secondBuild.arguments)))
+            #expect(firstPath == (try argument(after: "--swift-sdks-path", in: commands[5].arguments)))
+            #expect(firstPath.hasPrefix(scratch.path + "/"))
+        }
+    }
+
+    @Test("Default builds retain exact SDK selection in package scratch storage")
+    func defaultSDKSearchPath() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let runner = RecordingSubprocessRunner(
+                results: [
+                    .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
+                    .success(output: "built"),
+                    .success(output: directory.path + "\n")
+                ]
+            )
+            let swiftPM = SwiftPM(
+                runner: runner,
+                validateEnvironment: { _ in }
+            )
+
+            _ = try await swiftPM.build(
+                BuildRequest(ExecutableProduct(name: "Tool")),
+                using: buildEnvironment(in: directory)
+            )
+
+            let commands = await runner.commands
+            #expect(
+                try argument(after: "--swift-sdks-path", in: commands[1].arguments)
+                    .hasPrefix(directory.appending(path: ".build").path + "/")
+            )
         }
     }
 
@@ -251,6 +328,11 @@ private func buildEnvironment(in directory: URL) -> LocalBuildEnvironment {
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64)
     )
+}
+
+private func argument(after option: String, in arguments: [String]) throws -> String {
+    let optionIndex = try #require(arguments.firstIndex(of: option))
+    return try #require(arguments.dropFirst(optionIndex + 1).first)
 }
 
 private struct EventOutput: Equatable, Sendable {

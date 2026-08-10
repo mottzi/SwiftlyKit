@@ -425,8 +425,8 @@ A build performs these functions:
 
 1. Validate the Build request and revalidate the package and tools bound to the
    supplied Local build environment.
-2. Create a temporary SDK search directory containing only a link to the exact
-   selected Static Linux SDK.
+2. Prepare a deterministic SDK search directory inside build scratch containing
+   only a link to the exact selected Static Linux SDK.
 3. Invoke `swift build` through the exact Swiftly toolchain.
 4. Select the requested Linux Musl SDK, product, and debug or release
    configuration.
@@ -451,11 +451,15 @@ SwiftlyKit must:
 
 - never remove the package root's `.build` directory;
 - never remove a caller-provided scratch directory;
-- remove only its own temporary exact-SDK search directory;
+- retain its exact-SDK search metadata inside the effective scratch directory so
+  identical later builds use stable compiler and linker inputs;
+- isolate SDK versions and installed bundle locations in independent search
+  directories that each expose only one exact SDK;
 - leave the produced executable in scratch storage when no output URL is given.
 
-A later build using the same scratch storage may replace the executable. A
-consumer that needs a durable output supplies `output`.
+An identical later build using the same scratch storage reuses SwiftPM's compiled
+and linked output. A build whose relevant inputs changed may replace the
+executable. A consumer that needs a durable output supplies `output`.
 
 ### Environment variables
 
@@ -546,7 +550,8 @@ concurrently. It serializes mutating operations:
 A second mutating operation waits for the current mutating operation.
 
 Cancelling the calling task requests cancellation of the complete subprocess
-group. SwiftlyKit performs owned temporary cleanup and throws Swift's standard
+group. SwiftlyKit retains build scratch and its exact-SDK selection metadata,
+performs transient staging cleanup outside scratch, and throws Swift's standard
 `CancellationError`. Cancellation is not wrapped in `SwiftlyKitError`.
 
 Ending or omitting event observation does not detach a running subprocess.

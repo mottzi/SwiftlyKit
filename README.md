@@ -1,14 +1,14 @@
 # SwiftlyKit
 
-SwiftlyKit is a lightweight Swift library that builds statically linked Linux
-executables from local Swift packages on Apple silicon macOS.
+Cross-compile a local Swift package into a self-contained Linux executable—right
+from your Apple silicon Mac.
 
-SwiftlyKit uses SwiftPM for package operations and Swiftly for toolchain
-management. It selects an official Swift toolchain and its matching Static Linux
-SDK. It then builds one executable and verifies the result as a static ELF64 file.
-
-Use one `async` function for the common case. Use the staged API when your app
-must inspect and authorize installations, select a product, or control the build.
+SwiftlyKit handles the cross-compilation pipeline with SwiftPM and Swiftly. It
+pairs an official Swift toolchain with its matching Static Linux SDK, builds the
+executable you choose, and verifies the result is a statically linked ELF64 file.
+One `async` call takes you from package to binary; the staged API gives your app
+the control to inspect and authorize installations, select a product, and shape
+the build.
 
 ## Installation
 
@@ -221,7 +221,7 @@ A staged build never resolves dependencies automatically. The separate
 | Option | Default | Behavior |
 | --- | --- | --- |
 | `configuration` | `.debug` | Selects the SwiftPM debug or release configuration. |
-| `scratchDirectory` | `nil` | Uses the package `.build` directory. A supplied directory is not removed by SwiftlyKit. |
+| `scratchDirectory` | `nil` | Uses the package `.build` directory. SwiftlyKit retains exact-SDK selection metadata inside the effective scratch directory and does not remove it. |
 | `output` | `nil` | Returns the executable in scratch storage. A supplied destination receives an atomic copy. |
 | `strip` | `false` | Uses the selected toolchain to strip the executable, and then verifies it again. |
 | `environment` | `[:]` | Adds or replaces values in the build subprocess environment. SwiftlyKit keeps values that protect the prepared toolchain and SDK. |
@@ -229,6 +229,11 @@ A staged build never resolves dependencies automatically. The separate
 The parent directory of `output` must exist. SwiftlyKit never replaces an
 existing item at the output URL. It throws `SwiftlyKitError.outputAlreadyExists`
 if the destination exists.
+
+The retained SDK selection is a small hidden directory of symlinks beneath
+`.swiftlykit/sdk-selections` in scratch storage. Its stable path lets SwiftPM
+reuse compiled and linked outputs across identical builds while exposing only
+the exact prepared SDK. Removing scratch storage removes this metadata too.
 
 ## Toolchain selection
 
@@ -340,8 +345,10 @@ All long operations use Swift concurrency and are `async throws` functions. One
 `SwiftlyKit` value serializes preparation, dependency resolution, and builds.
 Read-only assessment and product discovery can run concurrently.
 
-Cancel the calling task to cancel the complete subprocess group. SwiftlyKit then
-removes its temporary files and throws Swift's standard `CancellationError`.
+Cancel the calling task to cancel the complete subprocess group. SwiftlyKit
+retains SwiftPM scratch state, including exact-SDK selection metadata, removes
+transient staging files outside scratch, and throws Swift's standard
+`CancellationError`.
 
 Operational failures use `SwiftlyKitError`. It conforms to `LocalizedError` and
 provides a user-facing description. Common control-flow errors include:
@@ -396,9 +403,10 @@ host. It uses Triple's dependency-free fixture and never authorizes installation
 SWIFTLYKIT_RUN_ACCEPTANCE=1 swift test --filter CrossCompilationAcceptanceTests
 ```
 
-The acceptance test requires compatible Swiftly, Swift 6.3.3, and its matching
-Static Linux SDK to already be installed. It builds and verifies both supported
-architectures in temporary scratch storage.
+The acceptance tests require compatible Swiftly, Swift 6.3.3, and its matching
+Static Linux SDK to already be installed. They build and verify both supported
+architectures in temporary scratch storage and prove that a second identical
+build performs no compilation or linking.
 
 For the internal design, see [Architecture](Documentation/Architecture.md). For
 the complete 0.1.0 release boundary, see [MVP 0.1.0](Documentation/MVP-0.1.0.md).

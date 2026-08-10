@@ -10,6 +10,7 @@ public struct BuildRequest: Sendable {
     public let configuration: BuildConfiguration
     
     /// An optional SwiftPM scratch directory instead of the package default.
+    /// SwiftlyKit retains exact-SDK selection metadata inside the effective scratch directory.
     public let scratchDirectory: URL?
     
     /// An optional publication destination that must not already exist.

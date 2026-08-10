@@ -103,8 +103,9 @@ discovery do not acquire it.
 - Every SwiftPM operation revalidates the package tools version, Swiftly
   executable, and exact SDK bundle of its `LocalBuildEnvironment`.
 - SwiftPM command construction always selects the prepared toolchain and exposes
-  only the prepared SDK through an isolated SDK search directory. Caller build
-  environment additions cannot replace protected home or Swiftly variables.
+  only the prepared SDK through a deterministic, isolated SDK search directory
+  retained inside the effective build scratch directory. Caller build environment
+  additions cannot replace protected home or Swiftly variables.
 - Product discovery and builds disable automatic dependency resolution. Staged
   builds surface a structured resolution-required error; only the fast track
   performs the explicit resolve-and-retry sequence.

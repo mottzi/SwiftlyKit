@@ -2,6 +2,7 @@ import Foundation
 
 enum SwiftPMError: Error, Equatable, Sendable {
     case commandFailed(operation: SwiftPMOperation, diagnostic: String)
+    case sdkSearchPathPreparationFailed(String)
     case malformedPackageDescription
     case dependencyResolutionRequired
     case executableNotFound(String)
@@ -15,6 +16,7 @@ extension SwiftPMError {
 
     var swiftlyKitError: SwiftlyKitError {
         switch self {
+            case .sdkSearchPathPreparationFailed(let detail): .buildFailed(detail)
             case .malformedPackageDescription: .packageInspectionFailed("SwiftPM returned malformed package metadata.")
             case .dependencyResolutionRequired: .dependencyResolutionRequired
             case .executableNotFound(let product): .executableProductNotFound(product)
