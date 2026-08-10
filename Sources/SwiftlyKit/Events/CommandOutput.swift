@@ -13,12 +13,7 @@ public struct CommandOutput: Sendable {
 
         guard let eventHandler else { return nil }
 
-        return { output, text in
-            let stream: Stream = switch output {
-                case .standardOutput: .standardOutput
-                case .standardError: .standardError
-            }
-
+        return { stream, text in
             await eventHandler(.output(CommandOutput(stream: stream, text: text)))
         }
     }

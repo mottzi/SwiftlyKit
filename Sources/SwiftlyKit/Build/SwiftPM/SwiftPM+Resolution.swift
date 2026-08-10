@@ -6,12 +6,11 @@ extension SwiftPM {
 
         try validateEnvironment(environment)
 
-        let progress = OperationProgress(
-            operation: .resolvingDependencies,
-            detail: "Resolving package dependencies."
+        await report(
+            .resolvingDependencies,
+            detail: "Resolving package dependencies.",
+            to: onEvent
         )
-
-        await onEvent?(.progress(progress))
 
         let resolutionCommand = command(
             environment,

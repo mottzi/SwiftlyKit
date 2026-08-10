@@ -38,13 +38,7 @@ struct SwiftOrgReleaseCatalog: Sendable {
         do { payloads = try JSONDecoder().decode([ReleasePayload].self, from: data) }
         catch { throw CatalogError.invalidPayload }
 
-        var releasesByVersion: [SwiftVersion: OfficialStableRelease] = [:]
-        for payload in payloads {
-            guard let release = release(from: payload) else { continue }
-            releasesByVersion[release.version] = release
-        }
-
-        return releasesByVersion.values.sorted { $0.version > $1.version }
+        return payloads.compactMap(release(from:))
     }
 
 }

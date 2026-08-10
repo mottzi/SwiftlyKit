@@ -10,12 +10,7 @@ extension SwiftPM {
 
         try validateEnvironment(environment)
 
-        let buildProgress = OperationProgress(
-            operation: .building,
-            detail: "Building \(request.product.name)."
-        )
-
-        await onEvent?(.progress(buildProgress))
+        await report(.building, detail: "Building \(request.product.name).", to: onEvent)
 
         let description = try await packageDescription(using: environment)
 
@@ -75,12 +70,7 @@ extension SwiftPM {
             try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
 
             if request.strip {
-                let stripProgress = OperationProgress(
-                    operation: .stripping,
-                    detail: "Stripping \(request.product.name)."
-                )
-
-                await onEvent?(.progress(stripProgress))
+                await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
 
                 try await strip(
                     executable,
@@ -91,12 +81,7 @@ extension SwiftPM {
             }
 
             if let output = request.output {
-                let publicationProgress = OperationProgress(
-                    operation: .publishing,
-                    detail: "Publishing \(request.product.name)."
-                )
-
-                await onEvent?(.progress(publicationProgress))
+                await report(.publishing, detail: "Publishing \(request.product.name).", to: onEvent)
 
                 return try AtomicOutputPublisher.publish(executable, to: output)
             }

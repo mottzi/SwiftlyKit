@@ -54,6 +54,21 @@ struct EnvironmentSelectionPolicyTests {
         #expect(selection == newer)
     }
 
+    @Test("Selection canonicalizes unordered duplicate releases before applying precedence")
+    func canonicalizesReleases() throws {
+
+        let older = selectionRelease("6.2.4")
+        let superseded = selectionRelease("6.3.3", architectures: [.x86_64])
+        let newest = selectionRelease("6.3.3", architectures: [.arm64])
+
+        let selection = try select(
+            preference: nil,
+            releases: [older, superseded, newest]
+        )
+
+        #expect(selection == newest)
+    }
+
     @Test("Exact selection enforces tools version and architecture")
     func validatesExactSelection() {
 

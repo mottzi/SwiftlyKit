@@ -2,19 +2,24 @@ import Foundation
 
 /// A cancellation-aware FIFO gate for operations that may mutate shared user state.
 actor MutationGate {
-
+    
     private var isOccupied = false
     private var waiters: [Waiter] = []
     private var cancelledWaiters: Set<UUID> = []
     private var grantedWaiters: Set<UUID> = []
-
-    func withAccess<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
-
+    
+    func withAccess<Result: Sendable>(
+        _ operation: @Sendable () async throws -> Result
+    ) async throws -> Result {
+        
         try await acquire()
         defer { release() }
-
         return try await operation()
     }
+    
+}
+
+extension MutationGate {
 
     private func acquire() async throws {
 
@@ -82,11 +87,15 @@ actor MutationGate {
         isOccupied = false
     }
 
+}
+
+extension MutationGate {
+    
     private struct Waiter {
 
         let id: UUID
         let continuation: CheckedContinuation<Bool, Never>
 
     }
-
+    
 }

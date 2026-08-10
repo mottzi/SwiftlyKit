@@ -82,20 +82,10 @@ struct LiveSubprocessRunnerTests {
 
 private actor OutputRecorder {
 
-    private(set) var output: [OutputStream: String] = [:]
+    private(set) var output: [CommandOutput.Stream: String] = [:]
 
-    func record(_ stream: SubprocessOutput, _ text: String) {
-
-        let key: OutputStream = switch stream {
-            case .standardOutput: .standardOutput
-            case .standardError: .standardError
-        }
-        output[key, default: ""].append(text)
-    }
-
-    enum OutputStream: Hashable {
-        case standardOutput
-        case standardError
+    func record(_ stream: CommandOutput.Stream, _ text: String) {
+        output[stream, default: ""].append(text)
     }
 
 }

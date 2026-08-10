@@ -23,5 +23,3 @@ A reader should understand the main behavior before reaching mechanics or consta
 - Keep tightly coupled private helpers nested and in the same file. Extract them only if they gain independent callers, behavior, or an interface worth learning.
 - Use domain names that let a non-expert follow the main algorithm. Keep numeric encodings and other lookup details near the bottom.
 - Do not split files, introduce abstractions, or add boilerplate only to shorten a declaration.
-
-`ELFExecutableVerifier` is the reference shape: interface → verification algorithm → semantic ELF helpers → byte reader → ELF vocabulary → errors.

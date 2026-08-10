@@ -35,14 +35,14 @@ struct SwiftOrgReleaseCatalogTests {
 
         let releases = try SwiftOrgReleaseCatalog.parse(data)
 
-        #expect(releases.map(\.version) == [swiftVersion("6.3.3"), swiftVersion("6.3")])
-        #expect(releases[1].staticLinuxSDK.identifier == "swift-6.3-RELEASE_static-linux-0.1.0")
-        #expect(releases[1].staticLinuxSDK.version == "0.1.0")
-        #expect(releases[1].staticLinuxSDKMetadata.downloadURL.absoluteString ==
+        #expect(releases.map(\.version) == [swiftVersion("6.3"), swiftVersion("6.3.3")])
+        #expect(releases[0].staticLinuxSDK.identifier == "swift-6.3-RELEASE_static-linux-0.1.0")
+        #expect(releases[0].staticLinuxSDK.version == "0.1.0")
+        #expect(releases[0].staticLinuxSDKMetadata.downloadURL.absoluteString ==
             "https://download.swift.org/swift-6.3-release/static-sdk/swift-6.3-RELEASE/swift-6.3-RELEASE_static-linux-0.1.0.artifactbundle.tar.gz")
-        #expect(releases[1].staticLinuxSDKMetadata.checksum ==
+        #expect(releases[0].staticLinuxSDKMetadata.checksum ==
             "d2078b69bdeb5c31202c10e9d8a11d6f66f82938b51a4b75f032ccb35c4c286c")
-        #expect(releases[1].staticLinuxSDKMetadata.supportedArchitectures == [.arm64, .x86_64])
+        #expect(releases[0].staticLinuxSDKMetadata.supportedArchitectures == [.arm64, .x86_64])
     }
 
     @Test("Malformed and non-SDK releases are excluded without poisoning valid releases")

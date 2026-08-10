@@ -45,7 +45,7 @@ extension HostPreflight {
 
 extension HostPreflight {
 
-    static func liveSDKProbe(runner: any SubprocessRunning = LiveSubprocessRunner()) async throws -> URL {
+    static func liveSDKProbe() async throws -> URL {
 
         try Task.checkCancellation()
 
@@ -54,7 +54,7 @@ extension HostPreflight {
                 executableURL: URL(filePath: "/usr/bin/xcrun"),
                 arguments: ["--sdk", "macosx", "--show-sdk-path"]
             )
-            let result = try await runner.run(command)
+            let result = try await LiveSubprocessRunner().run(command)
             
             try Task.checkCancellation()
             guard result.succeeded else { throw SwiftlyKitError.developerToolsUnavailable }

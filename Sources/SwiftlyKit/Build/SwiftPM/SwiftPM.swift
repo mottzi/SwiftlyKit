@@ -12,6 +12,19 @@ struct SwiftPM: Sendable {
 
 extension SwiftPM {
 
+    func report(
+        _ operation: OperationProgress.Operation,
+        detail: String,
+        to handler: EventHandler?
+    ) async {
+
+        await handler?(.progress(OperationProgress(operation: operation, detail: detail)))
+    }
+
+}
+
+extension SwiftPM {
+
     static func validate(
         _ environment: LocalBuildEnvironment,
         locateSDK: (String) -> URL? = { SDKBundleLocator.locate(identifier: $0) }

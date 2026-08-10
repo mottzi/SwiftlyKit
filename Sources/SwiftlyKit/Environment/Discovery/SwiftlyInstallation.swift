@@ -104,16 +104,13 @@ extension SwiftlyInstallation {
         )
     }
 
-    static func liveVersionProbe(
-        at executableURL: URL,
-        runner: any SubprocessRunning = LiveSubprocessRunner()
-    ) async throws -> String {
+    static func liveVersionProbe(at executableURL: URL) async throws -> String {
 
         try Task.checkCancellation()
 
         do {
             let command = SubprocessCommand(executableURL: executableURL, arguments: ["--version"])
-            let result = try await runner.run(command)
+            let result = try await LiveSubprocessRunner().run(command)
             
             try Task.checkCancellation()
             guard result.succeeded else { throw SwiftlyKitError.incompatibleSwiftly }

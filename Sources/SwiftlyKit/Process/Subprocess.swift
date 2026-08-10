@@ -37,12 +37,7 @@ struct SubprocessResult: Equatable, Sendable {
 
 }
 
-enum SubprocessOutput: Sendable {
-    case standardOutput
-    case standardError
-}
-
-typealias SubprocessOutputHandler = @Sendable (SubprocessOutput, String) async -> Void
+typealias SubprocessOutputHandler = @Sendable (CommandOutput.Stream, String) async -> Void
 
 protocol SubprocessRunning: Sendable {
 
