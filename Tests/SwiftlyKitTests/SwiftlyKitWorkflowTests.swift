@@ -17,9 +17,8 @@ struct SwiftlyKitWorkflowTests {
                 packageInputs: try PackageInputSnapshot.capture(at: packageRoot),
                 release: OfficialStableRelease(
                     version: version,
-                    staticLinuxSDK: OfficialStaticLinuxSDK(
-                        version: "1.0.0",
-                        identifier: "sdk",
+                    staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
+                    staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
                         downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
                         checksum: String(repeating: "a", count: 64),
                         supportedArchitectures: [.arm64]
@@ -72,9 +71,8 @@ struct SwiftlyKitWorkflowTests {
             )
             let release = OfficialStableRelease(
                 version: version,
-                staticLinuxSDK: OfficialStaticLinuxSDK(
-                    version: "0.0.1",
-                    identifier: sdkIdentifier,
+                staticLinuxSDK: StaticLinuxSDK(identifier: sdkIdentifier, version: "0.0.1"),
+                staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
                     downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
                     checksum: String(repeating: "a", count: 64),
                     supportedArchitectures: [.arm64]

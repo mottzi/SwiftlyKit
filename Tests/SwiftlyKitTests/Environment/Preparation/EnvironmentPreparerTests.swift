@@ -6,9 +6,11 @@ import Testing
 struct EnvironmentPreparerTests {
 
     private let version = SwiftVersion(major: 6, minor: 2, patch: 1)
-    private let sdk = OfficialStaticLinuxSDK(
-        version: "0.0.1",
+    private let sdk = StaticLinuxSDK(
         identifier: "swift-6.2.1-RELEASE_static-linux-0.0.1",
+        version: "0.0.1"
+    )
+    private let sdkMetadata = StaticLinuxSDKMetadata(
         downloadURL: URL(string: "https://download.swift.org/swift-6.2.1/sdk.tar.gz")!,
         checksum: String(repeating: "a", count: 64),
         supportedArchitectures: [.arm64]
@@ -72,8 +74,8 @@ struct EnvironmentPreparerTests {
         #expect(recorded[0].arguments == ["install", "6.2.1", "--verify", "--assume-yes"])
         #expect(!recorded[0].arguments.contains("--use"))
         #expect(recorded[1].arguments == [
-            "run", "swift", "sdk", "install", sdk.downloadURL.absoluteString,
-            "--checksum", sdk.checksum, "+6.2.1"
+            "run", "swift", "sdk", "install", sdkMetadata.downloadURL.absoluteString,
+            "--checksum", sdkMetadata.checksum, "+6.2.1"
         ])
     }
 
@@ -283,7 +285,11 @@ struct EnvironmentPreparerTests {
 
         return EnvironmentAssessment(
             packageInputs: try PackageInputSnapshot.capture(at: packageRoot),
-            release: OfficialStableRelease(version: version, staticLinuxSDK: sdk),
+            release: OfficialStableRelease(
+                version: version,
+                staticLinuxSDK: sdk,
+                staticLinuxSDKMetadata: sdkMetadata
+            ),
             requiredComponents: components,
             target: .linux(.arm64)
         )

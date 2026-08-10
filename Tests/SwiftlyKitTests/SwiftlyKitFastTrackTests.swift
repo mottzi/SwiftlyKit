@@ -135,9 +135,8 @@ private func fastTrackKit(packageRoot: URL, runner: RecordingSubprocessRunner) -
     )
     let release = OfficialStableRelease(
         version: version,
-        staticLinuxSDK: OfficialStaticLinuxSDK(
-            version: "1.0.0",
-            identifier: sdkIdentifier,
+        staticLinuxSDK: StaticLinuxSDK(identifier: sdkIdentifier, version: "1.0.0"),
+        staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
             downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
             checksum: String(repeating: "a", count: 64),
             supportedArchitectures: [.x86_64]

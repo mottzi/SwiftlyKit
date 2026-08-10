@@ -84,6 +84,7 @@ extension EnvironmentPreparer {
 
         let toolchain = assessment.swiftVersion
         let sdk = assessment.release.staticLinuxSDK
+        let sdkMetadata = assessment.release.staticLinuxSDKMetadata
 
         var state = try await inspect(swiftly, toolchain)
 
@@ -118,9 +119,9 @@ extension EnvironmentPreparer {
             guard assessment.requiredComponents.contains(.staticLinuxSDK)
             else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
             
-            guard sdk.downloadURL.scheme?.lowercased() == "https",
-                  sdk.checksum.count == 64,
-                  sdk.checksum.allSatisfy(\.isHexDigit)
+            guard sdkMetadata.downloadURL.scheme?.lowercased() == "https",
+                  sdkMetadata.checksum.count == 64,
+                  sdkMetadata.checksum.allSatisfy(\.isHexDigit)
             else { throw EnvironmentPreparationError.invalidDownloadURL }
             
             await report(
@@ -133,8 +134,8 @@ extension EnvironmentPreparer {
                 swiftly: swiftly.executableURL,
                 toolchain: toolchain,
                 arguments: [
-                    "sdk", "install", sdk.downloadURL.absoluteString,
-                    "--checksum", sdk.checksum
+                    "sdk", "install", sdkMetadata.downloadURL.absoluteString,
+                    "--checksum", sdkMetadata.checksum
                 ],
                 workingDirectory: temporaryDirectory
             )

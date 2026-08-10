@@ -131,9 +131,11 @@ private func assessorRelease() -> OfficialStableRelease {
     let version = SwiftVersion(major: 6, minor: 3, patch: 3)
     return OfficialStableRelease(
         version: version,
-        staticLinuxSDK: OfficialStaticLinuxSDK(
-            version: "0.1.0",
+        staticLinuxSDK: StaticLinuxSDK(
             identifier: "swift-6.3.3-RELEASE_static-linux-0.1.0",
+            version: "0.1.0"
+        ),
+        staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
             downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
             checksum: String(repeating: "a", count: 64),
             supportedArchitectures: [.arm64]

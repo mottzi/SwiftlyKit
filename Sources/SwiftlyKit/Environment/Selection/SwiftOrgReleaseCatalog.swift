@@ -88,15 +88,18 @@ extension SwiftOrgReleaseCatalog {
 
         guard let downloadURL = URL(string: downloadURLString) else { return nil }
 
-        let sdk = OfficialStaticLinuxSDK(
-            version: sdkVersion,
-            identifier: identifier,
+        let sdk = StaticLinuxSDK(identifier: identifier, version: sdkVersion)
+        let metadata = StaticLinuxSDKMetadata(
             downloadURL: downloadURL,
             checksum: checksum,
             supportedArchitectures: architectures
         )
 
-        return OfficialStableRelease(version: version, staticLinuxSDK: sdk)
+        return OfficialStableRelease(
+            version: version,
+            staticLinuxSDK: sdk,
+            staticLinuxSDKMetadata: metadata
+        )
     }
 
     private static func normalizedChecksum(_ checksum: String?) -> String? {

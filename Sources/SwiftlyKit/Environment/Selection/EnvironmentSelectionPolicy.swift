@@ -28,7 +28,7 @@ enum EnvironmentSelectionPolicy {
 
         let installedRelease = releases.first { release in
             guard release.version >= toolsVersion else { return false }
-            guard release.staticLinuxSDK.supports(architecture) else { return false }
+            guard release.supports(architecture) else { return false }
             guard installedVersions.contains(release.version) else { return false }
 
             let installedSDK = InstalledStaticLinuxSDK(
@@ -43,7 +43,7 @@ enum EnvironmentSelectionPolicy {
 
         let compatibleRelease = releases.first { release in
             guard release.version >= toolsVersion else { return false }
-            guard release.staticLinuxSDK.supports(architecture) else { return false }
+            guard release.supports(architecture) else { return false }
             return true
         }
 
@@ -92,7 +92,7 @@ extension EnvironmentSelectionPolicy {
         guard version >= toolsVersion
         else { throw SelectionError.incompatibleToolsVersion(requested: version, required: toolsVersion) }
         
-        guard release.staticLinuxSDK.supports(architecture)
+        guard release.supports(architecture)
         else { throw SelectionError.unsupportedArchitecture(version: version, architecture: architecture) }
 
         return release

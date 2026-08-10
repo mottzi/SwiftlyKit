@@ -4,21 +4,20 @@ import Foundation
 struct OfficialStableRelease: Hashable, Sendable {
 
     let version: SwiftVersion
-    let staticLinuxSDK: OfficialStaticLinuxSDK
+    let staticLinuxSDK: StaticLinuxSDK
+    let staticLinuxSDKMetadata: StaticLinuxSDKMetadata
+
+    func supports(_ architecture: LinuxArchitecture) -> Bool {
+        staticLinuxSDKMetadata.supportedArchitectures.contains(architecture)
+    }
 
 }
 
-/// Installation metadata for an official Static Linux SDK.
-struct OfficialStaticLinuxSDK: Hashable, Sendable {
+/// Internal release metadata for an official Static Linux SDK.
+struct StaticLinuxSDKMetadata: Hashable, Sendable {
 
-    let version: String
-    let identifier: String
     let downloadURL: URL
     let checksum: String
     let supportedArchitectures: Set<LinuxArchitecture>
-
-    func supports(_ architecture: LinuxArchitecture) -> Bool {
-        supportedArchitectures.contains(architecture)
-    }
 
 }

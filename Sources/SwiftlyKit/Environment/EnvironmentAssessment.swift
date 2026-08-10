@@ -43,10 +43,7 @@ extension EnvironmentAssessment {
 
     /// The matching exact Static Linux SDK.
     public var staticLinuxSDK: StaticLinuxSDK {
-        StaticLinuxSDK(
-            identifier: release.staticLinuxSDK.identifier,
-            version: release.staticLinuxSDK.version
-        )
+        release.staticLinuxSDK
     }
 
     /// Whether a compatible Swiftly installation is already available.
