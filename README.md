@@ -17,7 +17,7 @@ Add SwiftlyKit to your project with Swift Package Manager.
 In Xcode, select **File > Add Package Dependencies** and enter:
 
 ```text
-https://github.com/mottzi/SwiftyKit.git
+https://github.com/mottzi/SwiftlyKit.git
 ```
 
 Select version `0.1.0` or later. Then add the `SwiftlyKit` library to your target.
@@ -36,7 +36,7 @@ let package = Package(
     ],
     dependencies: [
         .package(
-            url: "https://github.com/mottzi/SwiftyKit.git",
+            url: "https://github.com/mottzi/SwiftlyKit.git",
             from: "0.1.0"
         )
     ],
@@ -44,7 +44,7 @@ let package = Package(
         .executableTarget(
             name: "YourTarget",
             dependencies: [
-                .product(name: "SwiftlyKit", package: "SwiftyKit")
+                .product(name: "SwiftlyKit", package: "SwiftlyKit")
             ]
         )
     ]
@@ -224,7 +224,7 @@ A staged build never resolves dependencies automatically. The separate
 | `scratchDirectory` | `nil` | Uses the package `.build` directory. SwiftlyKit retains exact-SDK selection metadata inside the effective scratch directory and does not remove it. |
 | `output` | `nil` | Returns the executable in scratch storage. A supplied destination receives an atomic copy. |
 | `strip` | `false` | Uses the selected toolchain to strip the executable, and then verifies it again. |
-| `environment` | `[:]` | Adds or replaces values in the build subprocess environment. SwiftlyKit keeps values that protect the prepared toolchain and SDK. |
+| `environment` | `[:]` | Adds or replaces values for build, bin-path, and strip subprocesses. SwiftlyKit keeps values that protect the prepared toolchain and SDK. |
 
 The parent directory of `output` must exist. SwiftlyKit never replaces an
 existing item at the output URL. It throws `SwiftlyKitError.outputAlreadyExists`
@@ -291,8 +291,8 @@ The handler can receive:
 
 - `SwiftlyKitEvent.progress` for preparation, dependency resolution, build,
   strip, and publication activities.
-- `SwiftlyKitEvent.output` for bounded standard output and standard error chunks
-  from delegated commands.
+- `SwiftlyKitEvent.output` for standard output and standard error chunks from
+  delegated commands.
 
 SwiftlyKit reports activity text. It does not report a percentage when the
 underlying tool cannot supply a trustworthy value.
