@@ -12,7 +12,7 @@ extension SwiftPM {
 
 extension SwiftPM {
 
-    func packageDescription(using environment: LocalBuildEnvironment) async throws -> SwiftPackageDescription {
+    func packageDescription(using environment: LocalBuildEnvironment) async throws -> PackageDescription {
 
         let packageCommand = command(
             environment,
@@ -31,7 +31,7 @@ extension SwiftPM {
         guard let data = result.standardOutput.data(using: .utf8)
         else { throw SwiftPMError.malformedPackageDescription }
 
-        return try SwiftPackageDescription(data: data)
+        return try PackageDescription(data: data)
     }
 
 }

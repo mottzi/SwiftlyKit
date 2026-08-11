@@ -58,14 +58,15 @@ discovery do not acquire it.
 - `SwiftlyKit.swift` is the public facade, fast-track orchestrator, and interface
   that maps internal failures to `SwiftlyKitError`.
 - `MutationGate.swift` serializes the mutating operations of one facade value.
-- `Package` canonicalizes the package root, parses the tools version, finds the
-  nearest `.swift-version`, and snapshots the input files byte-for-byte.
 - `Environment/Host` represents host readiness explicitly, lets readiness-required
   operations reject unsupported hosts or missing developer tools before other
   work proceeds, and owns the adapter that requests Apple's interactive Command
   Line Tools installer.
-- `Environment/Assessment` coordinates the read-only package, host, release,
-  discovery, and selection steps and produces `EnvironmentAssessment`.
+- `Environment/Assessment` owns `PackageInputSnapshot`, which canonicalizes the
+  package root, parses the tools version, finds the nearest `.swift-version`, and
+  snapshots those inputs byte-for-byte. It coordinates the read-only package,
+  host, release, discovery, and selection steps and produces
+  `EnvironmentAssessment`.
 - `Environment/Discovery` detects Swiftly, constructs Swiftly-run commands, and
   owns `InstalledEnvironmentInventory`, the canonical installed toolchain and
   SDK representation.
@@ -75,11 +76,18 @@ discovery do not acquire it.
 - `Environment/Preparation` revalidates the assessment, performs only authorized
   installations, refreshes installed inventory after mutations, and returns the
   prepared capability.
-- `Build` contains the public build value types. `Build/SwiftPM` validates a
-  prepared capability and owns product discovery, explicit dependency
-  resolution, build execution, resource rejection, ELF verification, optional
-  stripping, and atomic publication. `SDKSelectionDirectory` hides the retained
-  exact-SDK directory layout and its cross-process create-or-verify protocol.
+- `Build` contains the public build value types.
+- `SwiftPM` validates a prepared capability and coordinates product discovery,
+  explicit dependency resolution, build execution, optional stripping, and
+  build-storage cleanup.
+- `SwiftPMScratchDirectory` converts a public `BuildStorage` choice into the
+  canonical, safety-checked scratch directory used by SwiftPM operations.
+- `SwiftPM/PackageDescription` decodes SwiftPM package metadata into executable
+  products and their transitive runtime-resource requirements.
+- `SwiftPM/Output` owns runtime-resource inspection, ELF verification, and
+  exclusive atomic output copying.
+- `SDKSelectionDirectory` hides the retained exact-SDK directory layout and its
+  cross-process create-or-verify protocol.
 - `Subprocess` is the only adapter to `swift-subprocess`. Production uses
   `LiveSubprocessRunner`; tests use the same `SubprocessRunning` seam.
 - `Events` contains the optional awaited progress and output interface. Command

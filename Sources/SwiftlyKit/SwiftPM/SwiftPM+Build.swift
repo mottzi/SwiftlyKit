@@ -10,9 +10,12 @@ extension SwiftPM {
         
         try validateEnvironment(environment)
 
-        let scratchDirectory = try request.storage.validatedDirectory(for: environment.packageRoot)
+        let scratchDirectory = try SwiftPMScratchDirectory(
+            storage: request.storage,
+            packageRoot: environment.packageRoot
+        )
 
-        try Self.validate(request.output, outside: scratchDirectory)
+        try Self.validate(request.output, outside: scratchDirectory.url)
         
         await report(.building, detail: "Building \(request.product.name).", to: onEvent)
         
@@ -29,7 +32,7 @@ extension SwiftPM {
             sdkSearchDirectory = try SDKSelectionDirectory.resolve(
                 sdkIdentifier: environment.staticLinuxSDK.identifier,
                 sdkBundleURL: environment.sdkBundleURL,
-                scratchDirectory: scratchDirectory
+                scratchDirectory: scratchDirectory.url
             )
         } catch let error as SDKSelectionDirectory.Error {
             throw SwiftPMError.sdkSearchPathPreparationFailed(
@@ -44,7 +47,8 @@ extension SwiftPM {
         let commonArguments = Self.buildArguments(
             request,
             environment: environment,
-            sdkSearchDirectory: sdkSearchDirectory
+            sdkSearchDirectory: sdkSearchDirectory,
+            scratchDirectory: scratchDirectory
         )
 
         let buildCommand = command(
@@ -162,7 +166,8 @@ extension SwiftPM {
     private static func buildArguments(
         _ request: BuildRequest,
         environment: LocalBuildEnvironment,
-        sdkSearchDirectory: URL
+        sdkSearchDirectory: URL,
+        scratchDirectory: SwiftPMScratchDirectory
     ) -> [String] {
 
         let configurationArgument = switch request.configuration {
@@ -178,8 +183,8 @@ extension SwiftPM {
             "--configuration", configurationArgument
         ]
 
-        if let scratchDirectory = request.storage.explicitDirectory {
-            arguments += ["--scratch-path", scratchDirectory.path]
+        if scratchDirectory.isExplicit {
+            arguments += ["--scratch-path", scratchDirectory.url.path]
         }
 
         return arguments

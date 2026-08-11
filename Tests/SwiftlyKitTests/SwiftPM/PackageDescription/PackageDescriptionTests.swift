@@ -3,7 +3,7 @@ import Testing
 @testable import SwiftlyKit
 
 @Suite("Swift package description")
-struct SwiftPackageDescriptionTests {
+struct PackageDescriptionTests {
 
     @Test("Discovers explicit and implicit executable products in stable order")
     func discoversExecutables() throws {
@@ -81,7 +81,7 @@ struct SwiftPackageDescriptionTests {
     func rejectsMalformedTopLevelDescription() {
 
         #expect(throws: SwiftPMError.malformedPackageDescription) {
-            try SwiftPackageDescription(data: Data([0xff]))
+            try PackageDescription(data: Data([0xff]))
         }
 
         let malformedDescriptions = [
@@ -98,7 +98,7 @@ struct SwiftPackageDescriptionTests {
 
         for json in malformedDescriptions {
             #expect(throws: SwiftPMError.malformedPackageDescription) {
-                try SwiftPackageDescription(data: Data(json.utf8))
+                try PackageDescription(data: Data(json.utf8))
             }
         }
     }
@@ -131,7 +131,7 @@ struct SwiftPackageDescriptionTests {
         for product in malformedProducts {
             let json = packageJSON(products: product, targets: regularTarget(name: "Tool"))
             #expect(throws: SwiftPMError.malformedPackageDescription) {
-                try SwiftPackageDescription(data: Data(json.utf8))
+                try PackageDescription(data: Data(json.utf8))
             }
         }
     }
@@ -163,7 +163,7 @@ struct SwiftPackageDescriptionTests {
                 targets: target
             )
             #expect(throws: SwiftPMError.malformedPackageDescription) {
-                try SwiftPackageDescription(data: Data(json.utf8))
+                try PackageDescription(data: Data(json.utf8))
             }
         }
     }
@@ -179,7 +179,7 @@ struct SwiftPackageDescriptionTests {
             targets: regularTarget(name: "Tool")
         )
         #expect(throws: SwiftPMError.malformedPackageDescription) {
-            try SwiftPackageDescription(data: Data(duplicateProducts.utf8))
+            try PackageDescription(data: Data(duplicateProducts.utf8))
         }
 
         let duplicateTargets = packageJSON(
@@ -190,7 +190,7 @@ struct SwiftPackageDescriptionTests {
             """
         )
         #expect(throws: SwiftPMError.malformedPackageDescription) {
-            try SwiftPackageDescription(data: Data(duplicateTargets.utf8))
+            try PackageDescription(data: Data(duplicateTargets.utf8))
         }
     }
 
@@ -208,7 +208,7 @@ struct SwiftPackageDescriptionTests {
           ]
         }
         """
-        let description = try SwiftPackageDescription(data: Data(json.utf8))
+        let description = try PackageDescription(data: Data(json.utf8))
 
         #expect(description.products.map(\.name) == ["Tool"])
         #expect(!description.requiresRuntimeResources("Tool"))
@@ -364,7 +364,7 @@ struct SwiftPackageDescriptionTests {
                 """
             )
             #expect(throws: SwiftPMError.malformedPackageDescription) {
-                try SwiftPackageDescription(data: Data(json.utf8))
+                try PackageDescription(data: Data(json.utf8))
             }
         }
     }
@@ -374,7 +374,7 @@ struct SwiftPackageDescriptionTests {
 
         let name = "quote\" slash\\ newline\n snowman ☃\u{FE0F}"
         let json = try packageDescriptionJSON(executableProducts: [name])
-        let description = try SwiftPackageDescription(data: Data(json.utf8))
+        let description = try PackageDescription(data: Data(json.utf8))
 
         #expect(description.products.map(\.name) == [name])
         #expect(!description.requiresRuntimeResources(name))
@@ -382,10 +382,10 @@ struct SwiftPackageDescriptionTests {
 
 }
 
-private extension SwiftPackageDescriptionTests {
+private extension PackageDescriptionTests {
 
-    func description(products: String, targets: String) throws -> SwiftPackageDescription {
-        try SwiftPackageDescription(data: Data(packageJSON(products: products, targets: targets).utf8))
+    func description(products: String, targets: String) throws -> PackageDescription {
+        try PackageDescription(data: Data(packageJSON(products: products, targets: targets).utf8))
     }
 
     func packageJSON(products: String, targets: String) -> String {

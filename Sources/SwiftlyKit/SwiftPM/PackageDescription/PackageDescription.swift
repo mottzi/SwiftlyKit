@@ -1,6 +1,6 @@
 import Foundation
 
-struct SwiftPackageDescription {
+struct PackageDescription {
 
     let products: [ExecutableProduct]
     private let resourceProducts: Set<String>
@@ -24,7 +24,7 @@ struct SwiftPackageDescription {
 
 }
 
-extension SwiftPackageDescription {
+extension PackageDescription {
 
     private static func package(from description: Description) throws -> Package {
 
@@ -37,7 +37,7 @@ extension SwiftPackageDescription {
         var targets: [String: Target] = [:]
         for target in description.targets {
             targets[target.name] = Target(
-                kind: target.type,
+                kind: target.kind,
                 dependencies: target.dependencies,
                 resourceRequirement: resourceRequirement(for: target.resources)
             )
@@ -65,7 +65,7 @@ extension SwiftPackageDescription {
                 guard targets[target] != nil else { throw DescriptionError.missingTarget }
             }
 
-            guard product.type == .executable else { continue }
+            guard product.kind == .executable else { continue }
             explicitProducts.append((product.name, product.targets))
         }
 
@@ -153,7 +153,7 @@ extension SwiftPackageDescription {
 
 }
 
-extension SwiftPackageDescription {
+extension PackageDescription {
 
     private struct Package {
 
@@ -164,7 +164,7 @@ extension SwiftPackageDescription {
 
     private struct Target {
 
-        let kind: Description.TargetKind
+        let kind: Description.Target.Kind
         let dependencies: [Description.Dependency]
         let resourceRequirement: ResourceRequirement
 

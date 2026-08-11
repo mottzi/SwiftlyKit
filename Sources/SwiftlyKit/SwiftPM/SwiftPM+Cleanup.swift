@@ -26,7 +26,10 @@ extension SwiftPM {
     ) async throws {
         guard cleanup != .retain else { return }
 
-        let scratchDirectory = try storage.validatedDirectory(for: environment.packageRoot)
+        let scratchDirectory = try SwiftPMScratchDirectory(
+            storage: storage,
+            packageRoot: environment.packageRoot
+        )
 
         let operation: SwiftPMError.Operation
         let progress: OperationProgress.Operation
@@ -55,7 +58,7 @@ extension SwiftPM {
             swiftArguments: [
                 "package",
                 subcommand,
-                "--scratch-path", scratchDirectory.path
+                "--scratch-path", scratchDirectory.url.path
             ]
         )
 
