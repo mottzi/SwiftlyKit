@@ -43,7 +43,7 @@ enum EnvironmentSelectionPolicy {
 
 extension EnvironmentSelectionPolicy {
 
-    enum SelectionError: Error, Equatable, Sendable {
+    enum SelectionError: Error, Equatable {
         case invalidSwiftVersionPreference(String)
         case unavailableRelease(SwiftVersion)
         case incompatibleToolsVersion(requested: SwiftVersion, required: SwiftVersion)

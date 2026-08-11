@@ -1,7 +1,7 @@
 import Foundation
 
 /// Inspects Swiftly and SwiftPM without changing selection or installed state.
-struct InstalledEnvironmentInspector: Sendable {
+struct InstalledEnvironmentInspector {
 
     private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
     private(set) var isToolchainUsable: @Sendable (SwiftVersion) -> Bool = Self.liveToolchainUsability

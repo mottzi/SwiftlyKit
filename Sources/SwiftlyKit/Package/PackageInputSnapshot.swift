@@ -1,7 +1,7 @@
 import Foundation
 
 /// Byte-for-byte package inputs that authorize environment preparation.
-struct PackageInputSnapshot: Equatable, Sendable {
+struct PackageInputSnapshot: Equatable {
 
     let packageRoot: URL
     let toolsVersion: SwiftVersion

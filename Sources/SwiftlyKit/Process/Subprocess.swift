@@ -1,7 +1,7 @@
 import Foundation
 
 /// A complete description of one child process invocation.
-struct SubprocessCommand: Equatable, Sendable {
+struct SubprocessCommand: Equatable {
 
     let executableURL: URL
     let arguments: [String]
@@ -23,7 +23,7 @@ struct SubprocessCommand: Equatable, Sendable {
 }
 
 /// Bounded output and termination state from one child process.
-struct SubprocessResult: Equatable, Sendable {
+struct SubprocessResult: Equatable {
 
     let succeeded: Bool
     let standardOutput: String

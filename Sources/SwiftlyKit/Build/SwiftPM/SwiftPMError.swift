@@ -1,6 +1,6 @@
 import Foundation
 
-enum SwiftPMError: Error, Equatable, Sendable {
+enum SwiftPMError: Error, Equatable {
     case commandFailed(operation: SwiftPMOperation, diagnostic: String)
     case sdkSearchPathPreparationFailed(String)
     case malformedPackageDescription
@@ -36,7 +36,7 @@ extension SwiftPMError {
 
 }
 
-enum SwiftPMOperation: Equatable, Sendable {
+enum SwiftPMOperation {
     case build
     case packageDescription
     case dependencyResolution

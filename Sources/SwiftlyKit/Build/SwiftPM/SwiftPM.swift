@@ -1,6 +1,6 @@
 import Foundation
 
-struct SwiftPM: Sendable {
+struct SwiftPM {
 
     private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
 

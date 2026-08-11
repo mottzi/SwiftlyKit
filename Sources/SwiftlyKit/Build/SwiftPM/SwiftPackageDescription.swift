@@ -1,6 +1,6 @@
 import Foundation
 
-struct SwiftPackageDescription: Sendable {
+struct SwiftPackageDescription {
 
     let products: [ExecutableProduct]
     private let resourceProducts: Set<String>

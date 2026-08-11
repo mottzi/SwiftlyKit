@@ -61,7 +61,7 @@ struct AtomicOutputPublisherTests {
 
 }
 
-private enum PublicationAttempt: Sendable {
+private enum PublicationAttempt {
     case published
     case rejected(SwiftPMError)
     case unexpected

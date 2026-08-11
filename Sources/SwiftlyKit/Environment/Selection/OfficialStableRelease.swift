@@ -1,7 +1,7 @@
 import Foundation
 
 /// One official stable Swift toolchain and its matching Static Linux SDK.
-struct OfficialStableRelease: Hashable, Sendable {
+struct OfficialStableRelease: Hashable {
 
     let version: SwiftVersion
     let staticLinuxSDK: StaticLinuxSDK
@@ -14,7 +14,7 @@ struct OfficialStableRelease: Hashable, Sendable {
 }
 
 /// Internal release metadata for an official Static Linux SDK.
-struct StaticLinuxSDKMetadata: Hashable, Sendable {
+struct StaticLinuxSDKMetadata: Hashable {
 
     let downloadURL: URL
     let checksum: String

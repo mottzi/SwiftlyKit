@@ -1,7 +1,7 @@
 import Foundation
 
 /// Fetches the official stable Swift release catalog without retaining network state.
-struct SwiftOrgReleaseCatalog: Sendable {
+struct SwiftOrgReleaseCatalog {
 
     private(set) var load: @Sendable (URL) async throws -> Response = { url in
         try await SwiftOrgReleaseCatalog.liveLoad(url)
@@ -33,12 +33,12 @@ struct SwiftOrgReleaseCatalog: Sendable {
 
 extension SwiftOrgReleaseCatalog {
 
-    struct Response: Sendable {
+    struct Response {
         let data: Data
         let statusCode: Int?
     }
 
-    enum CatalogError: Error, Equatable, Sendable {
+    enum CatalogError: Error {
         case networkFailure
         case invalidPayload
     }

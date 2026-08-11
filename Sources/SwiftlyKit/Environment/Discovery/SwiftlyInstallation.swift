@@ -1,7 +1,7 @@
 import Foundation
 
 /// A compatible Swiftly executable discovered without changing user state.
-struct SwiftlyInstallation: Equatable, Sendable {
+struct SwiftlyInstallation: Equatable {
 
     let executableURL: URL
 

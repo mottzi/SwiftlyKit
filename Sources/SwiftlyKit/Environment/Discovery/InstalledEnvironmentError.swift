@@ -1,6 +1,6 @@
 import Foundation
 
-enum InstalledEnvironmentError: Error, Equatable, Sendable {
+enum InstalledEnvironmentError: Error, Equatable {
     case commandCouldNotRun(URL)
     case commandFailed(String)
     case invalidOutput

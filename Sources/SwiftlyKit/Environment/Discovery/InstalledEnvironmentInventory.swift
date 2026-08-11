@@ -1,5 +1,5 @@
 /// Canonical installed toolchain and SDK state observed through Swiftly.
-struct InstalledEnvironmentInventory: Equatable, Sendable {
+struct InstalledEnvironmentInventory: Equatable {
 
     let toolchains: [SwiftVersion]
     let sdks: [InstalledStaticLinuxSDK]
@@ -17,7 +17,7 @@ struct InstalledEnvironmentInventory: Equatable, Sendable {
 }
 
 /// A Static Linux SDK visible through one exact installed Swift toolchain.
-struct InstalledStaticLinuxSDK: Hashable, Sendable {
+struct InstalledStaticLinuxSDK: Hashable {
 
     let toolchainVersion: SwiftVersion
     let identifier: String

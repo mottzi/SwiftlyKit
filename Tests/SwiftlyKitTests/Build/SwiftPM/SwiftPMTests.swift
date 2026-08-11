@@ -335,7 +335,7 @@ private func argument(after option: String, in arguments: [String]) throws -> St
     return try #require(arguments.dropFirst(optionIndex + 1).first)
 }
 
-private struct EventOutput: Equatable, Sendable {
+private struct EventOutput: Equatable {
 
     let stream: CommandOutput.Stream
     let text: String
@@ -349,10 +349,8 @@ private actor SwiftPMEventRecorder {
 
     func record(_ event: SwiftlyKitEvent) {
         switch event {
-            case .progress(let progress):
-                operations.append(progress.operation)
-            case .output(let output):
-                outputs.append(EventOutput(stream: output.stream, text: output.text))
+            case .progress(let progress): operations.append(progress.operation)
+            case .output(let output): outputs.append(EventOutput(stream: output.stream, text: output.text))
         }
     }
 
