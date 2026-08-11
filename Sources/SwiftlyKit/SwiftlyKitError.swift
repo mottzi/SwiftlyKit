@@ -1,6 +1,6 @@
 import Foundation
 
-/// Typed failures from host checks, environment preparation, package inspection, and executable builds.
+/// Typed failures from host checks, environment preparation, package inspection, executable builds, and cleanup.
 public enum SwiftlyKitError: Equatable {
     /// The package root is not a readable local directory with a UTF-8 `Package.swift` file.
     case invalidPackageRoot(URL)
@@ -71,11 +71,26 @@ public enum SwiftlyKitError: Equatable {
     /// The output is not a verified static ELF64 executable for the requested architecture.
     case executableVerificationFailed(String)
 
-    /// The publication destination already exists and was not replaced.
+    /// The selected build storage contains the package root and could remove package sources.
+    case unsafeBuildStorage(URL)
+
+    /// Automatic cleanup cannot preserve an output located inside build storage.
+    case outputInsideBuildStorage(URL)
+
+    /// The copy destination already exists and was not replaced.
     case outputAlreadyExists(URL)
 
-    /// SwiftlyKit could not copy and atomically publish the executable to the destination.
-    case outputPublicationFailed(URL)
+    /// SwiftlyKit could not atomically copy the executable to the destination.
+    case outputCopyFailed(URL)
+
+    /// The executable remains at the associated output URL, but the requested post-build cleanup failed.
+    case postBuildCleanupFailed(output: URL, detail: String)
+
+    /// SwiftPM could not remove compiled products and intermediate build artifacts.
+    case buildArtifactCleanupFailed(String)
+
+    /// SwiftPM could not remove the complete effective scratch directory.
+    case buildStorageResetFailed(String)
 }
 
 extension SwiftlyKitError: LocalizedError {
@@ -152,11 +167,26 @@ extension SwiftlyKitError: LocalizedError {
             case .executableVerificationFailed(let detail):
                 "The produced executable failed verification: \(detail)"
 
+            case .unsafeBuildStorage(let url):
+                "Build storage at \(url.path) must not contain the package root."
+
+            case .outputInsideBuildStorage(let url):
+                "The output at \(url.path) must be outside build storage when cleanup is requested."
+
             case .outputAlreadyExists(let url):
                 "The output already exists at \(url.path)."
 
-            case .outputPublicationFailed(let url):
-                "The executable could not be published at \(url.path)."
+            case .outputCopyFailed(let url):
+                "The executable could not be copied to \(url.path)."
+
+            case .postBuildCleanupFailed(let output, let detail):
+                "The executable was copied to \(output.path), but build storage cleanup failed: \(detail)"
+
+            case .buildArtifactCleanupFailed(let detail):
+                "SwiftPM could not clean build artifacts: \(detail)"
+
+            case .buildStorageResetFailed(let detail):
+                "SwiftPM could not reset build storage: \(detail)"
         }
     }
 

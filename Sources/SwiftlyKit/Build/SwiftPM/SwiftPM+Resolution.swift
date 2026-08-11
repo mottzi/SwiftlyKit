@@ -2,7 +2,7 @@ import Foundation
 
 extension SwiftPM {
 
-    func resolveDependencies(using environment: LocalBuildEnvironment, onEvent: EventHandler? = nil) async throws {
+    func resolveDependencies(using environment: LocalBuildEnvironment, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
 
         try validateEnvironment(environment)
 
@@ -20,7 +20,7 @@ extension SwiftPM {
             ]
         )
 
-        let result = try await runner.run(resolutionCommand, onOutput: CommandOutput.handler(for: onEvent))
+        let result = try await runner.run(resolutionCommand, onOutput: CommandOutputChunk.handler(for: onEvent))
 
         guard result.succeeded
         else { throw SwiftPMError.commandFailed(operation: .dependencyResolution, diagnostic: boundedDiagnostic(result)) }

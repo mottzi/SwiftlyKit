@@ -36,7 +36,7 @@ struct EnvironmentPreparer {
     }
 
     /// Revalidates first, then performs only the mutations authorized by the assessment.
-    func prepare(_ assessment: EnvironmentAssessment, onEvent: EventHandler? = nil) async throws -> LocalBuildEnvironment {
+    func prepare(_ assessment: EnvironmentAssessment, onEvent: SwiftlyKitEvent.Handler? = nil) async throws -> LocalBuildEnvironment {
 
         try (await assessHost()).requireReady()
         try await revalidate(assessment)
@@ -66,7 +66,7 @@ extension EnvironmentPreparer {
 
     private func installRequiredComponents(
         _ assessment: EnvironmentAssessment,
-        onEvent: EventHandler?
+        onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> (
         swiftly: SwiftlyInstallation,
         inventory: InstalledEnvironmentInventory
@@ -148,7 +148,7 @@ extension EnvironmentPreparer {
 
 extension EnvironmentPreparer {
 
-    private func bootstrapSwiftly(onEvent: EventHandler?) async throws {
+    private func bootstrapSwiftly(onEvent: SwiftlyKitEvent.Handler?) async throws {
 
         let stagingDirectory = temporaryDirectory.appending(
             path: "SwiftlyKit-\(UUID().uuidString)",
@@ -218,16 +218,16 @@ extension EnvironmentPreparer {
         try await checkedRun(initializeSwiftlyCommand, onEvent: onEvent)
     }
 
-    private func checkedRun(_ command: SubprocessCommand, onEvent: EventHandler?) async throws {
+    private func checkedRun(_ command: SubprocessCommand, onEvent: SwiftlyKitEvent.Handler?) async throws {
         
         let result = try await execute(command, onEvent: onEvent)
         guard result.succeeded
         else { throw EnvironmentPreparationError.installationFailed(Self.bounded(result.combinedOutput)) }
     }
 
-    private func execute(_ command: SubprocessCommand, onEvent: EventHandler?) async throws -> SubprocessResult {
+    private func execute(_ command: SubprocessCommand, onEvent: SwiftlyKitEvent.Handler?) async throws -> SubprocessResult {
         do {
-            return try await runner.run(command, onOutput: CommandOutput.handler(for: onEvent))
+            return try await runner.run(command, onOutput: CommandOutputChunk.handler(for: onEvent))
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -236,7 +236,7 @@ extension EnvironmentPreparer {
         }
     }
 
-    private func report(_ component: PreparationComponent, _ detail: String, to handler: EventHandler?) async {
+    private func report(_ component: PreparationComponent, _ detail: String, to handler: SwiftlyKitEvent.Handler?) async {
 
         let progress = OperationProgress(
             operation: .preparingEnvironment,

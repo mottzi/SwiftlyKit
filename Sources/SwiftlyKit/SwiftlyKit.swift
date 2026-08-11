@@ -2,7 +2,7 @@ import Foundation
 
 /// Cross-compilation API that builds verified static Linux executables from trusted local Swift packages.
 /// Each initialization creates a mutation gate that its copies share.
-/// The gate serializes environment preparation, dependency resolution, and builds.
+/// The gate serializes environment preparation, dependency resolution, builds, and cleanup.
 public struct SwiftlyKit: Sendable {
     
     private let mutationGate: MutationGate
@@ -55,7 +55,7 @@ extension SwiftlyKit {
     /// Passing the assessment authorizes every component in its `requiredComponents` property.
     public func prepare(
         _ assessment: EnvironmentAssessment,
-        onEvent: EventHandler? = nil
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> LocalBuildEnvironment {
         
         try await mutationGate.withAccess {
@@ -80,7 +80,7 @@ extension SwiftlyKit {
     
     /// Runs SwiftPM dependency resolution with the prepared toolchain.
     /// This operation can access the network and create or update `Package.resolved`.
-    public func resolveDependencies(using environment: LocalBuildEnvironment, onEvent: EventHandler? = nil) async throws {
+    public func resolveDependencies(using environment: LocalBuildEnvironment, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
         
         try await mutationGate.withAccess {
             do { try await swiftPM.resolveDependencies(using: environment, onEvent: onEvent) }
@@ -93,11 +93,11 @@ extension SwiftlyKit {
     
     /// Builds and verifies one executable with the prepared toolchain and SDK.
     /// Disables automatic dependency resolution and throws `dependencyResolutionRequired` if resolution is necessary.
-    /// Strips the executable if requested and publishes it atomically if an output URL is present.
+    /// Strips the executable if requested, copies it atomically if requested, and then performs requested cleanup.
     public func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
-        onEvent: EventHandler? = nil
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> URL {
         
         try await mutationGate.withAccess {
@@ -108,6 +108,37 @@ extension SwiftlyKit {
             catch { throw SwiftlyKitError.buildFailed("An unexpected build error occurred.") }
         }
     }
+
+    /// Removes compiled products and intermediates from the selected SwiftPM scratch storage.
+    /// Retains package checkouts, repository clones, downloaded artifacts, and workspace state.
+    public func cleanBuildArtifacts(
+        in storage: BuildStorage = .packageDefault,
+        using environment: LocalBuildEnvironment,
+        onEvent: SwiftlyKitEvent.Handler? = nil
+    ) async throws {
+
+        try await mutationGate.withAccess {
+            do { try await swiftPM.cleanBuildArtifacts(in: storage, using: environment, onEvent: onEvent) }
+            catch is CancellationError { throw CancellationError() }
+            catch let error as SwiftPMError { throw error.swiftlyKitError }
+            catch { throw SwiftlyKitError.buildArtifactCleanupFailed("An unexpected cleanup error occurred.") }
+        }
+    }
+
+    /// Removes the complete selected SwiftPM scratch directory, including dependency storage.
+    public func resetBuildStorage(
+        in storage: BuildStorage = .packageDefault,
+        using environment: LocalBuildEnvironment,
+        onEvent: SwiftlyKitEvent.Handler? = nil
+    ) async throws {
+
+        try await mutationGate.withAccess {
+            do { try await swiftPM.resetBuildStorage(in: storage, using: environment, onEvent: onEvent) }
+            catch is CancellationError { throw CancellationError() }
+            catch let error as SwiftPMError { throw error.swiftlyKitError }
+            catch { throw SwiftlyKitError.buildStorageResetFailed("An unexpected cleanup error occurred.") }
+        }
+    }
     
 }
 
@@ -116,12 +147,15 @@ extension SwiftlyKit {
     /// Prepares the required environment, resolves dependencies if necessary, and builds one verified executable.
     /// Authorizes required component installation and resolves dependencies once before a build retry.
     /// Requires exactly one executable product if `product` is `nil`.
+    /// Copies and cleans build storage according to `output`.
     public static func build(
         _ packageRoot: URL,
         product: String? = nil,
         for target: BuildTarget = .linux(.x86_64),
         configuration: BuildConfiguration = .release,
-        onEvent: EventHandler? = nil
+        storage: BuildStorage = .packageDefault,
+        output: BuildOutput = .buildStorage,
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> URL {
 
         try await SwiftlyKit().build(
@@ -129,6 +163,8 @@ extension SwiftlyKit {
             product: product,
             for: target,
             configuration: configuration,
+            storage: storage,
+            output: output,
             onEvent: onEvent
         )
     }
@@ -138,14 +174,21 @@ extension SwiftlyKit {
         product productName: String?,
         for target: BuildTarget,
         configuration: BuildConfiguration,
-        onEvent: EventHandler?
+        storage: BuildStorage = .packageDefault,
+        output: BuildOutput = .buildStorage,
+        onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> URL {
 
         let assessment = try await assess(packageRoot, for: target)
         let environment = try await prepare(assessment, onEvent: onEvent)
         let products = try await executableProducts(using: environment)
         let product = try selectProduct(named: productName, from: products)
-        let request = BuildRequest(product, configuration: configuration)
+        let request = BuildRequest(
+            product,
+            configuration: configuration,
+            storage: storage,
+            output: output
+        )
 
         do {
             return try await build(request, using: environment, onEvent: onEvent)

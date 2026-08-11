@@ -4,8 +4,12 @@ public enum SwiftlyKitEvent: Sendable {
     case progress(OperationProgress)
 
     /// Forwards decoded output from a delegated mutating command.
-    case output(CommandOutput)
+    case output(CommandOutputChunk)
 }
 
-/// An asynchronous observer that SwiftlyKit awaits for each emitted event.
-public typealias EventHandler = @Sendable (SwiftlyKitEvent) async -> Void
+extension SwiftlyKitEvent {
+
+    /// An asynchronous observer that SwiftlyKit awaits for each emitted event.
+    public typealias Handler = @Sendable (SwiftlyKitEvent) async -> Void
+
+}

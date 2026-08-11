@@ -16,12 +16,26 @@ struct SwiftPMTests {
             (.executableNotFound("Tool"), .executableProductNotFound("Tool")),
             (.unsupportedProductResources("Tool"), .unsupportedProductResources("Tool")),
             (.invalidExecutable("invalid"), .executableVerificationFailed("invalid")),
+            (.unsafeBuildStorage(output), .unsafeBuildStorage(output)),
+            (.outputInsideBuildStorage(output), .outputInsideBuildStorage(output)),
             (.outputAlreadyExists(output), .outputAlreadyExists(output)),
-            (.outputPublicationFailed(output), .outputPublicationFailed(output)),
+            (.outputCopyFailed(output), .outputCopyFailed(output)),
+            (
+                .postBuildCleanupFailed(output: output, diagnostic: "cleanup failed"),
+                .postBuildCleanupFailed(output: output, detail: "cleanup failed")
+            ),
             (.commandFailed(operation: .build, diagnostic: "build failed"), .buildFailed("build failed")),
             (.commandFailed(operation: .packageDescription, diagnostic: "invalid manifest"), .packageInspectionFailed("invalid manifest")),
             (.commandFailed(operation: .dependencyResolution, diagnostic: "unresolved"), .dependencyResolutionFailed("unresolved")),
-            (.commandFailed(operation: .stripping, diagnostic: "objcopy failed"), .stripFailed("objcopy failed"))
+            (.commandFailed(operation: .stripping, diagnostic: "objcopy failed"), .stripFailed("objcopy failed")),
+            (
+                .commandFailed(operation: .cleaningBuildArtifacts, diagnostic: "clean failed"),
+                .buildArtifactCleanupFailed("clean failed")
+            ),
+            (
+                .commandFailed(operation: .resettingBuildStorage, diagnostic: "reset failed"),
+                .buildStorageResetFailed("reset failed")
+            )
         ]
 
         for (internalError, publicError) in mappings {
@@ -54,7 +68,7 @@ struct SwiftPMTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: mapping.configuration,
-                scratchDirectory: scratch,
+                storage: .directory(scratch),
                 environment: [
                     "CUSTOM": "value",
                     "HOME": "/untrusted/home",
@@ -113,7 +127,7 @@ struct SwiftPMTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: .release,
-                scratchDirectory: scratch
+                storage: .directory(scratch)
             )
             let swiftPM = SwiftPM(
                 runner: runner,
@@ -304,8 +318,8 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Explicit stripping is reverified and the result is published without replacement")
-    func stripAndPublish() async throws {
+    @Test("Explicit stripping is reverified and the result is copied without replacement")
+    func stripAndCopy() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
@@ -322,7 +336,7 @@ struct SwiftPMTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: .release,
-                output: output,
+                output: .copy(to: output),
                 strip: true
             )
             let swiftPM = SwiftPM(
@@ -343,7 +357,7 @@ struct SwiftPMTests {
             #expect(commands[3].arguments == [
                 "run", "llvm-objcopy", "--strip-all", executable.path, "+6.2.1"
             ])
-            #expect(await events.operations == [.building, .stripping, .publishing])
+            #expect(await events.operations == [.building, .stripping, .copying])
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "built"),
                 EventOutput(stream: .standardOutput, text: "stripped")
@@ -372,7 +386,7 @@ private func argument(after option: String, in arguments: [String]) throws -> St
 
 private struct EventOutput: Equatable {
 
-    let stream: CommandOutput.Stream
+    let stream: CommandOutputChunk.Stream
     let text: String
 
 }

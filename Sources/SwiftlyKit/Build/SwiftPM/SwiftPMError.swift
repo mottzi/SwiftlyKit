@@ -8,8 +8,11 @@ enum SwiftPMError: Error, Equatable {
     case executableNotFound(String)
     case unsupportedProductResources(String)
     case invalidExecutable(String)
+    case unsafeBuildStorage(URL)
+    case outputInsideBuildStorage(URL)
     case outputAlreadyExists(URL)
-    case outputPublicationFailed(URL)
+    case outputCopyFailed(URL)
+    case postBuildCleanupFailed(output: URL, diagnostic: String)
 }
 
 extension SwiftPMError {
@@ -22,15 +25,28 @@ extension SwiftPMError {
             case .executableNotFound(let product): .executableProductNotFound(product)
             case .unsupportedProductResources(let product): .unsupportedProductResources(product)
             case .invalidExecutable(let detail): .executableVerificationFailed(detail)
+            case .unsafeBuildStorage(let url): .unsafeBuildStorage(url)
+            case .outputInsideBuildStorage(let url): .outputInsideBuildStorage(url)
             case .outputAlreadyExists(let url): .outputAlreadyExists(url)
-            case .outputPublicationFailed(let url): .outputPublicationFailed(url)
+            case .outputCopyFailed(let url): .outputCopyFailed(url)
+            case .postBuildCleanupFailed(let output, let diagnostic):
+                .postBuildCleanupFailed(output: output, detail: diagnostic)
             case .commandFailed(let operation, let diagnostic):
                 switch operation {
                     case .build: .buildFailed(diagnostic)
                     case .packageDescription: .packageInspectionFailed(diagnostic)
                     case .dependencyResolution: .dependencyResolutionFailed(diagnostic)
                     case .stripping: .stripFailed(diagnostic)
+                    case .cleaningBuildArtifacts: .buildArtifactCleanupFailed(diagnostic)
+                    case .resettingBuildStorage: .buildStorageResetFailed(diagnostic)
                 }
+        }
+    }
+
+    var cleanupDiagnostic: String {
+        switch self {
+            case .commandFailed(_, let diagnostic): diagnostic
+            default: "An unexpected cleanup error occurred."
         }
     }
 
@@ -41,4 +57,6 @@ enum SwiftPMOperation {
     case packageDescription
     case dependencyResolution
     case stripping
+    case cleaningBuildArtifacts
+    case resettingBuildStorage
 }

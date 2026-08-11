@@ -1,5 +1,5 @@
 /// A decoded text chunk from standard output or standard error of a delegated command.
-public struct CommandOutput: Sendable {
+public struct CommandOutputChunk: Sendable {
 
     /// The standard stream that produced this text chunk.
     public let stream: Stream
@@ -14,20 +14,20 @@ public struct CommandOutput: Sendable {
 
 }
 
-extension CommandOutput {
+extension CommandOutputChunk {
 
-    static func handler(for eventHandler: EventHandler?) -> SubprocessOutputHandler? {
+    static func handler(for eventHandler: SwiftlyKitEvent.Handler?) -> SubprocessOutputHandler? {
 
         guard let eventHandler else { return nil }
 
         return { stream, text in
-            await eventHandler(.output(CommandOutput(stream: stream, text: text)))
+            await eventHandler(.output(CommandOutputChunk(stream: stream, text: text)))
         }
     }
 
 }
 
-extension CommandOutput {
+extension CommandOutputChunk {
     
     /// A standard subprocess output stream.
     public enum Stream: Sendable {

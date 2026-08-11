@@ -9,13 +9,11 @@ public struct BuildRequest: Sendable {
     /// The SwiftPM build configuration.
     public let configuration: BuildConfiguration
     
-    /// An optional SwiftPM scratch directory instead of the package default.
-    /// SwiftlyKit retains exact-SDK selection metadata inside the effective scratch directory.
-    public let scratchDirectory: URL?
+    /// The SwiftPM scratch storage used by the build.
+    public let storage: BuildStorage
     
-    /// The optional file URL for atomic publication.
-    /// The destination must not exist, and its parent directory must exist.
-    public let output: URL?
+    /// The location and post-copy lifecycle of the executable.
+    public let output: BuildOutput
     
     /// A Boolean value that removes all symbols from the verified executable if `true`.
     /// SwiftlyKit verifies the executable again after stripping.
@@ -26,18 +24,18 @@ public struct BuildRequest: Sendable {
     public let environment: [String: String]
 
     /// Creates a request for one discovered executable product.
-    /// Defaults to a debug build in package `.build` without stripping, publication, or environment additions.
+    /// Defaults to a debug build in package `.build` without stripping, copying, cleanup, or environment additions.
     public init(
         _ product: ExecutableProduct,
         configuration: BuildConfiguration = .debug,
-        scratchDirectory: URL? = nil,
-        output: URL? = nil,
+        storage: BuildStorage = .packageDefault,
+        output: BuildOutput = .buildStorage,
         strip: Bool = false,
         environment: [String: String] = [:]
     ) {
         self.product = product
         self.configuration = configuration
-        self.scratchDirectory = scratchDirectory
+        self.storage = storage
         self.output = output
         self.strip = strip
         self.environment = environment

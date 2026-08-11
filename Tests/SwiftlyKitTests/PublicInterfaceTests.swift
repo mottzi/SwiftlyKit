@@ -29,6 +29,26 @@ struct PublicInterfaceTests {
         _ = recovery
     }
 
+    @Test("Build storage copying and cleanup compile without testable access")
+    func buildStorageLifecycleCompiles() {
+
+        let workflow: @Sendable (URL, LocalBuildEnvironment, ExecutableProduct, URL) async throws -> URL = {
+            packageRoot, environment, product, destination in
+            let kit = SwiftlyKit()
+            let storage = BuildStorage.directory(packageRoot.appending(path: "scratch"))
+            let request = BuildRequest(
+                product,
+                storage: storage,
+                output: .copy(to: destination, cleanup: .reset)
+            )
+            let executable = try await kit.build(request, using: environment)
+            try await kit.cleanBuildArtifacts(in: storage, using: environment)
+            try await kit.resetBuildStorage(in: storage, using: environment)
+            return executable
+        }
+        _ = workflow
+    }
+
 }
 
 private func documentedWorkflow(_ packageRoot: URL) async throws -> URL {

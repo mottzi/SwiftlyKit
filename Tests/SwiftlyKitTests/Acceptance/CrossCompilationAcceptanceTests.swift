@@ -45,7 +45,7 @@ struct CrossCompilationAcceptanceTests {
                     BuildRequest(
                         product,
                         configuration: .release,
-                        scratchDirectory: scratchDirectory
+                        storage: .directory(scratchDirectory)
                     ),
                     using: environment
                 )
@@ -86,7 +86,7 @@ struct CrossCompilationAcceptanceTests {
             let request = BuildRequest(
                 product,
                 configuration: .release,
-                scratchDirectory: scratchDirectory
+                storage: .directory(scratchDirectory)
             )
             let firstOutput = AcceptanceOutputRecorder()
             let firstExecutable = try await kit.build(

@@ -8,7 +8,7 @@ pairs an official Swift toolchain with its matching Static Linux SDK, builds the
 executable you choose, and verifies the result is a statically linked ELF64 file.
 One `async` call takes you from package to binary; the staged API gives your app
 the control to inspect and authorize installations, select a product, and shape
-the build.
+the build, output copy, and scratch-storage lifecycle.
 
 ## Installation
 
@@ -121,6 +121,19 @@ let executable = try await SwiftlyKit.build(
 )
 ```
 
+Copy the executable out of scratch storage and remove all build storage after a
+successful copy when you need a disposable one-shot build:
+
+```swift
+let destination = URL(filePath: "/path/to/output/MyTool")
+let executable = try await SwiftlyKit.build(
+    packageRoot,
+    product: "MyTool",
+    storage: .directory(URL(filePath: "/path/to/scratch")),
+    output: .copy(to: destination, cleanup: .reset)
+)
+```
+
 > [!IMPORTANT]
 > The fast track authorizes SwiftlyKit to install required environment
 > components. It also authorizes dependency resolution when SwiftPM requires it.
@@ -198,7 +211,8 @@ let output = URL(filePath: "/path/to/output/MyTool")
 let request = BuildRequest(
     product,
     configuration: .release,
-    output: output,
+    storage: .directory(URL(filePath: "/path/to/scratch")),
+    output: .copy(to: output, cleanup: .reset),
     strip: true
 )
 
@@ -221,19 +235,55 @@ A staged build never resolves dependencies automatically. The separate
 | Option | Default | Behavior |
 | --- | --- | --- |
 | `configuration` | `.debug` | Selects the SwiftPM debug or release configuration. |
-| `scratchDirectory` | `nil` | Uses the package `.build` directory. SwiftlyKit retains exact-SDK selection metadata inside the effective scratch directory and does not remove it. |
-| `output` | `nil` | Returns the executable in scratch storage. A supplied destination receives an atomic copy. |
+| `storage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
+| `output` | `.buildStorage` | Returns the executable in scratch storage. `.copy(to:cleanup:)` atomically copies it and then performs the requested cleanup. |
 | `strip` | `false` | Uses the selected toolchain to strip the executable, and then verifies it again. |
 | `environment` | `[:]` | Adds or replaces values for build, bin-path, and strip subprocesses. SwiftlyKit keeps values that protect the prepared toolchain and SDK. |
 
-The parent directory of `output` must exist. SwiftlyKit never replaces an
-existing item at the output URL. It throws `SwiftlyKitError.outputAlreadyExists`
-if the destination exists.
+The parent directory of a copied output must exist. SwiftlyKit never replaces
+an existing item at the output URL. It throws
+`SwiftlyKitError.outputAlreadyExists` if the destination exists.
+
+`BuildCleanup.retain` keeps all scratch storage and is the default.
+`BuildCleanup.clean` delegates to `swift package clean`: it removes compiled
+products and intermediates while retaining SwiftPM repository clones,
+dependency checkouts, downloaded artifacts, and workspace state.
+`BuildCleanup.reset` delegates to `swift package reset` and removes the entire
+effective scratch directory, including those retained dependencies. Both modes
+work with `.packageDefault` and `.directory(URL)` storage.
+
+Automatic `.clean` or `.reset` requires copied output outside the effective
+scratch directory. SwiftlyKit completes the atomic copy before cleanup. If the
+copy succeeds but cleanup fails, it throws
+`SwiftlyKitError.postBuildCleanupFailed`; the associated output URL identifies
+the successfully copied executable that remains available.
+
+Use the staged cleanup operations when cleanup does not belong to the build
+call:
+
+```swift
+try await kit.cleanBuildArtifacts(
+    in: request.storage,
+    using: environment
+)
+
+try await kit.resetBuildStorage(
+    in: request.storage,
+    using: environment
+)
+```
+
+Standalone cleanup uses the same effective storage as a build. Cleaning keeps
+reusable dependency state. Resetting deletes the complete selected directory;
+do not select a directory containing files unrelated to SwiftPM build storage.
+SwiftlyKit rejects build storage equal to or above the package root. Both
+operations leave package sources and `Package.resolved` untouched.
 
 The retained SDK selection is a small hidden directory of symlinks beneath
 `.swiftlykit/sdk-selections` in scratch storage. Its stable path lets SwiftPM
 reuse compiled and linked outputs across identical builds while exposing only
-the exact prepared SDK. Removing scratch storage removes this metadata too.
+the exact prepared SDK. Cleaning or resetting build storage removes this
+metadata; the next build recreates it.
 
 ## Toolchain selection
 
@@ -267,7 +317,7 @@ Pass one event handler to a mutating operation. SwiftlyKit awaits the handler, s
 the handler provides backpressure. SwiftlyKit does not keep an event log.
 
 ```swift
-let onEvent: EventHandler = { event in
+let onEvent: SwiftlyKitEvent.Handler = { event in
     switch event {
     case .progress(let progress):
         print(progress.detail)
@@ -290,7 +340,7 @@ let environment = try await kit.prepare(
 The handler can receive:
 
 - `SwiftlyKitEvent.progress` for preparation, dependency resolution, build,
-  strip, and publication activities.
+  strip, copy, and cleanup activities.
 - `SwiftlyKitEvent.output` for standard output and standard error chunks from
   delegated commands.
 
@@ -328,7 +378,9 @@ SwiftlyKit does not:
 - change the default Swift toolchain;
 - run `swiftly use`;
 - update or replace an existing Swiftly installation;
-- remove Swiftly, a toolchain, an SDK, or build scratch storage;
+- remove Swiftly, a toolchain, or an SDK;
+- remove build scratch storage unless the consumer requests `.reset` or calls
+  `resetBuildStorage(in:using:)`;
 - install Xcode or select Apple developer tools;
 - request the Command Line Tools installer unless the consumer explicitly calls
   `requestCommandLineToolsInstallation()`;
@@ -343,13 +395,12 @@ user's permissions.
 ## Concurrency, cancellation, and errors
 
 All long operations use Swift concurrency and are `async throws` functions. One
-`SwiftlyKit` value serializes preparation, dependency resolution, and builds.
-Read-only assessment and product discovery can run concurrently.
+`SwiftlyKit` value serializes preparation, dependency resolution, builds, and
+cleanup. Read-only assessment and product discovery can run concurrently.
 
 Cancel the calling task to cancel the complete subprocess group. SwiftlyKit
-retains SwiftPM scratch state, including exact-SDK selection metadata, removes
-transient staging files outside scratch, and throws Swift's standard
-`CancellationError`.
+removes transient atomic-copy files and throws Swift's standard
+`CancellationError`. It does not start unrequested cleanup.
 
 Operational failures use `SwiftlyKitError`. It conforms to `LocalizedError` and
 provides a user-facing description. Common control-flow errors include:
@@ -360,6 +411,11 @@ provides a user-facing description. Common control-flow errors include:
 - `executableProductSelectionRequired`
 - `staleAssessment`
 - `outputAlreadyExists`
+- `unsafeBuildStorage`
+- `outputInsideBuildStorage`
+- `postBuildCleanupFailed`
+- `buildArtifactCleanupFailed`
+- `buildStorageResetFailed`
 
 Handle cancellation separately when your app must show different status:
 
@@ -382,11 +438,13 @@ do {
 | `EnvironmentAssessment` | Describes the selected environment and required installations. |
 | `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, and SDK. |
 | `BuildRequest` | Selects one product and its build options. |
+| `BuildStorage` | Selects package-default or explicit SwiftPM scratch storage. |
+| `BuildOutput`, `BuildCleanup` | Select executable copying and retained, cleaned, or reset build storage. |
 | `BuildTarget`, `LinuxArchitecture` | Select the Linux architecture. |
 | `BuildConfiguration` | Selects a debug or release build. |
 | `ToolchainSelection`, `SwiftVersion` | Select an automatic or exact official stable Swift release. |
 | `ExecutableProduct` | Identifies an executable product reported by SwiftPM. |
-| `SwiftlyKitEvent`, `EventHandler` | Report progress and delegated command output. |
+| `SwiftlyKitEvent`, `SwiftlyKitEvent.Handler` | Report progress and delegated command output. |
 | `SwiftlyKitError` | Reports typed operational failures. |
 
 ## Development

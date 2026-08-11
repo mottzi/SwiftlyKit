@@ -119,6 +119,43 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
+    @Test("The fast track forwards custom storage, copied output, and cleanup")
+    func outputAndCleanup() async throws {
+
+        try await withFastTrackTemporaryDirectory { packageRoot in
+            let executable = packageRoot.appending(path: "Tool")
+            let scratch = packageRoot.appending(path: "scratch")
+            let output = packageRoot.appending(path: "OutputTool")
+            try writeELF(to: executable, architecture: .x86_64)
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: packageJSON),
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: packageRoot.path + "\n"),
+                .success(output: "reset")
+            ])
+            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+
+            let result = try await kit.build(
+                packageRoot,
+                product: nil,
+                for: .linux(.x86_64),
+                configuration: .release,
+                storage: .directory(scratch),
+                output: .copy(to: output, cleanup: .reset),
+                onEvent: nil
+            )
+
+            #expect(result == output)
+            let commands = await runner.commands
+            #expect(commands.count == 5)
+            #expect(commands[2].arguments.contains(scratch.path))
+            #expect(commands[4].arguments.contains("reset"))
+            #expect(commands[4].arguments.contains(scratch.path))
+        }
+    }
+
 }
 
 private func fastTrackKit(packageRoot: URL, runner: RecordingSubprocessRunner) -> SwiftlyKit {

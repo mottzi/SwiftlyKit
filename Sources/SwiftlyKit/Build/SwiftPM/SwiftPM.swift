@@ -15,7 +15,7 @@ extension SwiftPM {
     func report(
         _ operation: OperationProgress.Operation,
         detail: String,
-        to handler: EventHandler?
+        to handler: SwiftlyKitEvent.Handler?
     ) async {
 
         await handler?(.progress(OperationProgress(operation: operation, detail: detail)))

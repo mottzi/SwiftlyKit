@@ -127,9 +127,9 @@ struct LiveSubprocessRunnerTests {
 
 private actor OutputRecorder {
 
-    private(set) var output: [CommandOutput.Stream: String] = [:]
+    private(set) var output: [CommandOutputChunk.Stream: String] = [:]
 
-    func record(_ stream: CommandOutput.Stream, _ text: String) {
+    func record(_ stream: CommandOutputChunk.Stream, _ text: String) {
         output[stream, default: ""].append(text)
     }
 

@@ -37,7 +37,7 @@ struct SubprocessResult: Equatable {
 
 }
 
-typealias SubprocessOutputHandler = @Sendable (CommandOutput.Stream, String) async -> Void
+typealias SubprocessOutputHandler = @Sendable (CommandOutputChunk.Stream, String) async -> Void
 
 protocol SubprocessRunning: Sendable {
 

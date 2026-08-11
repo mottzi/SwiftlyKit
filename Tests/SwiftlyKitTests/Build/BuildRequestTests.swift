@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import SwiftlyKit
 
@@ -12,10 +13,19 @@ struct BuildRequestTests {
         )
 
         #expect(request.configuration == .debug)
-        #expect(request.scratchDirectory == nil)
-        #expect(request.output == nil)
+        #expect(request.storage == .packageDefault)
+        #expect(request.output == .buildStorage)
         #expect(request.strip == false)
         #expect(request.environment.isEmpty)
+    }
+
+    @Test("Copied output retains build storage by default")
+    func copiedOutputDefault() {
+
+        let destination = URL(filePath: "/tmp/Server")
+        let output = BuildOutput.copy(to: destination)
+
+        #expect(output == .copy(to: destination, cleanup: .retain))
     }
 
 }

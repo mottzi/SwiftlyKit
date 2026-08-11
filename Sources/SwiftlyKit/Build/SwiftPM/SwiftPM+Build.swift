@@ -5,10 +5,14 @@ extension SwiftPM {
     func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
-        onEvent: EventHandler? = nil
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> URL {
         
         try validateEnvironment(environment)
+
+        let scratchDirectory = try request.storage.validatedDirectory(for: environment.packageRoot)
+
+        try Self.validate(request.output, outside: scratchDirectory)
         
         await report(.building, detail: "Building \(request.product.name).", to: onEvent)
         
@@ -19,9 +23,6 @@ extension SwiftPM {
         
         guard !description.requiresRuntimeResources(request.product.name)
         else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
-        
-        let scratchDirectory = request.scratchDirectory
-            ?? environment.packageRoot.appending(path: ".build", directoryHint: .isDirectory)
         
         let sdkSearchDirectory: URL
         do {
@@ -52,7 +53,7 @@ extension SwiftPM {
             additions: request.environment
         )
 
-        let buildResult = try await runner.run(buildCommand, onOutput: CommandOutput.handler(for: onEvent))
+        let buildResult = try await runner.run(buildCommand, onOutput: CommandOutputChunk.handler(for: onEvent))
 
         guard buildResult.succeeded else {
             let diagnostic = boundedDiagnostic(buildResult)
@@ -97,15 +98,35 @@ extension SwiftPM {
 
         if request.strip {
             await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
-            try await strip(executable, for: request, using: environment, onOutput: CommandOutput.handler(for: onEvent))
+            try await strip(executable, for: request, using: environment, onOutput: CommandOutputChunk.handler(for: onEvent))
         }
 
-        if let output = request.output {
-            await report(.publishing, detail: "Publishing \(request.product.name).", to: onEvent)
-            return try AtomicOutputPublisher.publish(executable, to: output)
-        }
+        switch request.output {
+            case .buildStorage:
+                return executable
 
-        return executable
+            case .copy(let destination, let cleanup):
+                await report(.copying, detail: "Copying \(request.product.name).", to: onEvent)
+                let output = try AtomicOutputCopier.copy(executable, to: destination)
+
+                do {
+                    try await perform(cleanup, in: request.storage, using: environment, onEvent: onEvent)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch let error as SwiftPMError {
+                    throw SwiftPMError.postBuildCleanupFailed(
+                        output: output,
+                        diagnostic: error.cleanupDiagnostic
+                    )
+                } catch {
+                    throw SwiftPMError.postBuildCleanupFailed(
+                        output: output,
+                        diagnostic: "An unexpected cleanup error occurred."
+                    )
+                }
+
+                return output
+        }
     }
 
 }
@@ -157,7 +178,7 @@ extension SwiftPM {
             "--configuration", configurationArgument
         ]
 
-        if let scratchDirectory = request.scratchDirectory {
+        if let scratchDirectory = request.storage.explicitDirectory {
             arguments += ["--scratch-path", scratchDirectory.path]
         }
 
@@ -171,6 +192,23 @@ extension SwiftPM {
         return lowercased.contains("package.resolved")
             || lowercased.contains("automatic resolution is disabled")
             || lowercased.contains("dependencies could not be resolved")
+    }
+
+    private static func validate(_ output: BuildOutput, outside scratchDirectory: URL) throws {
+        guard case .copy(let destination, let cleanup) = output,
+              cleanup != .retain
+        else { return }
+
+        let resolvedScratchDirectory = scratchDirectory.resolvingSymlinksInPath().standardizedFileURL
+        let resolvedDestination = destination
+            .deletingLastPathComponent()
+            .resolvingSymlinksInPath()
+            .appending(path: destination.lastPathComponent)
+            .standardizedFileURL
+
+        guard resolvedDestination != resolvedScratchDirectory,
+              !resolvedDestination.path.hasPrefix(resolvedScratchDirectory.path + "/")
+        else { throw SwiftPMError.outputInsideBuildStorage(destination) }
     }
 
 }

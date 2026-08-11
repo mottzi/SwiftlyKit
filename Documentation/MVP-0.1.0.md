@@ -146,7 +146,7 @@ public struct SwiftlyKit: Sendable {
 
     public func prepare(
         _ assessment: EnvironmentAssessment,
-        onEvent: EventHandler? = nil
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> LocalBuildEnvironment
 
     public func executableProducts(
@@ -155,17 +155,19 @@ public struct SwiftlyKit: Sendable {
 
     public func resolveDependencies(
         using environment: LocalBuildEnvironment,
-        onEvent: EventHandler? = nil
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws
 
     public func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
-        onEvent: EventHandler? = nil
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> URL
 }
 
-public typealias EventHandler = @Sendable (SwiftlyKitEvent) async -> Void
+extension SwiftlyKitEvent {
+    public typealias Handler = @Sendable (SwiftlyKitEvent) async -> Void
+}
 ```
 
 `SwiftlyKit()` is the only public initializer. Production paths and internal
@@ -521,7 +523,7 @@ The optional event handler receives one shared event type:
 ```swift
 public enum SwiftlyKitEvent: Sendable {
     case progress(OperationProgress)
-    case output(CommandOutput)
+    case output(CommandOutputChunk)
 }
 ```
 
@@ -529,7 +531,7 @@ public enum SwiftlyKitEvent: Sendable {
 human-readable detail. SwiftlyKit does not invent fractional or elapsed-time
 progress when its delegated tools do not report trustworthy measurements.
 
-`CommandOutput` identifies standard output or standard error and contains the
+`CommandOutputChunk` identifies standard output or standard error and contains the
 text chunk produced by the subprocess. SwiftlyKit awaits the event handler, which
 provides natural backpressure without an `AsyncStream` buffer.
 

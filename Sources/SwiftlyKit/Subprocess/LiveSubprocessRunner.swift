@@ -59,7 +59,7 @@ extension LiveSubprocessRunner {
 
     private func collect(
         _ sequence: SubprocessOutputSequence,
-        stream: CommandOutput.Stream,
+        stream: CommandOutputChunk.Stream,
         handler: SubprocessOutputHandler?
     ) async throws -> String {
 

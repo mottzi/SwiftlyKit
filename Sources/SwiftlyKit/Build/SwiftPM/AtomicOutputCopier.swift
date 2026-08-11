@@ -1,12 +1,12 @@
 import Foundation
 
-enum AtomicOutputPublisher {
+enum AtomicOutputCopier {
 
-    static func publish(_ source: URL, to destination: URL) throws -> URL {
+    static func copy(_ source: URL, to destination: URL) throws -> URL {
 
         guard source.isFileURL,
               destination.isFileURL
-        else { throw SwiftPMError.outputPublicationFailed(destination) }
+        else { throw SwiftPMError.outputCopyFailed(destination) }
 
         guard !FileManager.default.fileExists(atPath: destination.path)
         else { throw SwiftPMError.outputAlreadyExists(destination) }
@@ -16,14 +16,14 @@ enum AtomicOutputPublisher {
             .appending(path: ".\(destination.lastPathComponent).swiftlykit-\(UUID().uuidString)")
 
         do { try FileManager.default.copyItem(at: source, to: temporary) }
-        catch { throw SwiftPMError.outputPublicationFailed(destination) }
+        catch { throw SwiftPMError.outputCopyFailed(destination) }
         defer { try? FileManager.default.removeItem(at: temporary) }
 
         let renameStatus = renameatx_np(AT_FDCWD, temporary.path, AT_FDCWD, destination.path, UInt32(RENAME_EXCL))
 
         if renameStatus != 0 {
             if errno == EEXIST { throw SwiftPMError.outputAlreadyExists(destination) }
-            throw SwiftPMError.outputPublicationFailed(destination)
+            throw SwiftPMError.outputCopyFailed(destination)
         }
 
         return destination
