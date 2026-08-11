@@ -1,8 +1,11 @@
-/// An event emitted by a mutating SwiftlyKit operation.
+/// A progress or subprocess output event from a mutating SwiftlyKit operation.
 public enum SwiftlyKitEvent: Sendable {
+    /// Reports the current workflow activity and optional preparation component.
     case progress(OperationProgress)
+
+    /// Forwards decoded output from a delegated mutating command.
     case output(CommandOutput)
 }
 
-/// An optional, awaited event observer.
+/// An asynchronous observer that SwiftlyKit awaits for each emitted event.
 public typealias EventHandler = @Sendable (SwiftlyKitEvent) async -> Void

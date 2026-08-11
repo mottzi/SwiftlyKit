@@ -1,6 +1,9 @@
-/// A supported Linux architecture for a build target.
-public enum LinuxArchitecture: Sendable, Hashable {
+/// A supported architecture for a static Linux build target.
+public enum LinuxArchitecture: Sendable {
+    /// The 64-bit ARM architecture, which Linux identifies as `aarch64`.
     case arm64
+
+    /// The 64-bit x86 architecture.
     case x86_64
 }
 

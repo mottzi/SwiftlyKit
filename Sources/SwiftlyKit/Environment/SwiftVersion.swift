@@ -1,10 +1,16 @@
-/// A stable semantic version of Swift.
+/// A Swift version with unsigned major, minor, and patch components.
 public struct SwiftVersion: Sendable, Hashable {
 
+    /// The major version component.
     public let major: UInt
+
+    /// The minor version component.
     public let minor: UInt
+
+    /// The patch version component.
     public let patch: UInt
 
+    /// Creates a Swift version from unsigned major, minor, and patch components.
     public init(major: UInt, minor: UInt, patch: UInt) {
         self.major = major
         self.minor = minor
@@ -15,6 +21,7 @@ public struct SwiftVersion: Sendable, Hashable {
 
 extension SwiftVersion: CustomStringConvertible {
 
+    /// The version in `major.minor.patch` format.
     public var description: String {
         "\(major).\(minor).\(patch)"
     }
@@ -23,6 +30,7 @@ extension SwiftVersion: CustomStringConvertible {
 
 extension SwiftVersion: Comparable {
 
+    /// Returns `true` if the left version is less than the right version in major, minor, and patch order.
     public static func < (lhs: SwiftVersion, rhs: SwiftVersion) -> Bool {
         if lhs.major != rhs.major { return lhs.major < rhs.major }
         if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
@@ -54,9 +62,9 @@ extension SwiftVersion {
 
 }
 
-private extension Substring {
+extension Substring {
 
-    var isASCIIDecimal: Bool {
+    fileprivate var isASCIIDecimal: Bool {
         !isEmpty && utf8.allSatisfy { (48...57).contains($0) }
     }
 

@@ -1,6 +1,7 @@
-/// Selects the platform and architecture for a build.
+/// A supported Linux cross-compilation target.
 public enum BuildTarget: Sendable, Hashable {
 
+    /// Selects a Linux Musl target for the specified architecture.
     case linux(LinuxArchitecture)
 
 }

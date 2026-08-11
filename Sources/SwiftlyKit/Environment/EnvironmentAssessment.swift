@@ -1,8 +1,9 @@
 import Foundation
 
-/// A read-only description of the exact environment SwiftlyKit will prepare.
+/// A read-only result for one exact build environment and its unavailable components.
 public struct EnvironmentAssessment: Sendable {
 
+    /// The unavailable components that preparation is authorized to install.
     public let requiredComponents: [PreparationComponent]
 
     let packageInputs: PackageInputSnapshot
@@ -26,42 +27,42 @@ public struct EnvironmentAssessment: Sendable {
 
 extension EnvironmentAssessment {
     
-    /// The canonical package root captured during assessment.
+    /// The canonical package root that the assessment captured.
     public var packageRoot: URL {
         packageInputs.packageRoot
     }
 
-    /// The package's declared Swift tools version.
+    /// The Swift tools version that the package manifest declared during assessment.
     public var toolsVersion: SwiftVersion {
         packageInputs.toolsVersion
     }
 
-    /// The exact official Swift release selected for the package.
+    /// The exact official Swift release that the assessment selected.
     public var swiftVersion: SwiftVersion {
         release.version
     }
 
-    /// The matching exact Static Linux SDK.
+    /// The exact Static Linux SDK that is paired with the selected Swift release.
     public var staticLinuxSDK: StaticLinuxSDK {
         release.staticLinuxSDK
     }
 
-    /// Whether a compatible Swiftly installation is already available.
+    /// `true` if the assessment did not require Swiftly installation.
     public var isSwiftlyAvailable: Bool {
         !requiredComponents.contains(.swiftly)
     }
 
-    /// Whether the selected toolchain is already available.
+    /// `true` if the assessment did not require installation of the selected toolchain.
     public var isToolchainAvailable: Bool {
         !requiredComponents.contains(.toolchain)
     }
 
-    /// Whether the selected Static Linux SDK is already available.
+    /// `true` if the assessment did not require installation of the selected Static Linux SDK.
     public var isStaticLinuxSDKAvailable: Bool {
         !requiredComponents.contains(.staticLinuxSDK)
     }
 
-    /// Whether preparation will install at least one component.
+    /// `true` if the assessment authorizes installation of one or more components.
     public var requiresInstallation: Bool {
         !requiredComponents.isEmpty
     }

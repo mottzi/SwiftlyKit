@@ -1,9 +1,12 @@
 import Foundation
 
-/// A prepared capability binding operations to one exact toolchain and SDK.
+/// A prepared capability that binds build operations to one package, target, Swiftly executable, toolchain, and SDK.
 public struct LocalBuildEnvironment: Sendable {
 
+    /// The exact Swift toolchain version that is bound to build operations.
     public let swiftVersion: SwiftVersion
+
+    /// The exact Static Linux SDK that is bound to build operations.
     public let staticLinuxSDK: StaticLinuxSDK
 
     let packageRoot: URL

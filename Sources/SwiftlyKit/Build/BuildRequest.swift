@@ -1,6 +1,6 @@
 import Foundation
 
-/// Describes one executable build.
+/// Build options for one discovered executable product.
 public struct BuildRequest: Sendable {
 
     /// The executable product to build.
@@ -13,15 +13,20 @@ public struct BuildRequest: Sendable {
     /// SwiftlyKit retains exact-SDK selection metadata inside the effective scratch directory.
     public let scratchDirectory: URL?
     
-    /// An optional publication destination that must not already exist.
+    /// The optional file URL for atomic publication.
+    /// The destination must not exist, and its parent directory must exist.
     public let output: URL?
     
-    /// Whether to strip the verified executable before publication.
+    /// A Boolean value that removes all symbols from the verified executable if `true`.
+    /// SwiftlyKit verifies the executable again after stripping.
     public let strip: Bool
     
-    /// Additional subprocess environment values. SwiftlyKit preserves its required home and Swiftly values.
+    /// Additional environment values for build, bin-path, and strip commands.
+    /// SwiftlyKit preserves protected home and Swiftly values.
     public let environment: [String: String]
 
+    /// Creates a request for one discovered executable product.
+    /// Defaults to a debug build in package `.build` without stripping, publication, or environment additions.
     public init(
         _ product: ExecutableProduct,
         configuration: BuildConfiguration = .debug,

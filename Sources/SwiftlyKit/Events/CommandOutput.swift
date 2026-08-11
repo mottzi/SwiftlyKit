@@ -1,7 +1,10 @@
-/// A bounded chunk of subprocess output.
+/// A decoded text chunk from standard output or standard error of a delegated command.
 public struct CommandOutput: Sendable {
 
+    /// The standard stream that produced this text chunk.
     public let stream: Stream
+
+    /// Decoded subprocess text with its original line breaks.
     public let text: String
 
     private init(stream: Stream, text: String) {
@@ -26,8 +29,12 @@ extension CommandOutput {
 
 extension CommandOutput {
     
-    public enum Stream: Sendable, Hashable {
+    /// A standard subprocess output stream.
+    public enum Stream: Sendable {
+        /// Standard output from a delegated subprocess.
         case standardOutput
+
+        /// Standard error from a delegated subprocess.
         case standardError
     }
     
