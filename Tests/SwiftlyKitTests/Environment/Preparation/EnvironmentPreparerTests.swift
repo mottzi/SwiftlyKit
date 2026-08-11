@@ -25,7 +25,7 @@ struct EnvironmentPreparerTests {
         let validations = Counter()
         let preparer = EnvironmentPreparer(
             runner: commands,
-            checkHost: {},
+            assessHost: { .ready },
             downloadPackage: { _, _ in Issue.record("download must not run") },
             detectSwiftly: { swiftly },
             inspect: { _, _ in
@@ -59,7 +59,7 @@ struct EnvironmentPreparerTests {
         ])
         let preparer = EnvironmentPreparer(
             runner: commands,
-            checkHost: {},
+            assessHost: { .ready },
             downloadPackage: { _, _ in Issue.record("download must not run") },
             detectSwiftly: { swiftly },
             inspect: { _, _ in try await inspections.next() },
@@ -92,7 +92,7 @@ struct EnvironmentPreparerTests {
         ])
         let preparer = EnvironmentPreparer(
             runner: commands,
-            checkHost: {},
+            assessHost: { .ready },
             detectSwiftly: { swiftly },
             inspect: { _, _ in try await inspections.next() },
             locateSDK: { _ in URL(filePath: "/tmp/sdk.artifactbundle") },
@@ -118,7 +118,7 @@ struct EnvironmentPreparerTests {
         ])
         let preparer = EnvironmentPreparer(
             runner: commands,
-            checkHost: {},
+            assessHost: { .ready },
             detectSwiftly: { swiftly },
             inspect: { _, _ in try await inspections.next() },
             revalidate: { _ in }
@@ -149,7 +149,7 @@ struct EnvironmentPreparerTests {
                 homeDirectory: temporaryDirectory.appending(path: "home"),
                 temporaryDirectory: temporaryDirectory,
                 runner: commands,
-                checkHost: {},
+                assessHost: { .ready },
                 downloadPackage: { source, destination in
                     #expect(source.absoluteString == "https://download.swift.org/swiftly/darwin/swiftly.pkg")
                     try Data("package".utf8).write(to: destination)
@@ -179,7 +179,7 @@ struct EnvironmentPreparerTests {
         let commands = RecordingSubprocessRunner(results: [])
         let preparer = EnvironmentPreparer(
             runner: commands,
-            checkHost: {},
+            assessHost: { .ready },
             downloadPackage: { _, _ in throw EnvironmentPreparationError.invalidHTTPResponse(503) },
             detectSwiftly: { nil },
             revalidate: { _ in }
@@ -223,7 +223,7 @@ struct EnvironmentPreparerTests {
             let preparer = EnvironmentPreparer(
                 temporaryDirectory: temporaryDirectory,
                 runner: commands,
-                checkHost: {},
+                assessHost: { .ready },
                 downloadPackage: { _, destination in
                     try Data("package".utf8).write(to: destination)
                 },
@@ -248,7 +248,7 @@ struct EnvironmentPreparerTests {
         let commands = RecordingSubprocessRunner(results: [])
         let preparer = EnvironmentPreparer(
             runner: commands,
-            checkHost: {},
+            assessHost: { .ready },
             detectSwiftly: { swiftly },
             inspect: { _, _ in self.inventory(includesToolchain: false, includesSDK: false) },
             revalidate: { _ in }
@@ -264,7 +264,7 @@ struct EnvironmentPreparerTests {
     func downloadCancellationIsPreserved() async throws {
 
         let preparer = EnvironmentPreparer(
-            checkHost: {},
+            assessHost: { .ready },
             downloadPackage: { _, _ in throw CancellationError() },
             detectSwiftly: { nil },
             revalidate: { _ in }

@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import SwiftlyKit
 
-@Suite("SDK search path preparation")
-struct SDKSearchPathPreparerTests {
+@Suite("SDK selection directory")
+struct SDKSelectionDirectoryTests {
 
     @Test("Preparation is deterministic and exposes only the exact SDK")
     func deterministicExactSelection() throws {
@@ -13,12 +13,12 @@ struct SDKSearchPathPreparerTests {
             let identifier = "swift-6.3.3-RELEASE_static-linux-0.1.0"
             let bundle = try createBundle(identifier: identifier, in: directory)
 
-            let firstSelection = try SDKSearchPathPreparer.prepare(
+            let firstSelection = try SDKSelectionDirectory.resolve(
                 sdkIdentifier: identifier,
                 sdkBundleURL: bundle,
                 scratchDirectory: scratch
             )
-            let secondSelection = try SDKSearchPathPreparer.prepare(
+            let secondSelection = try SDKSelectionDirectory.resolve(
                 sdkIdentifier: identifier,
                 sdkBundleURL: bundle,
                 scratchDirectory: scratch
@@ -48,12 +48,12 @@ struct SDKSearchPathPreparerTests {
             let firstBundle = try createBundle(identifier: firstIdentifier, in: directory)
             let secondBundle = try createBundle(identifier: secondIdentifier, in: directory)
 
-            let firstSelection = try SDKSearchPathPreparer.prepare(
+            let firstSelection = try SDKSelectionDirectory.resolve(
                 sdkIdentifier: firstIdentifier,
                 sdkBundleURL: firstBundle,
                 scratchDirectory: scratch
             )
-            let secondSelection = try SDKSearchPathPreparer.prepare(
+            let secondSelection = try SDKSelectionDirectory.resolve(
                 sdkIdentifier: secondIdentifier,
                 sdkBundleURL: secondBundle,
                 scratchDirectory: scratch
@@ -80,12 +80,12 @@ struct SDKSearchPathPreparerTests {
             let firstBundle = try createBundle(identifier: identifier, in: firstRoot)
             let secondBundle = try createBundle(identifier: identifier, in: secondRoot)
 
-            let firstSelection = try SDKSearchPathPreparer.prepare(
+            let firstSelection = try SDKSelectionDirectory.resolve(
                 sdkIdentifier: identifier,
                 sdkBundleURL: firstBundle,
                 scratchDirectory: scratch
             )
-            let secondSelection = try SDKSearchPathPreparer.prepare(
+            let secondSelection = try SDKSelectionDirectory.resolve(
                 sdkIdentifier: identifier,
                 sdkBundleURL: secondBundle,
                 scratchDirectory: scratch
@@ -106,7 +106,7 @@ struct SDKSearchPathPreparerTests {
             let selections = try await withThrowingTaskGroup(of: URL.self) { group in
                 for _ in 0..<16 {
                     group.addTask {
-                        try SDKSearchPathPreparer.prepare(
+                        try SDKSelectionDirectory.resolve(
                             sdkIdentifier: identifier,
                             sdkBundleURL: bundle,
                             scratchDirectory: scratch
@@ -124,6 +124,32 @@ struct SDKSearchPathPreparerTests {
         }
     }
 
+    @Test("A lost creation race verifies and reuses the winner")
+    func lostCreationRace() throws {
+
+        try withTemporaryDirectory(prefix: "SwiftlyKit-SDKSearchPath") { directory in
+            let scratch = directory.appending(path: "scratch", directoryHint: .isDirectory)
+            let identifier = "swift-6.3.3-RELEASE_static-linux-0.1.0"
+            let bundle = try createBundle(identifier: identifier, in: directory)
+
+            let selection = try SDKSelectionDirectory.resolve(
+                sdkIdentifier: identifier,
+                sdkBundleURL: bundle,
+                scratchDirectory: scratch,
+                fileManager: LosingSelectionRaceFileManager()
+            )
+
+            let entries = try FileManager.default.contentsOfDirectory(
+                at: selection,
+                includingPropertiesForKeys: [.isSymbolicLinkKey]
+            )
+            let link = try #require(entries.first)
+
+            #expect(entries.count == 1)
+            #expect(link.resolvingSymlinksInPath().path == bundle.resolvingSymlinksInPath().path)
+        }
+    }
+
     @Test("Unexpected selection contents are preserved and rejected")
     func unexpectedSelectionContents() throws {
 
@@ -131,7 +157,7 @@ struct SDKSearchPathPreparerTests {
             let scratch = directory.appending(path: "scratch", directoryHint: .isDirectory)
             let identifier = "swift-6.3.3-RELEASE_static-linux-0.1.0"
             let bundle = try createBundle(identifier: identifier, in: directory)
-            let selection = try SDKSearchPathPreparer.prepare(
+            let selection = try SDKSelectionDirectory.resolve(
                 sdkIdentifier: identifier,
                 sdkBundleURL: bundle,
                 scratchDirectory: scratch
@@ -139,8 +165,8 @@ struct SDKSearchPathPreparerTests {
             let unexpectedEntry = selection.appending(path: "unexpected")
             try Data().write(to: unexpectedEntry)
 
-            #expect(throws: SDKSearchPathPreparer.Error.self) {
-                try SDKSearchPathPreparer.prepare(
+            #expect(throws: SDKSelectionDirectory.Error.self) {
+                try SDKSelectionDirectory.resolve(
                     sdkIdentifier: identifier,
                     sdkBundleURL: bundle,
                     scratchDirectory: scratch
@@ -166,8 +192,8 @@ struct SDKSearchPathPreparerTests {
             let identifier = "swift-6.3.3-RELEASE_static-linux-0.1.0"
             let bundle = try createBundle(identifier: identifier, in: directory)
 
-            #expect(throws: SDKSearchPathPreparer.Error.unexpectedItem(redirectedComponent.path)) {
-                try SDKSearchPathPreparer.prepare(
+            #expect(throws: SDKSelectionDirectory.Error.unexpectedItem(redirectedComponent.path)) {
+                try SDKSelectionDirectory.resolve(
                     sdkIdentifier: identifier,
                     sdkBundleURL: bundle,
                     scratchDirectory: scratch
@@ -184,8 +210,8 @@ struct SDKSearchPathPreparerTests {
             let scratch = directory.appending(path: "scratch", directoryHint: .isDirectory)
             let bundle = try createBundle(identifier: "sdk", in: directory)
 
-            #expect(throws: SDKSearchPathPreparer.Error.invalidIdentifier("../outside")) {
-                try SDKSearchPathPreparer.prepare(
+            #expect(throws: SDKSelectionDirectory.Error.invalidIdentifier("../outside")) {
+                try SDKSelectionDirectory.resolve(
                     sdkIdentifier: "../outside",
                     sdkBundleURL: bundle,
                     scratchDirectory: scratch
@@ -202,7 +228,7 @@ struct SDKSearchPathPreparerTests {
             let scratch = directory.appending(path: "scratch", directoryHint: .isDirectory)
             let identifier = "swift-6.3.3-RELEASE_static-linux-0.1.0"
             let bundle = try createBundle(identifier: identifier, in: directory)
-            let selection = try SDKSearchPathPreparer.prepare(
+            let selection = try SDKSelectionDirectory.resolve(
                 sdkIdentifier: identifier,
                 sdkBundleURL: bundle,
                 scratchDirectory: scratch
@@ -212,8 +238,8 @@ struct SDKSearchPathPreparerTests {
             let conflictingBundle = try createBundle(identifier: "conflicting", in: directory)
             try FileManager.default.createSymbolicLink(at: link, withDestinationURL: conflictingBundle)
 
-            #expect(throws: SDKSearchPathPreparer.Error.unexpectedItem(link.path)) {
-                try SDKSearchPathPreparer.prepare(
+            #expect(throws: SDKSelectionDirectory.Error.unexpectedItem(link.path)) {
+                try SDKSelectionDirectory.resolve(
                     sdkIdentifier: identifier,
                     sdkBundleURL: bundle,
                     scratchDirectory: scratch
@@ -221,6 +247,15 @@ struct SDKSearchPathPreparerTests {
             }
             #expect(link.resolvingSymlinksInPath().path == conflictingBundle.resolvingSymlinksInPath().path)
         }
+    }
+
+}
+
+private final class LosingSelectionRaceFileManager: FileManager, @unchecked Sendable {
+
+    override func createSymbolicLink(at url: URL, withDestinationURL destURL: URL) throws {
+        try super.createSymbolicLink(at: url, withDestinationURL: destURL)
+        throw CocoaError(.fileWriteFileExists)
     }
 
 }

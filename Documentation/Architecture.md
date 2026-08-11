@@ -7,7 +7,7 @@ workflow. Both routes use the same three internal workflow components:
 ```mermaid
 flowchart LR
     Consumer --> Facade[SwiftlyKit]
-    Facade -->|request Command Line Tools installer| Requester[CommandLineToolsInstallationRequester]
+    Facade -->|request Command Line Tools installer| Requester[HostCLTInstaller]
     Facade -->|assess| Assessor[EnvironmentAssessor]
     Assessor --> Assessment[EnvironmentAssessment]
     Assessment --> Preparer[EnvironmentPreparer]
@@ -41,11 +41,12 @@ and SDK context used by later operations. `BuildRequest` then contains only
 choices for one build.
 
 The static `requestCommandLineToolsInstallation` recovery operation is separate
-from environment preparation. It first reuses host preflight as an idempotency
-check, then invokes Apple's `xcode-select --install` entry point only when a
-usable SDK is unavailable. It returns when macOS accepts the request; it cannot
-observe license acceptance or installation completion. The consumer retries
-assessment after the user finishes the system interaction.
+from environment preparation. `HostPreflight` reports `HostReadiness` as data.
+The recovery operation returns immediately for a ready host, rejects an
+unsupported host, and invokes Apple's `xcode-select --install` entry point only
+when developer tools are unavailable. It returns when macOS accepts the request;
+it cannot observe license acceptance or installation completion. The consumer
+retries assessment after the user finishes the system interaction.
 
 Each `SwiftlyKit` facade instance owns a cancellation-aware FIFO `MutationGate`.
 Preparation, dependency resolution, and builds acquire the gate because they can
@@ -54,14 +55,15 @@ discovery do not acquire it.
 
 ## Implementation map
 
-- `SwiftlyKit.swift` is the public facade, fast-track orchestrator, and boundary
+- `SwiftlyKit.swift` is the public facade, fast-track orchestrator, and interface
   that maps internal failures to `SwiftlyKitError`.
 - `MutationGate.swift` serializes the mutating operations of one facade value.
 - `Package` canonicalizes the package root, parses the tools version, finds the
   nearest `.swift-version`, and snapshots the input files byte-for-byte.
-- `Environment/Host` rejects unsupported hosts and missing developer tools
-  before environment work proceeds, and owns the explicit adapter that requests
-  Apple's interactive Command Line Tools installer.
+- `Environment/Host` represents host readiness explicitly, lets readiness-required
+  operations reject unsupported hosts or missing developer tools before other
+  work proceeds, and owns the adapter that requests Apple's interactive Command
+  Line Tools installer.
 - `Environment/Assessment` coordinates the read-only package, host, release,
   discovery, and selection steps and produces `EnvironmentAssessment`.
 - `Environment/Discovery` detects Swiftly, constructs Swiftly-run commands, and
@@ -76,7 +78,8 @@ discovery do not acquire it.
 - `Build` contains the public build value types. `Build/SwiftPM` validates a
   prepared capability and owns product discovery, explicit dependency
   resolution, build execution, resource rejection, ELF verification, optional
-  stripping, and atomic publication.
+  stripping, and atomic publication. `SDKSelectionDirectory` hides the retained
+  exact-SDK directory layout and its cross-process create-or-verify protocol.
 - `Process` is the only adapter to `swift-subprocess`. Production uses
   `LiveSubprocessRunner`; tests use the same `SubprocessRunning` seam.
 - `Events` contains the optional awaited progress and output interface. Command
@@ -89,6 +92,9 @@ discovery do not acquire it.
 - The Command Line Tools installer is requested only through the explicit public
   recovery operation. It is not part of assessment or preparation, and success
   means only that macOS accepted the request.
+- Unsupported hosts and unavailable developer tools are `HostReadiness` values
+  inside the host module. Operations that cannot recover translate those values
+  to `SwiftlyKitError`; the installer requester branches on them directly.
 - Assessment derives its values from one captured `Package.swift` and nearest
   `.swift-version` state. Preparation compares the same inputs byte-for-byte
   before any mutation.
@@ -106,6 +112,9 @@ discovery do not acquire it.
   only the prepared SDK through a deterministic, isolated SDK search directory
   retained inside the effective build scratch directory. Caller build environment
   additions cannot replace protected home or Swiftly variables.
+- SDK selection resolves only after the retained directory is verified. If
+  another process wins atomic link creation, SwiftlyKit verifies and reuses that
+  exact selection; conflicting filesystem state is never accepted.
 - Product discovery and builds disable automatic dependency resolution. Staged
   builds surface a structured resolution-required error; only the fast track
   performs the explicit resolve-and-retry sequence.

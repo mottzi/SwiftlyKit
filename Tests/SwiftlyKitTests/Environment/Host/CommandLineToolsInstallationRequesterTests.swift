@@ -9,9 +9,9 @@ struct CommandLineToolsInstallationRequesterTests {
     func readyHostIsNoOp() async throws {
 
         let commands = RecordingSubprocessRunner(results: [])
-        let requester = CommandLineToolsInstallationRequester(
+        let requester = HostCLTInstaller(
             runner: commands,
-            checkHost: {}
+            assessHost: { .ready }
         )
 
         try await requester.request()
@@ -23,9 +23,9 @@ struct CommandLineToolsInstallationRequesterTests {
     func requestsInstaller() async throws {
 
         let commands = RecordingSubprocessRunner(results: [.success()])
-        let requester = CommandLineToolsInstallationRequester(
+        let requester = HostCLTInstaller(
             runner: commands,
-            checkHost: { throw SwiftlyKitError.developerToolsUnavailable }
+            assessHost: { .developerToolsUnavailable }
         )
 
         try await requester.request()
@@ -41,9 +41,9 @@ struct CommandLineToolsInstallationRequesterTests {
     func unsupportedHostIsPreserved() async throws {
 
         let commands = RecordingSubprocessRunner(results: [])
-        let requester = CommandLineToolsInstallationRequester(
+        let requester = HostCLTInstaller(
             runner: commands,
-            checkHost: { throw SwiftlyKitError.unsupportedHost }
+            assessHost: { .unsupportedHost }
         )
 
         await #expect(throws: SwiftlyKitError.unsupportedHost) {
@@ -57,9 +57,9 @@ struct CommandLineToolsInstallationRequesterTests {
 
         let output = String(repeating: "x", count: 9 * 1024)
         let commands = RecordingSubprocessRunner(results: [.failure(standardError: output)])
-        let requester = CommandLineToolsInstallationRequester(
+        let requester = HostCLTInstaller(
             runner: commands,
-            checkHost: { throw SwiftlyKitError.developerToolsUnavailable }
+            assessHost: { .developerToolsUnavailable }
         )
 
         await #expect(throws: SwiftlyKitError.commandLineToolsInstallationRequestFailed(
@@ -72,9 +72,9 @@ struct CommandLineToolsInstallationRequesterTests {
     @Test("Cancellation while checking the host is preserved")
     func checkCancellationIsPreserved() async throws {
 
-        let requester = CommandLineToolsInstallationRequester(
+        let requester = HostCLTInstaller(
             runner: RecordingSubprocessRunner(results: []),
-            checkHost: { throw CancellationError() }
+            assessHost: { throw CancellationError() }
         )
 
         await #expect(throws: CancellationError.self) {
@@ -85,9 +85,9 @@ struct CommandLineToolsInstallationRequesterTests {
     @Test("Cancellation while requesting installation is preserved")
     func requestCancellationIsPreserved() async throws {
 
-        let requester = CommandLineToolsInstallationRequester(
+        let requester = HostCLTInstaller(
             runner: ThrowingCommandLineToolsRunner(error: CancellationError()),
-            checkHost: { throw SwiftlyKitError.developerToolsUnavailable }
+            assessHost: { .developerToolsUnavailable }
         )
 
         await #expect(throws: CancellationError.self) {
@@ -99,12 +99,9 @@ struct CommandLineToolsInstallationRequesterTests {
 
 private struct ThrowingCommandLineToolsRunner: SubprocessRunning {
 
-    let error: any Error & Sendable
+    let error: any Error
 
-    func run(
-        _ command: SubprocessCommand,
-        onOutput: SubprocessOutputHandler?
-    ) async throws -> SubprocessResult {
+    func run(_ command: SubprocessCommand, onOutput: SubprocessOutputHandler?) async throws -> SubprocessResult {
         throw error
     }
 

@@ -1,14 +1,14 @@
 import Foundation
 
 /// Prepares exactly the environment authorized by an accepted assessment.
-struct EnvironmentPreparer: Sendable {
+struct EnvironmentPreparer {
 
     private(set) var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     private(set) var temporaryDirectory: URL = FileManager.default.temporaryDirectory
     private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
 
-    private(set) var checkHost: @Sendable () async throws -> Void = {
-        try await HostPreflight().check()
+    private(set) var assessHost: @Sendable () async throws -> HostReadiness = {
+        try await HostPreflight().assess()
     }
 
     private(set) var downloadPackage: @Sendable (URL, URL) async throws -> Void = {
@@ -38,7 +38,7 @@ struct EnvironmentPreparer: Sendable {
     /// Revalidates first, then performs only the mutations authorized by the assessment.
     func prepare(_ assessment: EnvironmentAssessment, onEvent: EventHandler? = nil) async throws -> LocalBuildEnvironment {
 
-        try await checkHost()
+        try (await assessHost()).requireReady()
         try await revalidate(assessment)
         try Task.checkCancellation()
 
@@ -263,7 +263,7 @@ extension EnvironmentPreparer {
 
 }
 
-struct HTTPPackageDownloader: Sendable {
+struct HTTPPackageDownloader {
 
     private(set) var transfer: @Sendable (URL) async throws -> (temporaryURL: URL, statusCode: Int?) = { source in
         try await HTTPPackageDownloader.liveTransfer(source)

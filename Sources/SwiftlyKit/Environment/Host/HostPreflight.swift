@@ -1,7 +1,7 @@
 import Foundation
 
-/// Read-only validation of the host and its active macOS SDK.
-struct HostPreflight: Sendable {
+/// Read-only assessment of the host and its active macOS SDK.
+struct HostPreflight {
 
     private(set) var hostFacts: HostFacts = Self.liveHostFacts
 
@@ -9,14 +9,14 @@ struct HostPreflight: Sendable {
         try await HostPreflight.liveSDKProbe()
     }
 
-    /// Validates the host and its active SDK.
-    func check() async throws {
+    /// Reports whether the host is ready for SwiftlyKit operations.
+    func assess() async throws -> HostReadiness {
 
         try Task.checkCancellation()
 
         guard hostFacts.isAppleSilicon,
               hostFacts.operatingSystemVersion.majorVersion >= 13
-        else { throw SwiftlyKitError.unsupportedHost }
+        else { return .unsupportedHost }
 
         let sdkURL: URL
         do {
@@ -25,7 +25,7 @@ struct HostPreflight: Sendable {
             throw CancellationError()
         } catch {
             if Task.isCancelled { throw CancellationError() }
-            throw SwiftlyKitError.developerToolsUnavailable
+            return .developerToolsUnavailable
         }
 
         try Task.checkCancellation()
@@ -33,8 +33,10 @@ struct HostPreflight: Sendable {
         let canonicalSDKURL = sdkURL
             .resolvingSymlinksInPath()
             .standardizedFileURL
-        
-        guard Self.isUsableSDK(at: canonicalSDKURL) else { throw SwiftlyKitError.developerToolsUnavailable }
+
+        guard Self.isUsableSDK(at: canonicalSDKURL) else { return .developerToolsUnavailable }
+
+        return .ready
     }
 
 }
@@ -81,13 +83,17 @@ extension HostPreflight {
         let result = try await LiveSubprocessRunner().run(command)
 
         try Task.checkCancellation()
-        guard result.succeeded else { throw SwiftlyKitError.developerToolsUnavailable }
+        guard result.succeeded else { throw SDKProbeError.unavailable }
 
         let path = result.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard path.hasPrefix("/") else { throw SwiftlyKitError.developerToolsUnavailable }
+        guard path.hasPrefix("/") else { throw SDKProbeError.unavailable }
 
         try Task.checkCancellation()
         return URL(filePath: path)
     }
 
+}
+
+private enum SDKProbeError: Error {
+    case unavailable
 }

@@ -1,10 +1,10 @@
 import Foundation
 
 /// Read-only orchestration that resolves one exact build environment.
-struct EnvironmentAssessor: Sendable {
+struct EnvironmentAssessor {
 
-    private(set) var checkHost: @Sendable () async throws -> Void = {
-        try await HostPreflight().check()
+    private(set) var assessHost: @Sendable () async throws -> HostReadiness = {
+        try await HostPreflight().assess()
     }
 
     private(set) var detectSwiftly: @Sendable () async throws -> SwiftlyInstallation? = {
@@ -29,7 +29,7 @@ struct EnvironmentAssessor: Sendable {
         toolchain: ToolchainSelection
     ) async throws -> EnvironmentAssessment {
 
-        try await checkHost()
+        try (await assessHost()).requireReady()
 
         let snapshot = try PackageInputSnapshot.capture(at: packageRoot)
 

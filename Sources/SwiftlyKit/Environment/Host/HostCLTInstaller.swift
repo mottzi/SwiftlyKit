@@ -1,32 +1,41 @@
 import Foundation
 
 /// Requests Apple's interactive Command Line Tools installer when the host SDK is unavailable.
-struct CommandLineToolsInstallationRequester: Sendable {
+struct HostCLTInstaller {
 
     private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
 
-    private(set) var checkHost: @Sendable () async throws -> Void = {
-        try await HostPreflight().check()
+    private(set) var assessHost: @Sendable () async throws -> HostReadiness = {
+        try await HostPreflight().assess()
     }
 
     /// Returns after the request is accepted, not after the user completes installation.
     func request() async throws {
 
+        let readiness: HostReadiness
         do {
-            try await checkHost()
-            return
+            readiness = try await assessHost()
         } catch is CancellationError {
             throw CancellationError()
-        } catch SwiftlyKitError.developerToolsUnavailable {
-            // The explicit recovery operation is needed.
-        } catch let error as SwiftlyKitError {
-            throw error
         } catch {
             if Task.isCancelled { throw CancellationError() }
             throw SwiftlyKitError.commandLineToolsInstallationRequestFailed(
                 "The host environment could not be checked."
             )
         }
+
+        switch readiness {
+            case .ready: return
+            case .developerToolsUnavailable: try await requestSystemInstaller()
+            case .unsupportedHost: throw SwiftlyKitError.unsupportedHost
+        }
+    }
+
+}
+
+extension HostCLTInstaller {
+
+    private func requestSystemInstaller() async throws {
 
         try Task.checkCancellation()
 
@@ -59,7 +68,7 @@ struct CommandLineToolsInstallationRequester: Sendable {
 
 }
 
-extension CommandLineToolsInstallationRequester {
+extension HostCLTInstaller {
 
     private static func bounded(_ value: String) -> String {
         String(value.prefix(8 * 1024))

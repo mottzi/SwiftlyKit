@@ -30,7 +30,7 @@ struct SwiftlyKitWorkflowTests {
             let kit = SwiftlyKit(
                 assessor: EnvironmentAssessor(),
                 preparer: EnvironmentPreparer(
-                    checkHost: {},
+                    assessHost: { .ready },
                     detectSwiftly: { Issue.record("detection must follow revalidation"); return nil }
                 ),
                 swiftPM: SwiftPM()
@@ -83,7 +83,7 @@ struct SwiftlyKitWorkflowTests {
             ])
             let kit = SwiftlyKit(
                 assessor: EnvironmentAssessor(
-                    checkHost: {},
+                    assessHost: { .ready },
                     detectSwiftly: { swiftly },
                     loadReleases: { [release] },
                     inspectInventory: { _ in inventory },
@@ -91,7 +91,7 @@ struct SwiftlyKitWorkflowTests {
                 ),
                 preparer: EnvironmentPreparer(
                     runner: runner,
-                    checkHost: {},
+                    assessHost: { .ready },
                     downloadPackage: { _, _ in Issue.record("download must not run") },
                     detectSwiftly: { swiftly },
                     inspect: { _, _ in inventory },
@@ -164,10 +164,7 @@ private actor WorkflowMutationRunner: SubprocessRunning {
         self.binaryDirectory = binaryDirectory
     }
 
-    func run(
-        _ command: SubprocessCommand,
-        onOutput: SubprocessOutputHandler?
-    ) async throws -> SubprocessResult {
+    func run(_ command: SubprocessCommand, onOutput: SubprocessOutputHandler?) async throws -> SubprocessResult {
 
         concurrentCommands += 1
         maximumConcurrentCommands = max(maximumConcurrentCommands, concurrentCommands)

@@ -14,7 +14,7 @@ struct EnvironmentAssessorTests {
             )
             let release = assessorRelease()
             let assessor = EnvironmentAssessor(
-                checkHost: {},
+                assessHost: { .ready },
                 detectSwiftly: { nil },
                 loadReleases: { [release] },
                 inspectInventory: { _ in
@@ -40,7 +40,7 @@ struct EnvironmentAssessorTests {
     func hostRejectionShortCircuits() async {
 
         let assessor = EnvironmentAssessor(
-            checkHost: { throw SwiftlyKitError.unsupportedHost },
+            assessHost: { .unsupportedHost },
             detectSwiftly: { Issue.record("Swiftly detection must not run."); return nil },
             loadReleases: { Issue.record("Catalog loading must not run."); return [] },
             inspectInventory: { _ in
@@ -68,7 +68,7 @@ struct EnvironmentAssessorTests {
             )
 
             let invalidCatalog = EnvironmentAssessor(
-                checkHost: {},
+                assessHost: { .ready },
                 detectSwiftly: { nil },
                 loadReleases: { throw SwiftOrgReleaseCatalog.CatalogError.invalidPayload }
             )
@@ -83,7 +83,7 @@ struct EnvironmentAssessorTests {
             }
 
             let unavailableCatalog = EnvironmentAssessor(
-                checkHost: {},
+                assessHost: { .ready },
                 detectSwiftly: { nil },
                 loadReleases: { throw SwiftOrgReleaseCatalog.CatalogError.networkFailure }
             )
@@ -108,7 +108,7 @@ struct EnvironmentAssessorTests {
             )
             let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
             let assessor = EnvironmentAssessor(
-                checkHost: {},
+                assessHost: { .ready },
                 detectSwiftly: { swiftly },
                 loadReleases: { [assessorRelease()] },
                 inspectInventory: { _ in throw InstalledEnvironmentError.invalidOutput }

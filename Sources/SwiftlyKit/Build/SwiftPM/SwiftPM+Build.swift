@@ -25,12 +25,12 @@ extension SwiftPM {
         
         let sdkSearchDirectory: URL
         do {
-            sdkSearchDirectory = try SDKSearchPathPreparer.prepare(
+            sdkSearchDirectory = try SDKSelectionDirectory.resolve(
                 sdkIdentifier: environment.staticLinuxSDK.identifier,
                 sdkBundleURL: environment.sdkBundleURL,
                 scratchDirectory: scratchDirectory
             )
-        } catch let error as SDKSearchPathPreparer.Error {
+        } catch let error as SDKSelectionDirectory.Error {
             throw SwiftPMError.sdkSearchPathPreparationFailed(
                 error.errorDescription ?? "The exact SDK search directory could not be prepared."
             )

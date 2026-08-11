@@ -145,7 +145,7 @@ private func fastTrackKit(packageRoot: URL, runner: RecordingSubprocessRunner) -
 
     return SwiftlyKit(
         assessor: EnvironmentAssessor(
-            checkHost: {},
+            assessHost: { .ready },
             detectSwiftly: { swiftly },
             loadReleases: { [release] },
             inspectInventory: { _ in inventory },
@@ -153,7 +153,7 @@ private func fastTrackKit(packageRoot: URL, runner: RecordingSubprocessRunner) -
         ),
         preparer: EnvironmentPreparer(
             runner: runner,
-            checkHost: {},
+            assessHost: { .ready },
             downloadPackage: { _, _ in Issue.record("download must not run") },
             detectSwiftly: { swiftly },
             inspect: { _, _ in inventory },

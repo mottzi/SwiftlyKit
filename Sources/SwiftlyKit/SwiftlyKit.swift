@@ -1,27 +1,8 @@
 import Foundation
 
-/// Prepares official Swift cross-compilation environments and builds Linux executables.
-///
-/// The static fast track prepares everything required and selects the sole executable product.
-///
-/// ```swift
-/// let executable = try await SwiftlyKit.build(packageRoot)
-/// ```
-///
-/// Use the staged API to inspect required installations or select from multiple products.
-/// Assessing is read-only. Passing the returned assessment to ``prepare(_:onEvent:)`` explicitly authorizes its
-/// required installations. The resulting ``LocalBuildEnvironment`` carries the context used by every later operation.
-///
-/// ```swift
-/// let kit = SwiftlyKit()
-/// let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))
-/// let environment = try await kit.prepare(assessment)
-/// let products = try await kit.executableProducts(using: environment)
-/// let executable = try await kit.build(
-///     BuildRequest(products[0], configuration: .release),
-///     using: environment
-/// )
-/// ```
+/// Cross-compilation API that builds verified static Linux executables from trusted local Swift packages.
+/// Each initialization creates a mutation gate that its copies share.
+/// The gate serializes environment preparation, dependency resolution, and builds.
 public struct SwiftlyKit: Sendable {
     
     private let mutationGate: MutationGate
@@ -29,6 +10,7 @@ public struct SwiftlyKit: Sendable {
     private let preparer: EnvironmentPreparer
     private let swiftPM: SwiftPM
     
+    /// Creates a SwiftlyKit instance for the current host and user environment.
     public init() {
         self.init(
             assessor: EnvironmentAssessor(),
@@ -48,20 +30,19 @@ public struct SwiftlyKit: Sendable {
         self.swiftPM = swiftPM
     }
 
-    /// Requests Apple's interactive Command Line Tools installer when no usable macOS SDK is active.
-    ///
-    /// This operation returns after macOS accepts the request. The user must finish the system installation and then
-    /// retry assessment or building. If an active Xcode or Command Line Tools SDK is already usable, it returns without
-    /// showing the installer. SwiftlyKit never selects or changes the active developer directory.
+    /// Requests Apple's interactive Command Line Tools installer on a supported host if no usable macOS SDK is active.
+    /// Returns after macOS accepts the request, not after the installation finishes.
+    /// Skips the request if active developer tools provide a usable SDK and never changes the active developer directory.
     public static func requestCommandLineToolsInstallation() async throws {
-        try await CommandLineToolsInstallationRequester().request()
+        try await HostCLTInstaller().request()
     }
 
 }
 
 extension SwiftlyKit {
 
-    /// Assesses the exact environment required by a trusted local package.
+    /// Selects an exact official toolchain and matching Static Linux SDK without changing package or installed state.
+    /// Captures `Package.swift` and the nearest `.swift-version` file so preparation can validate the same inputs.
     public func assess(
         _ packageRoot: URL,
         for target: BuildTarget,
@@ -70,7 +51,8 @@ extension SwiftlyKit {
         try await assessor.assess(packageRoot, for: target, toolchain: toolchain)
     }
     
-    /// Performs the exact mutations described by an accepted assessment.
+    /// Revalidates an assessment, installs only its required components, and returns the bound build environment.
+    /// Passing the assessment authorizes every component in its `requiredComponents` property.
     public func prepare(
         _ assessment: EnvironmentAssessment,
         onEvent: EventHandler? = nil
@@ -86,10 +68,8 @@ extension SwiftlyKit {
         }
     }
     
-    /// Discovers executable products in the package bound to a prepared environment.
-    public func executableProducts(
-        using environment: LocalBuildEnvironment
-    ) async throws -> [ExecutableProduct] {
+    /// Returns explicit and implicit executable products in name order without resolving package dependencies.
+    public func executableProducts(using environment: LocalBuildEnvironment) async throws -> [ExecutableProduct] {
         
         do { return try await swiftPM.executableProducts(using: environment) }
         catch is CancellationError { throw CancellationError() }
@@ -98,11 +78,9 @@ extension SwiftlyKit {
         catch { throw SwiftlyKitError.packageInspectionFailed("An unexpected package error occurred.") }
     }
     
-    /// Explicitly resolves dependencies in the package bound to a prepared environment.
-    public func resolveDependencies(
-        using environment: LocalBuildEnvironment,
-        onEvent: EventHandler? = nil
-    ) async throws {
+    /// Runs SwiftPM dependency resolution with the prepared toolchain.
+    /// This operation can access the network and create or update `Package.resolved`.
+    public func resolveDependencies(using environment: LocalBuildEnvironment, onEvent: EventHandler? = nil) async throws {
         
         try await mutationGate.withAccess {
             do { try await swiftPM.resolveDependencies(using: environment, onEvent: onEvent) }
@@ -113,7 +91,9 @@ extension SwiftlyKit {
         }
     }
     
-    /// Builds, verifies, and optionally publishes one executable product.
+    /// Builds and verifies one executable with the prepared toolchain and SDK.
+    /// Disables automatic dependency resolution and throws `dependencyResolutionRequired` if resolution is necessary.
+    /// Strips the executable if requested and publishes it atomically if an output URL is present.
     public func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
@@ -133,10 +113,9 @@ extension SwiftlyKit {
 
 extension SwiftlyKit {
     
-    /// Prepares the required environment and builds an executable product in one operation.
-    ///
-    /// This operation may install Swiftly, a Swift toolchain, or a Static Linux SDK, and may resolve package dependencies.
-    /// When `product` is `nil`, the package must declare exactly one executable product.
+    /// Prepares the required environment, resolves dependencies if necessary, and builds one verified executable.
+    /// Authorizes required component installation and resolves dependencies once before a build retry.
+    /// Requires exactly one executable product if `product` is `nil`.
     public static func build(
         _ packageRoot: URL,
         product: String? = nil,

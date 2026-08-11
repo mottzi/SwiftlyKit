@@ -5,6 +5,19 @@ import Testing
 @Suite("Host preflight")
 struct HostPreflightTests {
 
+    @Test("Readiness requirements map non-ready states to public errors")
+    func readinessRequirements() throws {
+
+        try HostReadiness.ready.requireReady()
+
+        #expect(throws: SwiftlyKitError.developerToolsUnavailable) {
+            try HostReadiness.developerToolsUnavailable.requireReady()
+        }
+        #expect(throws: SwiftlyKitError.unsupportedHost) {
+            try HostReadiness.unsupportedHost.requireReady()
+        }
+    }
+
     @Test("Unsupported architecture short-circuits the SDK probe")
     func unsupportedArchitectureShortCircuitsProbe() async throws {
 
@@ -16,9 +29,7 @@ struct HostPreflightTests {
             sdkProbe: { fatalError("SDK probe must not run on an unsupported architecture") }
         )
 
-        await #expect(throws: SwiftlyKitError.unsupportedHost) {
-            try await preflight.check()
-        }
+        #expect(try await preflight.assess() == .unsupportedHost)
     }
 
     @Test("An old macOS version short-circuits the SDK probe")
@@ -32,9 +43,7 @@ struct HostPreflightTests {
             sdkProbe: { fatalError("SDK probe must not run on an unsupported macOS version") }
         )
 
-        await #expect(throws: SwiftlyKitError.unsupportedHost) {
-            try await preflight.check()
-        }
+        #expect(try await preflight.assess() == .unsupportedHost)
     }
 
     @Test("Missing and invalid SDK paths map to developer tools unavailable")
@@ -44,9 +53,7 @@ struct HostPreflightTests {
             hostFacts: supportedHostFacts,
             sdkProbe: { URL(string: "https://example.com/MacOSX.sdk")! }
         )
-        await #expect(throws: SwiftlyKitError.developerToolsUnavailable) {
-            try await remotePreflight.check()
-        }
+        #expect(try await remotePreflight.assess() == .developerToolsUnavailable)
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-HostPreflight") { temporaryDirectory in
             let missingURL = temporaryDirectory.appending(path: "missing-sdk")
@@ -54,9 +61,7 @@ struct HostPreflightTests {
                 hostFacts: supportedHostFacts,
                 sdkProbe: { missingURL }
             )
-            await #expect(throws: SwiftlyKitError.developerToolsUnavailable) {
-                try await missingPreflight.check()
-            }
+            #expect(try await missingPreflight.assess() == .developerToolsUnavailable)
 
             let fileURL = temporaryDirectory.appending(path: "sdk-file")
             try Data("not a directory".utf8).write(to: fileURL)
@@ -64,9 +69,7 @@ struct HostPreflightTests {
                 hostFacts: supportedHostFacts,
                 sdkProbe: { fileURL }
             )
-            await #expect(throws: SwiftlyKitError.developerToolsUnavailable) {
-                try await filePreflight.check()
-            }
+            #expect(try await filePreflight.assess() == .developerToolsUnavailable)
         }
     }
 
@@ -78,13 +81,11 @@ struct HostPreflightTests {
             sdkProbe: { throw SwiftlyKitError.unsupportedHost }
         )
 
-        await #expect(throws: SwiftlyKitError.developerToolsUnavailable) {
-            try await preflight.check()
-        }
+        #expect(try await preflight.assess() == .developerToolsUnavailable)
     }
 
-    @Test("A valid SDK symlink path succeeds")
-    func validSDKPathSucceeds() async throws {
+    @Test("A valid SDK symlink path reports a ready host")
+    func validSDKPathReportsReady() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-HostPreflight") { temporaryDirectory in
             let realSDKURL = temporaryDirectory.appending(path: "MacOSX.sdk")
@@ -96,7 +97,7 @@ struct HostPreflightTests {
                 hostFacts: supportedHostFacts,
                 sdkProbe: { symlinkURL }
             )
-            try await preflight.check()
+            #expect(try await preflight.assess() == .ready)
         }
     }
 
@@ -109,7 +110,7 @@ struct HostPreflightTests {
         )
 
         await #expect(throws: CancellationError.self) {
-            try await preflight.check()
+            _ = try await preflight.assess()
         }
     }
 
