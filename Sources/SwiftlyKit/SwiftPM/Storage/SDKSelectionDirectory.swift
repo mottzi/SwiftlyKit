@@ -57,37 +57,20 @@ enum SDKSelectionDirectory {
 
 extension SDKSelectionDirectory {
 
-    enum Error: Equatable, LocalizedError {
-
-        case couldNotCreateDirectory(String)
-        case couldNotCreateSelection(String)
-        case invalidIdentifier(String)
-        case unexpectedItem(String)
-
-        var errorDescription: String? {
-            switch self {
-                case .couldNotCreateDirectory(let path): "The exact SDK search directory could not be created at \(path)."
-                case .couldNotCreateSelection(let path): "The exact SDK selection link could not be created at \(path)."
-                case .invalidIdentifier(let identifier): "The exact SDK identifier is invalid: \(identifier)."
-                case .unexpectedItem(let path): "The exact SDK search directory contains an unexpected item at \(path)."
-            }
-        }
-
-    }
-
-}
-
-extension SDKSelectionDirectory {
-
-    private static func isValidIdentifier(_ identifier: String) -> Bool {
-
+    private static func isValidIdentifier(
+        _ identifier: String
+    ) -> Bool {
+        
         guard !identifier.isEmpty else { return false }
         let allowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
         return identifier.unicodeScalars.allSatisfy(allowedCharacters.contains)
     }
 
-    private static func selectionComponent(sdkIdentifier: String, canonicalBundleURL: URL) -> String {
-
+    private static func selectionComponent(
+        sdkIdentifier: String,
+        canonicalBundleURL: URL
+    ) -> String {
+        
         let digest = SHA256.hash(data: Data(canonicalBundleURL.path.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
@@ -205,7 +188,10 @@ extension SDKSelectionDirectory {
         }
     }
 
-    private static func createOwnedDirectory(at url: URL, fileManager: FileManager) throws {
+    private static func createOwnedDirectory(
+        at url: URL,
+        fileManager: FileManager
+    ) throws {
 
         do {
             try fileManager.createDirectory(at: url, withIntermediateDirectories: false)
@@ -219,6 +205,28 @@ extension SDKSelectionDirectory {
         } catch {
             throw Error.couldNotCreateDirectory(url.path)
         }
+    }
+
+}
+
+extension SDKSelectionDirectory {
+
+    enum Error: Equatable, LocalizedError {
+
+        case couldNotCreateDirectory(String)
+        case couldNotCreateSelection(String)
+        case invalidIdentifier(String)
+        case unexpectedItem(String)
+
+        var errorDescription: String? {
+            switch self {
+                case .couldNotCreateDirectory(let path): "The exact SDK search directory could not be created at \(path)."
+                case .couldNotCreateSelection(let path): "The exact SDK selection link could not be created at \(path)."
+                case .invalidIdentifier(let identifier): "The exact SDK identifier is invalid: \(identifier)."
+                case .unexpectedItem(let path): "The exact SDK search directory contains an unexpected item at \(path)."
+            }
+        }
+
     }
 
 }

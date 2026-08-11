@@ -12,18 +12,21 @@ struct SwiftPMScratchDirectory {
     ) throws(SwiftPMError) {
 
         let configuredURL: URL
+        
         switch storage {
             case .packageDefault:
                 configuredURL = packageRoot.appending(path: ".build", directoryHint: .isDirectory)
-                isExplicit = false
+                self.isExplicit = false
+            
             case .directory(let directory):
                 configuredURL = directory
-                isExplicit = true
+                self.isExplicit = true
         }
 
         let url = configuredURL
             .resolvingSymlinksInPath()
             .standardizedFileURL
+        
         let packageRoot = packageRoot
             .resolvingSymlinksInPath()
             .standardizedFileURL
@@ -33,4 +36,5 @@ struct SwiftPMScratchDirectory {
 
         self.url = url
     }
+    
 }

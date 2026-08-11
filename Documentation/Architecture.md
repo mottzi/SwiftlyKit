@@ -80,14 +80,13 @@ discovery do not acquire it.
 - `SwiftPM` validates a prepared capability and coordinates product discovery,
   explicit dependency resolution, build execution, optional stripping, and
   build-storage cleanup.
-- `SwiftPMScratchDirectory` converts a public `BuildStorage` choice into the
-  canonical, safety-checked scratch directory used by SwiftPM operations.
 - `SwiftPM/PackageDescription` decodes SwiftPM package metadata into executable
   products and their transitive runtime-resource requirements.
 - `SwiftPM/Output` owns runtime-resource inspection, ELF verification, and
   exclusive atomic output copying.
-- `SDKSelectionDirectory` hides the retained exact-SDK directory layout and its
-  cross-process create-or-verify protocol.
+- `SwiftPM/Storage` converts a public `BuildStorage` choice into a canonical,
+  safety-checked scratch directory and hides the retained exact-SDK directory
+  layout and its cross-process create-or-verify protocol.
 - `Subprocess` is the only adapter to `swift-subprocess`. Production uses
   `LiveSubprocessRunner`; tests use the same `SubprocessRunning` seam.
 - `Events` contains the optional awaited progress and output interface. Command
