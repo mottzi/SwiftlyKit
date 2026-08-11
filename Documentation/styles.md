@@ -52,8 +52,12 @@ Apply these rules in order. A style-only pass preserves behavior, API, names, ac
 - When optional binding merely renames a value to a generic alias, retain the source variable's domain name and use shorthand binding.
 - Use shorthand optional binding whenever the bound name is unchanged.
 - Indent every `case` one level inside its `switch`.
-- A switch is compact only when every case expression begins on the same line as its case label. Preserve a compact switch regardless of line length.
-- A switch is mixed only when at least one one-expression case begins on its case-label line and another one-expression case begins on the following line. In a mixed switch, place every one-expression case body on the following line and separate adjacent cases with one blank line.
+- A case body is single-statement when it contains exactly one non-compound statement and no attached comment.
+- A switch is compactable when every case label occupies one line, every case body is single-statement, and every complete `case ...: statement` line would end before column 125. Indentation counts toward the column.
+- Format every compactable switch compactly by placing each case body on the same line as its case label.
+- Preserve an already compact switch regardless of line length.
+- A switch is mixed when at least one single-statement case body begins on its case-label line and another begins on the following line.
+- If a mixed switch is compactable, compact it. Otherwise, place every single-statement case body on the following line and separate adjacent cases with one blank line.
 - Place compound case bodies on subsequent indented lines.
 - Preserve a `do`/`catch` chain when every clause contains one non-compound statement.
 - If any clause contains conditional control flow, a switch, a loop, or another `do` block, expand every clause in that chain and place each `catch` on the same line as the preceding closing brace.
