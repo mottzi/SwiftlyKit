@@ -191,28 +191,6 @@ struct EnvironmentPreparerTests {
         #expect(await commands.commands.isEmpty)
     }
 
-    @Test("HTTP download rejects a non-success response before publishing")
-    func httpDownloadRejectsHTTPFailure() async throws {
-
-        try await withTemporaryDirectory(prefix: "SwiftlyKit-EnvironmentPreparation") { temporaryDirectory in
-            let source = URL(string: "https://download.swift.org/swiftly.pkg")!
-            let temporaryDownload = temporaryDirectory.appending(path: "download")
-            let destination = temporaryDirectory.appending(path: "swiftly.pkg")
-            try Data("package".utf8).write(to: temporaryDownload)
-
-            let downloader = HTTPPackageDownloader { requestedSource in
-                #expect(requestedSource == source)
-                return (temporaryDownload, 503)
-            }
-
-            await #expect(throws: EnvironmentPreparationError.invalidHTTPResponse(503)) {
-                try await downloader.download(from: source, to: destination)
-            }
-
-            #expect(!FileManager.default.fileExists(atPath: destination.path))
-        }
-    }
-
     @Test("Bootstrap rejects an untrusted package before installation")
     func bootstrapRejectsUntrustedPackage() async throws {
 

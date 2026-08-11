@@ -34,7 +34,7 @@ public struct SwiftlyKit: Sendable {
     /// Returns after macOS accepts the request, not after the installation finishes.
     /// Skips the request if active developer tools provide a usable SDK and never changes the active developer directory.
     public static func requestCommandLineToolsInstallation() async throws {
-        try await HostCLTInstaller().request()
+        try await HostCLTRequest().request()
     }
 
 }

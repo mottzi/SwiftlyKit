@@ -3,13 +3,13 @@ import Testing
 @testable import SwiftlyKit
 
 @Suite("Command Line Tools installation requester")
-struct CommandLineToolsInstallationRequesterTests {
+struct HostCLTRequestTests {
 
     @Test("A ready host performs no installation request")
     func readyHostIsNoOp() async throws {
 
         let commands = RecordingSubprocessRunner(results: [])
-        let requester = HostCLTInstaller(
+        let requester = HostCLTRequest(
             runner: commands,
             assessHost: { .ready }
         )
@@ -23,7 +23,7 @@ struct CommandLineToolsInstallationRequesterTests {
     func requestsInstaller() async throws {
 
         let commands = RecordingSubprocessRunner(results: [.success()])
-        let requester = HostCLTInstaller(
+        let requester = HostCLTRequest(
             runner: commands,
             assessHost: { .developerToolsUnavailable }
         )
@@ -41,7 +41,7 @@ struct CommandLineToolsInstallationRequesterTests {
     func unsupportedHostIsPreserved() async throws {
 
         let commands = RecordingSubprocessRunner(results: [])
-        let requester = HostCLTInstaller(
+        let requester = HostCLTRequest(
             runner: commands,
             assessHost: { .unsupportedHost }
         )
@@ -57,7 +57,7 @@ struct CommandLineToolsInstallationRequesterTests {
 
         let output = String(repeating: "x", count: 9 * 1024)
         let commands = RecordingSubprocessRunner(results: [.failure(standardError: output)])
-        let requester = HostCLTInstaller(
+        let requester = HostCLTRequest(
             runner: commands,
             assessHost: { .developerToolsUnavailable }
         )
@@ -72,7 +72,7 @@ struct CommandLineToolsInstallationRequesterTests {
     @Test("Cancellation while checking the host is preserved")
     func checkCancellationIsPreserved() async throws {
 
-        let requester = HostCLTInstaller(
+        let requester = HostCLTRequest(
             runner: RecordingSubprocessRunner(results: []),
             assessHost: { throw CancellationError() }
         )
@@ -85,7 +85,7 @@ struct CommandLineToolsInstallationRequesterTests {
     @Test("Cancellation while requesting installation is preserved")
     func requestCancellationIsPreserved() async throws {
 
-        let requester = HostCLTInstaller(
+        let requester = HostCLTRequest(
             runner: ThrowingCommandLineToolsRunner(error: CancellationError()),
             assessHost: { .developerToolsUnavailable }
         )

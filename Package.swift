@@ -30,7 +30,7 @@ let package = Package(
             name: "SwiftlyKitTests",
             dependencies: ["SwiftlyKit"],
             resources: [
-                .copy("Fixtures/TripleCrossCompilation")
+                .copy("Fixtures/CrossCompilationPackage")
             ]
         )
     ],

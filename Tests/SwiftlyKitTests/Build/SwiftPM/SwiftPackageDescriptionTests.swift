@@ -3,7 +3,7 @@ import Testing
 @testable import SwiftlyKit
 
 @Suite("Swift package description")
-struct PackageDescriptionTests {
+struct SwiftPackageDescriptionTests {
 
     @Test("Discovers named explicit and implicit executable products in stable order")
     func discoversExecutables() throws {

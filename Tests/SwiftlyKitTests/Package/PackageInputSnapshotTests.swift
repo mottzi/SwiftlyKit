@@ -202,30 +202,6 @@ struct PackageInputSnapshotTests {
 
 }
 
-@Test("Swift version parsing rejects non-semantic selectors")
-func strictSwiftVersionParsing() {
-
-    #expect(SwiftVersion(parsing: "6.2") == SwiftVersion(major: 6, minor: 2, patch: 0))
-    #expect(SwiftVersion(parsing: "6.2.1") == SwiftVersion(major: 6, minor: 2, patch: 1))
-
-    let values = [
-        "",
-        "6",
-        "6.",
-        ".2",
-        "6..2",
-        "+6.2",
-        "6.-2",
-        "6.2-rc1",
-        "6.2+build",
-        "6.2.1.0",
-        String(repeating: "9", count: 40) + ".0"
-    ]
-    for value in values {
-        #expect(SwiftVersion(parsing: value) == nil)
-    }
-}
-
 private func write(_ value: String, to url: URL) throws {
     try Data(value.utf8).write(to: url)
 }

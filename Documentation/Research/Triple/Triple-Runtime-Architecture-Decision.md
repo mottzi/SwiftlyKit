@@ -251,12 +251,12 @@ The current Triple architecture depends on this host environment in more than
 one place:
 
 - package inspection invokes `/usr/bin/xcrun swift package dump-package`;
-  [Triple source: manifest inspection](../../TripleCore/Sources/TripleCore/SwiftPackageInspector/SwiftPackageInspector+Manifest.swift)
+  [Triple source: manifest inspection](../../../TripleCore/Sources/TripleCore/SwiftPackageInspector/SwiftPackageInspector+Manifest.swift)
 - environment preparation bootstraps Swiftly, installs the exact toolchain,
   and installs the matching Static Linux SDK;
-  [Triple source: environment preparation](../../TripleCore/Sources/TripleCore/Toolchains/EnvironmentManager/EnvironmentManager+Preparation.swift)
+  [Triple source: environment preparation](../../../TripleCore/Sources/TripleCore/Toolchains/EnvironmentManager/EnvironmentManager+Preparation.swift)
 - the build command runs the selected compiler through Swiftly.
-  [Triple source: build command factory](../../TripleCore/Sources/TripleCore/Builds/SwiftPMBuildCommandFactory.swift)
+  [Triple source: build command factory](../../../TripleCore/Sources/TripleCore/Builds/SwiftPMBuildCommandFactory.swift)
 
 Moving only manifest inspection from `xcrun swift` to the selected Swiftly
 toolchain improves consistency but does not remove the host SDK requirement.
@@ -325,7 +325,7 @@ workload needs.
 items, SSH agent state, `~/.ssh`, `~/.netrc`, Git configuration, or corporate
 certificate configuration. Triple currently executes SwiftPM with a macOS
 home directory, so private dependency behavior will change.
-[Triple source: controlled Swiftly environment](../../TripleCore/Sources/TripleCore/Toolchains/Swiftly/OfficialSwiftlyProvider/OfficialSwiftlyProvider+CommandEnvironment.swift)
+[Triple source: controlled Swiftly environment](../../../TripleCore/Sources/TripleCore/Toolchains/Swiftly/OfficialSwiftlyProvider/OfficialSwiftlyProvider+CommandEnvironment.swift)
 
 **Recommendation:** design a credential broker, not a home-directory mount.
 Pass only credentials approved for the current build, keep secrets out of

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Requests Apple's interactive Command Line Tools installer when the host SDK is unavailable.
-struct HostCLTInstaller {
+struct HostCLTRequest {
 
     private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
 
@@ -33,7 +33,7 @@ struct HostCLTInstaller {
 
 }
 
-extension HostCLTInstaller {
+extension HostCLTRequest {
 
     private func requestSystemInstaller() async throws {
 
@@ -68,7 +68,7 @@ extension HostCLTInstaller {
 
 }
 
-extension HostCLTInstaller {
+extension HostCLTRequest {
 
     private static func bounded(_ value: String) -> String {
         String(value.prefix(8 * 1024))

@@ -398,7 +398,7 @@ swift test
 ```
 
 Run the real-system cross-compilation acceptance test explicitly on a prepared
-host. It uses Triple's dependency-free fixture and never authorizes installation:
+host. It uses SwiftlyKit's dependency-free fixture package and never authorizes installation:
 
 ```sh
 SWIFTLYKIT_RUN_ACCEPTANCE=1 swift test --filter CrossCompilationAcceptanceTests

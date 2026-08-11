@@ -7,7 +7,7 @@ workflow. Both routes use the same three internal workflow components:
 ```mermaid
 flowchart LR
     Consumer --> Facade[SwiftlyKit]
-    Facade -->|request Command Line Tools installer| Requester[HostCLTInstaller]
+    Facade -->|request Command Line Tools installer| Requester[HostCLTRequest]
     Facade -->|assess| Assessor[EnvironmentAssessor]
     Assessor --> Assessment[EnvironmentAssessment]
     Assessment --> Preparer[EnvironmentPreparer]
@@ -17,10 +17,10 @@ flowchart LR
     Gate --> Preparer
     Gate --> SwiftPM
     Facade -->|executableProducts| SwiftPM
-    Assessor --> Process[SubprocessRunning]
-    Requester --> Process
-    Preparer --> Process
-    SwiftPM --> Process
+    Assessor --> Subprocess[SubprocessRunning]
+    Requester --> Subprocess
+    Preparer --> Subprocess
+    SwiftPM --> Subprocess
 ```
 
 ## Public workflows
@@ -80,7 +80,7 @@ discovery do not acquire it.
   resolution, build execution, resource rejection, ELF verification, optional
   stripping, and atomic publication. `SDKSelectionDirectory` hides the retained
   exact-SDK directory layout and its cross-process create-or-verify protocol.
-- `Process` is the only adapter to `swift-subprocess`. Production uses
+- `Subprocess` is the only adapter to `swift-subprocess`. Production uses
   `LiveSubprocessRunner`; tests use the same `SubprocessRunning` seam.
 - `Events` contains the optional awaited progress and output interface. Command
   output from preparation and SwiftPM is converted through one shared adapter.

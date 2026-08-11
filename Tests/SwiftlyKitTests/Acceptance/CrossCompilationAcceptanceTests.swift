@@ -6,17 +6,17 @@ import Testing
 struct CrossCompilationAcceptanceTests {
 
     @Test(
-        "Triple fixture builds verified ARM64 and x86-64 executables",
+        "Cross-compilation package builds verified ARM64 and x86-64 executables",
         .enabled(
             if: ProcessInfo.processInfo.environment["SWIFTLYKIT_RUN_ACCEPTANCE"] == "1",
             "Run explicitly with SWIFTLYKIT_RUN_ACCEPTANCE=1."
         )
     )
-    func tripleFixtureBuildsBothArchitectures() async throws {
+    func packageBuildsBothArchitectures() async throws {
 
         let resourceRoot = try #require(Bundle.module.resourceURL)
         let packageRoot = resourceRoot.appending(
-            path: "TripleCrossCompilation",
+            path: "CrossCompilationPackage",
             directoryHint: .isDirectory
         )
         let kit = SwiftlyKit()
@@ -67,7 +67,7 @@ struct CrossCompilationAcceptanceTests {
 
         let resourceRoot = try #require(Bundle.module.resourceURL)
         let packageRoot = resourceRoot.appending(
-            path: "TripleCrossCompilation",
+            path: "CrossCompilationPackage",
             directoryHint: .isDirectory
         )
         let kit = SwiftlyKit()
