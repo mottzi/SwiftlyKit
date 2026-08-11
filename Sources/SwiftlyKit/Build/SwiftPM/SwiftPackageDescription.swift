@@ -26,7 +26,7 @@ struct SwiftPackageDescription {
             let target = Target(
                 type: type,
                 dependencies: Self.referencedTargetNames(in: raw["dependencies"], knownNames: targetNames),
-                hasResources: !((raw["resources"] as? [Any]) ?? []).isEmpty
+                requiresRuntimeResources: Self.requiresRuntimeResources(raw["resources"])
             )
             
             return (name, target)
@@ -54,11 +54,11 @@ struct SwiftPackageDescription {
         products = allProducts.map { ExecutableProduct(name: $0.name) }.sorted { $0.name < $1.name }
 
         resourceProducts = Set(allProducts.compactMap { product in
-            Self.requiresResources(product.targets, targets: targets) ? product.name : nil
+            Self.requiresRuntimeResources(product.targets, targets: targets) ? product.name : nil
         })
     }
 
-    func requiresResources(_ productName: String) -> Bool {
+    func requiresRuntimeResources(_ productName: String) -> Bool {
         resourceProducts.contains(productName)
     }
 
@@ -85,7 +85,7 @@ extension SwiftPackageDescription {
         return []
     }
 
-    private static func requiresResources(_ roots: [String], targets: [String: Target]) -> Bool {
+    private static func requiresRuntimeResources(_ roots: [String], targets: [String: Target]) -> Bool {
 
         var pending = roots
         var visited: Set<String> = []
@@ -94,11 +94,26 @@ extension SwiftPackageDescription {
             guard visited.insert(name).inserted else { continue }
             guard let target = targets[name] else { continue }
 
-            if target.hasResources { return true }
+            if target.requiresRuntimeResources { return true }
             pending.append(contentsOf: target.dependencies)
         }
 
         return false
+    }
+
+    private static func requiresRuntimeResources(_ value: Any?) -> Bool {
+
+        guard let value else { return false }
+        guard let resources = value as? [Any] else { return true }
+
+        return resources.contains { resource in
+            guard let resource = resource as? [String: Any],
+                  let rule = resource["rule"] as? [String: Any],
+                  rule.count == 1
+            else { return true }
+
+            return rule["embedInCode"] == nil
+        }
     }
 
 }
@@ -109,7 +124,7 @@ extension SwiftPackageDescription {
 
         let type: String
         let dependencies: Set<String>
-        let hasResources: Bool
+        let requiresRuntimeResources: Bool
 
     }
 

@@ -17,7 +17,7 @@ extension SwiftPM {
         guard description.products.contains(request.product)
         else { throw SwiftPMError.executableNotFound(request.product.name) }
         
-        guard !description.requiresResources(request.product.name)
+        guard !description.requiresRuntimeResources(request.product.name)
         else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
         
         let scratchDirectory = request.scratchDirectory
@@ -75,8 +75,19 @@ extension SwiftPM {
         guard !binaryDirectory.isEmpty else { throw SwiftPMError.executableNotFound(request.product.name) }
 
         let binaryDirectoryURL = URL(filePath: binaryDirectory)
-        let hasRuntimeResourceBundle = try containsRuntimeResourceBundle(in: binaryDirectoryURL)
-        guard !hasRuntimeResourceBundle else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
+        
+        let runtimeResourceBundles: [String]
+        do {
+            runtimeResourceBundles = try BuildOutputInspector.runtimeResourceBundles(in: binaryDirectoryURL)
+        } catch {
+            throw SwiftPMError.invalidExecutable("The build output could not be inspected for runtime resources.")
+        }
+
+        guard runtimeResourceBundles.isEmpty else {
+            let names = runtimeResourceBundles.joined(separator: ", ")
+            await report(.building, detail: "Build produced unsupported runtime resource bundles: \(names).", to: onEvent)
+            throw SwiftPMError.unsupportedProductResources(request.product.name)
+        }
 
         let executable = binaryDirectoryURL.appending(path: request.product.name)
         guard FileManager.default.fileExists(atPath: executable.path)
@@ -160,29 +171,6 @@ extension SwiftPM {
         return lowercased.contains("package.resolved")
             || lowercased.contains("automatic resolution is disabled")
             || lowercased.contains("dependencies could not be resolved")
-    }
-
-}
-
-extension SwiftPM {
-
-    private func containsRuntimeResourceBundle(in directory: URL) throws -> Bool {
-
-        do {
-            let contents = try FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            )
-
-            return try contents.contains { url in
-                guard url.pathExtension == "resources" else { return false }
-                let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
-                return resourceValues.isDirectory == true
-            }
-        } catch {
-            throw SwiftPMError.invalidExecutable("The build output could not be inspected for runtime resources.")
-        }
     }
 
 }

@@ -313,8 +313,9 @@ Before SwiftlyKit returns a URL, it verifies that the result:
 - declares no required dynamic libraries.
 
 SwiftlyKit rejects an executable product that needs a SwiftPM runtime resource
-bundle. The package and all its dependencies must support the selected Linux
-Musl target.
+bundle. Resources embedded in code and Apple privacy metadata do not require a
+runtime bundle and are supported. The package and all its dependencies must
+support the selected Linux Musl target.
 
 ## Environment behavior
 

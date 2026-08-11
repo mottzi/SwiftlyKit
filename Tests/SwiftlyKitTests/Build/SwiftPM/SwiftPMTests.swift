@@ -197,11 +197,13 @@ struct SwiftPMTests {
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let resources = directory.appending(path: "Dependency_Assets.resources")
             try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
+            try Data("asset".utf8).write(to: resources.appending(path: "asset.txt"))
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
                 .success(output: "built"),
                 .success(output: directory.path + "\n")
             ])
+            let events = SwiftPMEventRecorder()
             let environment = buildEnvironment(in: directory)
             let request = BuildRequest(ExecutableProduct(name: "Tool"))
             let swiftPM = SwiftPM(
@@ -210,8 +212,41 @@ struct SwiftPMTests {
             )
 
             await #expect(throws: SwiftPMError.unsupportedProductResources("Tool")) {
-                try await swiftPM.build(request, using: environment)
+                try await swiftPM.build(
+                    request,
+                    using: environment,
+                    onEvent: { await events.record($0) }
+                )
             }
+            #expect(await events.details.last == "Build produced unsupported runtime resource bundles: Dependency_Assets.resources.")
+        }
+    }
+
+    @Test("Build ignores privacy-only resource bundles emitted by dependency products")
+    func privacyMetadataResources() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let resources = directory.appending(path: "Dependency_Metadata.resources")
+            try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
+            try Data("privacy metadata".utf8).write(to: resources.appending(path: "PrivacyInfo.xcprivacy"))
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
+                .success(output: "built"),
+                .success(output: directory.path + "\n")
+            ])
+            let swiftPM = SwiftPM(
+                runner: runner,
+                validateEnvironment: { _ in }
+            )
+
+            #expect(
+                try await swiftPM.build(
+                    BuildRequest(ExecutableProduct(name: "Tool")),
+                    using: buildEnvironment(in: directory)
+                ) == executable
+            )
         }
     }
 
@@ -345,11 +380,14 @@ private struct EventOutput: Equatable {
 private actor SwiftPMEventRecorder {
 
     private(set) var operations: [OperationProgress.Operation] = []
+    private(set) var details: [String] = []
     private(set) var outputs: [EventOutput] = []
 
     func record(_ event: SwiftlyKitEvent) {
         switch event {
-            case .progress(let progress): operations.append(progress.operation)
+            case .progress(let progress):
+                operations.append(progress.operation)
+                details.append(progress.detail)
             case .output(let output): outputs.append(EventOutput(stream: output.stream, text: output.text))
         }
     }
