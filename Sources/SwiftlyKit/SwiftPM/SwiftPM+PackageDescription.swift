@@ -26,7 +26,7 @@ extension SwiftPM {
         let result = try await runner.run(packageCommand, onOutput: nil)
 
         guard result.succeeded
-        else { throw SwiftPMError.commandFailed(operation: .packageDescription, diagnostic: boundedDiagnostic(result)) }
+        else { throw SwiftPMError.commandFailed(operation: .inspectingPackage, diagnostic: boundedDiagnostic(result)) }
 
         guard let data = result.standardOutput.data(using: .utf8)
         else { throw SwiftPMError.malformedPackageDescription }

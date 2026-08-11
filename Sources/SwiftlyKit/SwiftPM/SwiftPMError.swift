@@ -1,7 +1,7 @@
 import Foundation
 
 enum SwiftPMError: Error, Equatable {
-    case commandFailed(operation: SwiftPMOperation, diagnostic: String)
+    case commandFailed(operation: Operation, diagnostic: String)
     case sdkSearchPathPreparationFailed(String)
     case malformedPackageDescription
     case dependencyResolutionRequired
@@ -33,9 +33,9 @@ extension SwiftPMError {
                 .postBuildCleanupFailed(output: output, detail: diagnostic)
             case .commandFailed(let operation, let diagnostic):
                 switch operation {
-                    case .build: .buildFailed(diagnostic)
-                    case .packageDescription: .packageInspectionFailed(diagnostic)
-                    case .dependencyResolution: .dependencyResolutionFailed(diagnostic)
+                    case .building: .buildFailed(diagnostic)
+                    case .inspectingPackage: .packageInspectionFailed(diagnostic)
+                    case .resolvingDependencies: .dependencyResolutionFailed(diagnostic)
                     case .stripping: .stripFailed(diagnostic)
                     case .cleaningBuildArtifacts: .buildArtifactCleanupFailed(diagnostic)
                     case .resettingBuildStorage: .buildStorageResetFailed(diagnostic)
@@ -52,11 +52,15 @@ extension SwiftPMError {
 
 }
 
-enum SwiftPMOperation {
-    case build
-    case packageDescription
-    case dependencyResolution
-    case stripping
-    case cleaningBuildArtifacts
-    case resettingBuildStorage
+extension SwiftPMError {
+
+    enum Operation {
+        case building
+        case inspectingPackage
+        case resolvingDependencies
+        case stripping
+        case cleaningBuildArtifacts
+        case resettingBuildStorage
+    }
+
 }

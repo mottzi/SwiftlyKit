@@ -58,7 +58,7 @@ extension SwiftPM {
         guard buildResult.succeeded else {
             let diagnostic = boundedDiagnostic(buildResult)
             if Self.indicatesRequiredResolution(diagnostic) { throw SwiftPMError.dependencyResolutionRequired }
-            else { throw SwiftPMError.commandFailed(operation: .build, diagnostic: diagnostic) }
+            else { throw SwiftPMError.commandFailed(operation: .building, diagnostic: diagnostic) }
         }
 
         let pathCommand = command(
@@ -70,7 +70,7 @@ extension SwiftPM {
         let pathResult = try await runner.run(pathCommand, onOutput: nil)
 
         guard pathResult.succeeded
-        else { throw SwiftPMError.commandFailed(operation: .build, diagnostic: boundedDiagnostic(pathResult)) }
+        else { throw SwiftPMError.commandFailed(operation: .building, diagnostic: boundedDiagnostic(pathResult)) }
 
         let binaryDirectory = pathResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !binaryDirectory.isEmpty else { throw SwiftPMError.executableNotFound(request.product.name) }

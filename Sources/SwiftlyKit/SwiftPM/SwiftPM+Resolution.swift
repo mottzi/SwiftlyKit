@@ -23,7 +23,7 @@ extension SwiftPM {
         let result = try await runner.run(resolutionCommand, onOutput: CommandOutputChunk.handler(for: onEvent))
 
         guard result.succeeded
-        else { throw SwiftPMError.commandFailed(operation: .dependencyResolution, diagnostic: boundedDiagnostic(result)) }
+        else { throw SwiftPMError.commandFailed(operation: .resolvingDependencies, diagnostic: boundedDiagnostic(result)) }
     }
 
 }

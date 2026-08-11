@@ -24,9 +24,9 @@ struct SwiftPMTests {
                 .postBuildCleanupFailed(output: output, diagnostic: "cleanup failed"),
                 .postBuildCleanupFailed(output: output, detail: "cleanup failed")
             ),
-            (.commandFailed(operation: .build, diagnostic: "build failed"), .buildFailed("build failed")),
-            (.commandFailed(operation: .packageDescription, diagnostic: "invalid manifest"), .packageInspectionFailed("invalid manifest")),
-            (.commandFailed(operation: .dependencyResolution, diagnostic: "unresolved"), .dependencyResolutionFailed("unresolved")),
+            (.commandFailed(operation: .building, diagnostic: "build failed"), .buildFailed("build failed")),
+            (.commandFailed(operation: .inspectingPackage, diagnostic: "invalid manifest"), .packageInspectionFailed("invalid manifest")),
+            (.commandFailed(operation: .resolvingDependencies, diagnostic: "unresolved"), .dependencyResolutionFailed("unresolved")),
             (.commandFailed(operation: .stripping, diagnostic: "objcopy failed"), .stripFailed("objcopy failed")),
             (
                 .commandFailed(operation: .cleaningBuildArtifacts, diagnostic: "clean failed"),
@@ -310,7 +310,7 @@ struct SwiftPMTests {
             )
 
             await #expect(throws: SwiftPMError.commandFailed(
-                operation: .dependencyResolution,
+                operation: .resolvingDependencies,
                 diagnostic: "resolution failed\ncontext"
             )) {
                 try await swiftPM.resolveDependencies(using: buildEnvironment(in: directory))

@@ -28,7 +28,7 @@ extension SwiftPM {
 
         let scratchDirectory = try storage.validatedDirectory(for: environment.packageRoot)
 
-        let operation: SwiftPMOperation
+        let operation: SwiftPMError.Operation
         let progress: OperationProgress.Operation
         let detail: String
         let subcommand: String
