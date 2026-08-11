@@ -37,33 +37,15 @@ public struct SwiftlyKit: Sendable {
         )
     }
 
-    init(assessor: EnvironmentAssessor, preparer: EnvironmentPreparer, swiftPM: SwiftPM) {
-
+    init(
+        assessor: EnvironmentAssessor,
+        preparer: EnvironmentPreparer,
+        swiftPM: SwiftPM
+    ) {
         self.mutationGate = MutationGate()
         self.assessor = assessor
         self.preparer = preparer
         self.swiftPM = swiftPM
-    }
-
-    /// Prepares the required environment and builds an executable product in one operation.
-    ///
-    /// This operation may install Swiftly, a Swift toolchain, or a Static Linux SDK, and may resolve package dependencies.
-    /// When `product` is `nil`, the package must declare exactly one executable product.
-    public static func build(
-        _ packageRoot: URL,
-        product: String? = nil,
-        for target: BuildTarget = .linux(.x86_64),
-        configuration: BuildConfiguration = .release,
-        onEvent: EventHandler? = nil
-    ) async throws -> URL {
-
-        try await SwiftlyKit().build(
-            packageRoot,
-            product: product,
-            for: target,
-            configuration: configuration,
-            onEvent: onEvent
-        )
     }
 
     /// Requests Apple's interactive Command Line Tools installer when no usable macOS SDK is active.
@@ -73,28 +55,6 @@ public struct SwiftlyKit: Sendable {
     /// showing the installer. SwiftlyKit never selects or changes the active developer directory.
     public static func requestCommandLineToolsInstallation() async throws {
         try await CommandLineToolsInstallationRequester().request()
-    }
-
-    func build(
-        _ packageRoot: URL,
-        product productName: String?,
-        for target: BuildTarget,
-        configuration: BuildConfiguration,
-        onEvent: EventHandler?
-    ) async throws -> URL {
-
-        let assessment = try await assess(packageRoot, for: target)
-        let environment = try await prepare(assessment, onEvent: onEvent)
-        let products = try await executableProducts(using: environment)
-        let product = try selectProduct(named: productName, from: products)
-        let request = BuildRequest(product, configuration: configuration)
-
-        do {
-            return try await build(request, using: environment, onEvent: onEvent)
-        } catch SwiftlyKitError.dependencyResolutionRequired {
-            try await resolveDependencies(using: environment, onEvent: onEvent)
-            return try await build(request, using: environment, onEvent: onEvent)
-        }
     }
 
 }
@@ -127,7 +87,9 @@ extension SwiftlyKit {
     }
     
     /// Discovers executable products in the package bound to a prepared environment.
-    public func executableProducts(using environment: LocalBuildEnvironment) async throws -> [ExecutableProduct] {
+    public func executableProducts(
+        using environment: LocalBuildEnvironment
+    ) async throws -> [ExecutableProduct] {
         
         do { return try await swiftPM.executableProducts(using: environment) }
         catch is CancellationError { throw CancellationError() }
@@ -137,7 +99,10 @@ extension SwiftlyKit {
     }
     
     /// Explicitly resolves dependencies in the package bound to a prepared environment.
-    public func resolveDependencies(using environment: LocalBuildEnvironment, onEvent: EventHandler? = nil) async throws {
+    public func resolveDependencies(
+        using environment: LocalBuildEnvironment,
+        onEvent: EventHandler? = nil
+    ) async throws {
         
         try await mutationGate.withAccess {
             do { try await swiftPM.resolveDependencies(using: environment, onEvent: onEvent) }
@@ -167,6 +132,49 @@ extension SwiftlyKit {
 }
 
 extension SwiftlyKit {
+    
+    /// Prepares the required environment and builds an executable product in one operation.
+    ///
+    /// This operation may install Swiftly, a Swift toolchain, or a Static Linux SDK, and may resolve package dependencies.
+    /// When `product` is `nil`, the package must declare exactly one executable product.
+    public static func build(
+        _ packageRoot: URL,
+        product: String? = nil,
+        for target: BuildTarget = .linux(.x86_64),
+        configuration: BuildConfiguration = .release,
+        onEvent: EventHandler? = nil
+    ) async throws -> URL {
+
+        try await SwiftlyKit().build(
+            packageRoot,
+            product: product,
+            for: target,
+            configuration: configuration,
+            onEvent: onEvent
+        )
+    }
+    
+    func build(
+        _ packageRoot: URL,
+        product productName: String?,
+        for target: BuildTarget,
+        configuration: BuildConfiguration,
+        onEvent: EventHandler?
+    ) async throws -> URL {
+
+        let assessment = try await assess(packageRoot, for: target)
+        let environment = try await prepare(assessment, onEvent: onEvent)
+        let products = try await executableProducts(using: environment)
+        let product = try selectProduct(named: productName, from: products)
+        let request = BuildRequest(product, configuration: configuration)
+
+        do {
+            return try await build(request, using: environment, onEvent: onEvent)
+        } catch SwiftlyKitError.dependencyResolutionRequired {
+            try await resolveDependencies(using: environment, onEvent: onEvent)
+            return try await build(request, using: environment, onEvent: onEvent)
+        }
+    }
 
     private func selectProduct(named name: String?, from products: [ExecutableProduct]) throws -> ExecutableProduct {
 
