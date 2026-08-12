@@ -1,4 +1,5 @@
-enum HostReadiness {
+/// Read-only readiness of the current host for SwiftlyKit operations.
+public enum HostReadiness: Sendable, Equatable {
 
     case ready
     case developerToolsUnavailable

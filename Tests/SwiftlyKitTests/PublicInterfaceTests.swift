@@ -49,6 +49,15 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("Host readiness inspection compiles without testable access")
+    func hostReadinessInspectionCompiles() {
+
+        let inspection: @Sendable () async throws -> HostReadiness = {
+            try await SwiftlyKit.hostReadiness()
+        }
+        _ = inspection
+    }
+
     @Test("The documented Command Line Tools recovery compiles without testable access")
     func commandLineToolsRecoveryCompiles() {
 

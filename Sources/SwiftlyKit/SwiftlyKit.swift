@@ -30,6 +30,13 @@ public struct SwiftlyKit: Sendable {
         self.swiftPM = swiftPM
     }
 
+    /// Returns support and active developer tools readiness for the current host.
+    /// This read-only operation does not require a package.
+    /// Throws `CancellationError` if the task is canceled.
+    public static func hostReadiness() async throws -> HostReadiness {
+        try await HostPreflight().assess()
+    }
+
     /// Requests Apple's interactive Command Line Tools installer on a supported host if no usable macOS SDK is active.
     /// Returns after macOS accepts the request, not after the installation finishes.
     /// Skips the request if active developer tools provide a usable SDK and never changes the active developer directory.

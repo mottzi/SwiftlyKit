@@ -95,8 +95,10 @@ teardown. The process implementation is not public API.
 SwiftlyKit must return `unsupportedHost` before mutation on an Intel Mac or an
 unsupported macOS release. It must return `developerToolsUnavailable` before
 mutation when `/usr/bin/xcrun --sdk macosx --show-sdk-path` does not identify a
-usable SDK. The consumer may then explicitly call
-`requestCommandLineToolsInstallation()` to request Apple's interactive installer.
+usable SDK. A consumer can call `hostReadiness()` without a package to inspect
+the same host state before it starts another operation. The consumer may then
+explicitly call `requestCommandLineToolsInstallation()` to request Apple's
+interactive installer.
 The user remains responsible for completing installation or selecting existing
 developer tools before retrying assessment.
 
@@ -135,7 +137,17 @@ wording and accessors may be refined during implementation, but the workflow and
 capabilities must remain within this specification.
 
 ```swift
+public enum HostReadiness: Sendable, Equatable {
+    case ready
+    case developerToolsUnavailable
+    case unsupportedHost
+}
+
 public struct SwiftlyKit: Sendable {
+    public static func hostReadiness() async throws -> HostReadiness
+
+    public static func requestCommandLineToolsInstallation() async throws
+
     public init()
 
     public func assess(

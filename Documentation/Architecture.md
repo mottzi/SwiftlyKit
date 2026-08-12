@@ -7,7 +7,9 @@ workflow. Both routes use the same three internal workflow components:
 ```mermaid
 flowchart LR
     Consumer --> Facade[SwiftlyKit]
+    Facade -->|inspect host readiness| Preflight[HostPreflight]
     Facade -->|request Command Line Tools installer| Requester[HostCLTRequest]
+    Requester --> Preflight
     Facade -->|assess| Assessor[EnvironmentAssessor]
     Facade -->|discover compatible environments| Assessor
     Assessor --> Choices[EnvironmentChoices]
@@ -52,13 +54,14 @@ materializes each exact compatible assessment once in newest-first order.
 evidence without more I/O. The collection can remain useful for exact selection
 if an invalid `.swift-version` makes automatic selection fail.
 
-The static `requestCommandLineToolsInstallation` recovery operation is separate
-from environment preparation. `HostPreflight` reports `HostReadiness` as data.
-The recovery operation returns immediately for a ready host, rejects an
-unsupported host, and invokes Apple's `xcode-select --install` entry point only
-when developer tools are unavailable. It returns when macOS accepts the request;
-it cannot observe license acceptance or installation completion. The consumer
-retries assessment after the user finishes the system interaction.
+The static `hostReadiness` operation exposes the same read-only `HostPreflight`
+result used by assessment, preparation, and recovery. It does not require a
+package. The separate `requestCommandLineToolsInstallation` recovery operation
+returns for a ready host, rejects an unsupported host, and invokes Apple's
+`xcode-select --install` entry point only if developer tools are unavailable. It
+returns when macOS accepts the request; it cannot observe license acceptance or
+installation completion. The consumer retries readiness inspection or
+assessment after the user finishes the system interaction.
 
 Each `SwiftlyKit` facade instance owns a cancellation-aware FIFO `MutationGate`.
 Preparation, dependency resolution, and builds acquire the gate because they can
@@ -113,8 +116,8 @@ discovery do not acquire it.
 - The Command Line Tools installer is requested only through the explicit public
   recovery operation. It is not part of assessment or preparation, and success
   means only that macOS accepted the request.
-- Unsupported hosts and unavailable developer tools are `HostReadiness` values
-  inside the host module. Operations that cannot recover translate those values
+- `HostReadiness` reports unsupported hosts and unavailable developer tools
+  without package work. Operations that cannot continue translate those values
   to `SwiftlyKitError`; the installer requester branches on them directly.
 - Assessment derives its values from one captured `Package.swift` and nearest
   `.swift-version` state. Preparation compares the same inputs byte-for-byte

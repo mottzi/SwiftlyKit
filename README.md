@@ -65,28 +65,38 @@ authorize environment preparation. SwiftlyKit does not install Xcode or select
 the active developer directory. It can explicitly request Apple's interactive
 Command Line Tools installer.
 
-### Request missing Command Line Tools
+### Inspect host readiness
 
-Assessment and building throw `SwiftlyKitError.developerToolsUnavailable` when
-no usable macOS SDK is active. An unsandboxed consumer can respond by requesting
-[Apple's system installer](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools):
+An interactive consumer can inspect host readiness before it asks for a package
+or starts a build. This read-only operation does not load the Swift.org catalog
+or inspect installed Swiftly state:
 
 ```swift
-do {
-    let executable = try await SwiftlyKit.build(packageRoot)
-    print(executable.path)
-} catch SwiftlyKitError.developerToolsUnavailable {
+switch try await SwiftlyKit.hostReadiness() {
+case .ready:
+    print("The host is ready.")
+
+case .developerToolsUnavailable:
     try await SwiftlyKit.requestCommandLineToolsInstallation()
     print("Finish the installation in the macOS dialog, then try again.")
+
+case .unsupportedHost:
+    print("SwiftlyKit requires Apple silicon and macOS 13 or later.")
 }
 ```
 
-The request returns when macOS accepts it, not when installation finishes. The
-user must click Install, accept Apple's license, and then retry assessment or
-building. The operation is a no-op when an active Xcode or Command Line Tools
-SDK is already usable. It never installs Xcode or changes the active developer
-directory; if developer tools are installed but not selected, the consumer must
-select them outside SwiftlyKit.
+Assessment and building still perform the same readiness check and throw
+`SwiftlyKitError.developerToolsUnavailable` or `SwiftlyKitError.unsupportedHost`
+if the caller does not inspect first. The inspection is optional.
+
+The explicit recovery operation requests
+[Apple's system installer](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools).
+It returns when macOS accepts the request, not when installation finishes. The
+user must click Install, accept Apple's license, and then retry inspection,
+assessment, or building. The operation is a no-op when an active Xcode or
+Command Line Tools SDK is already usable. It never installs Xcode or changes the
+active developer directory; if developer tools are installed but not selected,
+the consumer must select them outside SwiftlyKit.
 
 ## Quick start
 
@@ -482,7 +492,8 @@ do {
 
 | Type | Purpose |
 | --- | --- |
-| `SwiftlyKit` | Provides the fast track, staged operations, and explicit Command Line Tools recovery. |
+| `SwiftlyKit` | Provides host inspection, explicit recovery, the fast track, and staged operations. |
+| `HostReadiness` | Reports host support and active developer tools readiness without a package. |
 | `EnvironmentChoices` | Lists exact compatible assessments and applies automatic or exact selection without more I/O. |
 | `EnvironmentAssessment` | Describes the selected environment and required installations. |
 | `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, and SDK. |
