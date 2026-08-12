@@ -34,9 +34,7 @@ struct CrossCompilationAcceptanceTests {
 
                 let environment = try await kit.prepare(assessment)
                 let products = try await kit.executableProducts(using: environment)
-                let product = try #require(
-                    products.first { $0.name == "CrossCompilationFixture" }
-                )
+                let product = try products.select("CrossCompilationFixture")
                 let scratchDirectory = scratchRoot.appending(
                     path: String(describing: architecture),
                     directoryHint: .isDirectory
@@ -78,9 +76,7 @@ struct CrossCompilationAcceptanceTests {
         )
         let environment = try await kit.prepare(assessment)
         let products = try await kit.executableProducts(using: environment)
-        let product = try #require(
-            products.first { $0.name == "CrossCompilationFixture" }
-        )
+        let product = try products.select("CrossCompilationFixture")
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-IncrementalAcceptance") { scratchDirectory in
             let request = BuildRequest(

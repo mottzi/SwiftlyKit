@@ -29,43 +29,97 @@ struct EnvironmentAssessor {
         toolchain: ToolchainSelection
     ) async throws -> EnvironmentAssessment {
 
+        let observation = try await observe(packageRoot, for: target)
+        return try assessment(selecting: toolchain, from: observation)
+    }
+
+    /// Captures one observation and returns each exact compatible environment in newest-first order.
+    func compatibleEnvironments(_ packageRoot: URL, for target: BuildTarget) async throws -> EnvironmentChoices {
+
+        let observation = try await observe(packageRoot, for: target)
+        let releases = EnvironmentSelectionPolicy.compatibleReleases(
+            toolsVersion: observation.packageInputs.toolsVersion,
+            architecture: target.architecture,
+            releases: observation.releases
+        )
+        let assessments = releases.map { release in
+            assessment(for: release, from: observation)
+        }
+
+        return EnvironmentChoices(
+            assessments: assessments,
+            toolsVersion: observation.packageInputs.toolsVersion,
+            swiftVersionPreference: observation.packageInputs.swiftVersion,
+            architecture: target.architecture,
+            releases: observation.releases,
+            inventory: observation.inventory
+        )
+    }
+
+}
+
+extension EnvironmentAssessor {
+
+    private func observe(_ packageRoot: URL, for target: BuildTarget) async throws -> Observation {
+
         try (await assessHost()).requireReady()
 
-        let snapshot = try PackageInputSnapshot.capture(at: packageRoot)
-
+        let packageInputs = try PackageInputSnapshot.capture(at: packageRoot)
         let swiftly = try await detectSwiftly()
         let releases = try await officialReleases()
         let inventory = try await installedInventory(swiftly)
+
+        return Observation(
+            packageInputs: packageInputs,
+            releases: releases,
+            inventory: inventory,
+            isSwiftlyAvailable: swiftly != nil,
+            target: target
+        )
+    }
+
+    private func assessment(
+        selecting toolchain: ToolchainSelection,
+        from observation: Observation
+    ) throws -> EnvironmentAssessment {
 
         let release: OfficialStableRelease
         do {
             release = try EnvironmentSelectionPolicy.select(
                 toolchain: toolchain,
-                toolsVersion: snapshot.toolsVersion,
-                swiftVersionPreference: snapshot.swiftVersion,
-                architecture: target.architecture,
-                releases: releases,
-                inventory: inventory
+                toolsVersion: observation.packageInputs.toolsVersion,
+                swiftVersionPreference: observation.packageInputs.swiftVersion,
+                architecture: observation.target.architecture,
+                releases: observation.releases,
+                inventory: observation.inventory
             )
         } catch {
             throw error.swiftlyKitError
         }
 
-        let toolchainAvailable = inventory.contains(toolchain: release.version)
-        let sdkListed = inventory.contains(toolchain: release.version, sdk: release.staticLinuxSDK.identifier)
+        return assessment(for: release, from: observation)
+    }
+
+    private func assessment(for release: OfficialStableRelease, from observation: Observation) -> EnvironmentAssessment {
+
+        let toolchainAvailable = observation.inventory.contains(toolchain: release.version)
+        let sdkListed = observation.inventory.contains(
+            toolchain: release.version,
+            sdk: release.staticLinuxSDK.identifier
+        )
         let sdkBundleURL = locateSDK(release.staticLinuxSDK.identifier)
         let sdkAvailable = sdkBundleURL != nil && (sdkListed || !toolchainAvailable)
 
         var requiredComponents: [PreparationComponent] = []
-        if swiftly == nil { requiredComponents.append(.swiftly) }
+        if !observation.isSwiftlyAvailable { requiredComponents.append(.swiftly) }
         if !toolchainAvailable { requiredComponents.append(.toolchain) }
         if !sdkAvailable { requiredComponents.append(.staticLinuxSDK) }
 
         return EnvironmentAssessment(
-            packageInputs: snapshot,
+            packageInputs: observation.packageInputs,
             release: release,
             requiredComponents: requiredComponents,
-            target: target
+            target: observation.target
         )
     }
 
@@ -93,6 +147,19 @@ extension EnvironmentAssessor {
         do { return try await inspectInventory(swiftly) }
         catch is CancellationError { throw CancellationError() }
         catch { throw SwiftlyKitError.incompatibleSwiftly }
+    }
+
+}
+
+private extension EnvironmentAssessor {
+
+    /// Package, catalog, and installed state captured by one read-only observation.
+    struct Observation {
+        let packageInputs: PackageInputSnapshot
+        let releases: [OfficialStableRelease]
+        let inventory: InstalledEnvironmentInventory
+        let isSwiftlyAvailable: Bool
+        let target: BuildTarget
     }
 
 }

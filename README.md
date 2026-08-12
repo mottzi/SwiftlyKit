@@ -108,15 +108,18 @@ This fast track uses these defaults:
 - The target is x86-64 Linux.
 - The build configuration is release.
 - SwiftlyKit selects the toolchain automatically.
+- The executable is not stripped.
 - The executable stays in SwiftPM scratch storage.
 
-Specify a product, target, or configuration when you need a different result:
+Specify a product, target, toolchain, or configuration when you need a different
+result:
 
 ```swift
 let executable = try await SwiftlyKit.build(
     packageRoot,
     product: "MyTool",
     for: .linux(.arm64),
+    toolchain: .exact(SwiftVersion(major: 6, minor: 2, patch: 1)),
     configuration: .debug
 )
 ```
@@ -130,7 +133,8 @@ let executable = try await SwiftlyKit.build(
     packageRoot,
     product: "MyTool",
     storage: .directory(URL(filePath: "/path/to/scratch")),
-    output: .copy(to: destination, cleanup: .reset)
+    output: .copy(to: destination, cleanup: .reset),
+    strip: true
 )
 ```
 
@@ -172,6 +176,30 @@ Use the properties of `EnvironmentAssessment` to show the proposed changes to
 the user. The assessment reports whether Swiftly, the toolchain, and the SDK are
 available.
 
+If your app lets the user choose a toolchain, replace the direct assessment with
+one read-only discovery pass:
+
+```swift
+let choices = try await kit.compatibleEnvironments(
+    packageRoot,
+    for: .linux(.arm64)
+)
+
+for choice in choices {
+    print("Swift \(choice.swiftVersion): \(choice.requiredComponents)")
+}
+
+let selection: ToolchainSelection = .automatic
+let assessment = try choices.select(selection)
+```
+
+`EnvironmentChoices` contains exact compatible assessments once each in
+newest-first order. `select(_:)` applies either `.automatic` or `.exact` to the
+same captured package, catalog, and installed state without more I/O. Each
+selected assessment passes directly to `prepare(_:)`. An automatic selection
+failure does not hide compatible exact choices. The collection is empty if no
+official stable release is compatible.
+
 ### 2. Prepare the environment
 
 Pass the accepted assessment to `prepare(_:)`. This call authorizes only the
@@ -194,13 +222,12 @@ SwiftlyKit asks SwiftPM for the executable products in the prepared package:
 
 ```swift
 let products = try await kit.executableProducts(using: environment)
-
-guard let product = products.first(where: { $0.name == "MyTool" }) else {
-    throw SwiftlyKitError.executableProductNotFound("MyTool")
-}
+let product = try products.select("MyTool")
 ```
 
-Product discovery does not resolve package dependencies.
+Product discovery does not resolve package dependencies. The returned
+`ExecutableProducts` value remains iterable and indexable. Call `select()`
+without a name if the package must contain exactly one executable product.
 
 ### 4. Build the product
 
@@ -237,8 +264,13 @@ A staged build never resolves dependencies automatically. The separate
 | `configuration` | `.debug` | Selects the SwiftPM debug or release configuration. |
 | `storage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
 | `output` | `.buildStorage` | Returns the executable in scratch storage. `.copy(to:cleanup:)` atomically copies it and then performs the requested cleanup. |
-| `strip` | `false` | Uses the selected toolchain to strip the executable, and then verifies it again. |
+| `strip` | `false` | Uses the selected toolchain to strip an output copy, and then verifies it again. |
 | `environment` | `[:]` | Adds or replaces values for build, bin-path, and strip subprocesses. SwiftlyKit keeps values that protect the prepared toolchain and SDK. |
+
+Stripping never changes SwiftPM's produced executable. With `.buildStorage`,
+SwiftlyKit returns a deterministic stripped copy inside build storage. With
+`.copy`, SwiftlyKit strips and verifies a temporary sibling before it atomically
+publishes the requested output. A strip failure publishes nothing.
 
 The parent directory of a copied output must exist. SwiftlyKit never replaces
 an existing item at the output URL. It throws
@@ -296,7 +328,19 @@ The default `.automatic` policy selects a toolchain in this order:
 The selected version must support the package's `swift-tools-version` and the
 requested architecture.
 
-Use `.exact` when your app must select one official stable release:
+Use `.exact` when your app must select one official stable release. The fast
+track accepts the selection directly:
+
+```swift
+let executable = try await SwiftlyKit.build(
+    packageRoot,
+    toolchain: .exact(
+        SwiftVersion(major: 6, minor: 2, patch: 1)
+    )
+)
+```
+
+Pass the same selection during assessment in the staged workflow:
 
 ```swift
 let assessment = try await kit.assess(
@@ -307,6 +351,10 @@ let assessment = try await kit.assess(
     )
 )
 ```
+
+Use `compatibleEnvironments(_:for:)` if the caller does not know the exact
+version in advance. Iterate over the returned exact assessments, keep the user
+choice as a `ToolchainSelection`, and call `select(_:)` before preparation.
 
 SwiftlyKit does not use snapshot toolchains, development branches, custom SDKs,
 or arbitrary Swiftly selectors.
@@ -430,13 +478,15 @@ do {
 }
 ```
 
-## API overview
+## Interface overview
 
 | Type | Purpose |
 | --- | --- |
 | `SwiftlyKit` | Provides the fast track, staged operations, and explicit Command Line Tools recovery. |
+| `EnvironmentChoices` | Lists exact compatible assessments and applies automatic or exact selection without more I/O. |
 | `EnvironmentAssessment` | Describes the selected environment and required installations. |
 | `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, and SDK. |
+| `ExecutableProducts` | Lists discovered products and selects a named or sole executable. |
 | `BuildRequest` | Selects one product and its build options. |
 | `BuildStorage` | Selects package-default or explicit SwiftPM scratch storage. |
 | `BuildOutput`, `BuildCleanup` | Select executable copying and retained, cleaned, or reset build storage. |

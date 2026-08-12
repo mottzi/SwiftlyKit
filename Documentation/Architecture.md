@@ -9,10 +9,15 @@ flowchart LR
     Consumer --> Facade[SwiftlyKit]
     Facade -->|request Command Line Tools installer| Requester[HostCLTRequest]
     Facade -->|assess| Assessor[EnvironmentAssessor]
+    Facade -->|discover compatible environments| Assessor
+    Assessor --> Choices[EnvironmentChoices]
+    Choices -->|select| Assessment
     Assessor --> Assessment[EnvironmentAssessment]
     Assessment --> Preparer[EnvironmentPreparer]
     Preparer --> Environment[LocalBuildEnvironment]
     Environment --> SwiftPM
+    SwiftPM --> Products[ExecutableProducts]
+    Products -->|select| Product[ExecutableProduct]
     Facade -->|prepare / resolve / build| Gate[MutationGate]
     Gate --> Preparer
     Gate --> SwiftPM
@@ -29,7 +34,8 @@ The static `SwiftlyKit.build` fast track creates a `SwiftlyKit` value and runs t
 staged operations in order: assess, prepare, discover products, select one, and
 build. If the build reports that dependency resolution is required, the fast
 track resolves once and retries the build. It is orchestration over the staged
-API, not a separate build pipeline.
+interface, not a separate build pipeline. It forwards exact toolchain selection
+and build choices, including stripping, into those same staged operations.
 
 The staged API keeps authorization and build choices explicit. Assessment is
 read-only: it captures the canonical package root and package-input bytes,
@@ -39,6 +45,12 @@ official release. Passing that assessment to `prepare` authorizes only its
 capability containing the exact package, target, Swiftly executable, toolchain,
 and SDK context used by later operations. `BuildRequest` then contains only
 choices for one build.
+
+Compatible-environment discovery uses the same read-only observation and
+materializes each exact compatible assessment once in newest-first order.
+`EnvironmentChoices.select` applies automatic or exact policy to that captured
+evidence without more I/O. The collection can remain useful for exact selection
+if an invalid `.swift-version` makes automatic selection fail.
 
 The static `requestCommandLineToolsInstallation` recovery operation is separate
 from environment preparation. `HostPreflight` reports `HostReadiness` as data.
@@ -65,8 +77,8 @@ discovery do not acquire it.
 - `Environment/Assessment` owns `PackageInputSnapshot`, which canonicalizes the
   package root, parses the tools version, finds the nearest `.swift-version`, and
   snapshots those inputs byte-for-byte. It coordinates the read-only package,
-  host, release, discovery, and selection steps and produces
-  `EnvironmentAssessment`.
+  host, release, discovery, and selection steps and produces one
+  `EnvironmentAssessment` or an `EnvironmentChoices` snapshot.
 - `Environment/Discovery` detects Swiftly, constructs Swiftly-run commands, and
   owns `InstalledEnvironmentInventory`, the canonical installed toolchain and
   SDK representation.
@@ -81,9 +93,11 @@ discovery do not acquire it.
   explicit dependency resolution, build execution, optional stripping, and
   build-storage cleanup.
 - `SwiftPM/PackageDescription` decodes SwiftPM package metadata into executable
-  products and their transitive runtime-resource requirements.
+  products and their transitive runtime-resource requirements. The facade wraps
+  the name-ordered products in `ExecutableProducts`, which owns named and sole
+  selection policy.
 - `SwiftPM/Output` owns runtime-resource inspection, ELF verification, and
-  exclusive atomic output copying.
+  staged output transformation and atomic publication.
 - `SwiftPM/Storage` converts a public `BuildStorage` choice into a canonical,
   safety-checked scratch directory and hides the retained exact-SDK directory
   layout and its cross-process create-or-verify protocol.
@@ -105,6 +119,9 @@ discovery do not acquire it.
 - Assessment derives its values from one captured `Package.swift` and nearest
   `.swift-version` state. Preparation compares the same inputs byte-for-byte
   before any mutation.
+- Compatible environment choices are unique by Swift version, ordered newest
+  first, and derived from one package, catalog, target, and installed-state
+  observation. Selection from the snapshot performs no I/O.
 - Preparation installs only components authorized by `requiredComponents` and
   confirms the selected toolchain and SDK before returning. Swiftly installer
   downloads require HTTPS and a successful response, the installer must pass
@@ -125,10 +142,16 @@ discovery do not acquire it.
 - Product discovery and builds disable automatic dependency resolution. Staged
   builds surface a structured resolution-required error; only the fast track
   performs the explicit resolve-and-retry sequence.
+- Executable products are unique and ordered by name. Named and sole-product
+  selection use the same `ExecutableProducts.select` behavior in staged and
+  fast-track workflows.
 - Internal SwiftPM failures are classified structurally before becoming public
   `SwiftlyKitError` values. Collected subprocess output and surfaced diagnostics
   are bounded.
 - A build result must be an executable, static, little-endian ELF64 file for the
   requested architecture. Stripped results are verified again.
-- Output publication uses an exclusive atomic rename and never replaces an
-  existing destination.
+- Stripping operates on a SwiftlyKit-owned copy and never changes SwiftPM's
+  produced executable in build storage.
+- Requested output publication occurs only after optional stripping and
+  verification, uses an exclusive atomic rename, and never replaces an existing
+  destination.

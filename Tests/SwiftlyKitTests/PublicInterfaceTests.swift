@@ -20,6 +20,35 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("The fast track exposes exact toolchain selection and stripping")
+    func fastTrackToolchainAndStrippingCompile() {
+
+        let workflow: @Sendable (URL, URL) async throws -> URL = { packageRoot, destination in
+            try await SwiftlyKit.build(
+                packageRoot,
+                toolchain: .exact(SwiftVersion(major: 6, minor: 2, patch: 1)),
+                output: .copy(to: destination),
+                strip: true
+            )
+        }
+        _ = workflow
+    }
+
+    @Test("Compatible environment discovery compiles without testable access")
+    func compatibleEnvironmentDiscoveryCompiles() {
+
+        let workflow: @Sendable (URL, ToolchainSelection) async throws -> EnvironmentAssessment = {
+            packageRoot, selection in
+            let choices = try await SwiftlyKit().compatibleEnvironments(
+                packageRoot,
+                for: .linux(.arm64)
+            )
+            _ = choices.map(\.swiftVersion)
+            return try choices.select(selection)
+        }
+        _ = workflow
+    }
+
     @Test("The documented Command Line Tools recovery compiles without testable access")
     func commandLineToolsRecoveryCompiles() {
 
@@ -58,7 +87,7 @@ private func documentedWorkflow(_ packageRoot: URL) async throws -> URL {
     _ = assessment.requiresInstallation
     let environment = try await kit.prepare(assessment)
     let products = try await kit.executableProducts(using: environment)
-    guard let product = products.first else { throw SwiftlyKitError.executableProductNotFound("") }
+    let product = try products.select()
     let request = BuildRequest(product, configuration: .release)
     do {
         return try await kit.build(request, using: environment)

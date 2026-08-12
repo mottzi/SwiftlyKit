@@ -156,35 +156,113 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
+    @Test("The fast track selects an exact toolchain")
+    func exactToolchain() async throws {
+
+        try await withFastTrackTemporaryDirectory { packageRoot in
+            let selectedVersion = SwiftVersion(major: 6, minor: 2, patch: 1)
+            let newerVersion = SwiftVersion(major: 6, minor: 3, patch: 0)
+            let executable = packageRoot.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .x86_64)
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: packageJSON),
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: packageRoot.path + "\n")
+            ])
+            let kit = fastTrackKit(
+                packageRoot: packageRoot,
+                runner: runner,
+                versions: [selectedVersion, newerVersion]
+            )
+
+            _ = try await kit.build(
+                packageRoot,
+                product: nil,
+                for: .linux(.x86_64),
+                toolchain: .exact(selectedVersion),
+                configuration: .release,
+                onEvent: nil
+            )
+
+            let commands = await runner.commands
+            #expect(commands[2].arguments.suffix(1) == ["+6.2.1"])
+        }
+    }
+
+    @Test("The fast track forwards stripping without changing the SwiftPM executable")
+    func strip() async throws {
+
+        try await withFastTrackTemporaryDirectory { packageRoot in
+            let executable = packageRoot.appending(path: "Tool")
+            let output = packageRoot.appending(path: "StrippedTool")
+            try writeELF(to: executable, architecture: .x86_64)
+            let originalBytes = try Data(contentsOf: executable)
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: packageJSON),
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: packageRoot.path + "\n"),
+                .success(output: "stripped")
+            ])
+            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+
+            let result = try await kit.build(
+                packageRoot,
+                product: nil,
+                for: .linux(.x86_64),
+                configuration: .release,
+                output: .copy(to: output),
+                strip: true,
+                onEvent: nil
+            )
+
+            #expect(result == output)
+            #expect(try Data(contentsOf: executable) == originalBytes)
+            let commands = await runner.commands
+            #expect(commands.count == 5)
+            #expect(commands[4].arguments.prefix(3) == ["run", "llvm-objcopy", "--strip-all"])
+            #expect(commands[4].arguments[3] != executable.path)
+        }
+    }
+
 }
 
-private func fastTrackKit(packageRoot: URL, runner: RecordingSubprocessRunner) -> SwiftlyKit {
+private func fastTrackKit(
+    packageRoot: URL,
+    runner: RecordingSubprocessRunner,
+    versions: [SwiftVersion] = [SwiftVersion(major: 6, minor: 2, patch: 1)]
+) -> SwiftlyKit {
 
-    let version = SwiftVersion(major: 6, minor: 2, patch: 1)
-    let sdkIdentifier = "swift-6.2.1-RELEASE_static-linux-1.0.0"
     let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
     let inventory = InstalledEnvironmentInventory(
-        toolchains: [version],
-        sdks: [InstalledStaticLinuxSDK(
-            toolchainVersion: version,
-            identifier: sdkIdentifier
-        )]
+        toolchains: versions,
+        sdks: versions.map { version in
+            InstalledStaticLinuxSDK(
+                toolchainVersion: version,
+                identifier: sdkIdentifier(for: version)
+            )
+        }
     )
-    let release = OfficialStableRelease(
-        version: version,
-        staticLinuxSDK: StaticLinuxSDK(identifier: sdkIdentifier, version: "1.0.0"),
-        staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
-            downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
-            checksum: String(repeating: "a", count: 64),
-            supportedArchitectures: [.x86_64]
-        )!
-    )
+    let releases = versions.map { version in
+        OfficialStableRelease(
+            version: version,
+            staticLinuxSDK: StaticLinuxSDK(identifier: sdkIdentifier(for: version), version: "1.0.0"),
+            staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
+                downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
+                checksum: String(repeating: "a", count: 64),
+                supportedArchitectures: [.x86_64]
+            )!
+        )
+    }
 
     return SwiftlyKit(
         assessor: EnvironmentAssessor(
             assessHost: { .ready },
             detectSwiftly: { swiftly },
-            loadReleases: { [release] },
+            loadReleases: { releases },
             inspectInventory: { _ in inventory },
             locateSDK: { _ in packageRoot.appending(path: "sdk.artifactbundle") }
         ),
@@ -201,6 +279,10 @@ private func fastTrackKit(packageRoot: URL, runner: RecordingSubprocessRunner) -
             validateEnvironment: { _ in }
         )
     )
+}
+
+private func sdkIdentifier(for version: SwiftVersion) -> String {
+    "swift-\(version)-RELEASE_static-linux-1.0.0"
 }
 
 private func withFastTrackTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {

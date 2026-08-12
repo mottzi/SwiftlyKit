@@ -2,14 +2,21 @@ import Foundation
 
 enum AtomicOutputCopier {
 
-    static func copy(_ source: URL, to destination: URL) throws -> URL {
+    static func copy(
+        _ source: URL,
+        to destination: URL,
+        replacingExisting: Bool = false,
+        prepare: (URL) async throws -> Void = { _ in }
+    ) async throws -> URL {
 
         guard source.isFileURL,
               destination.isFileURL
         else { throw SwiftPMError.outputCopyFailed(destination) }
 
-        guard !FileManager.default.fileExists(atPath: destination.path)
-        else { throw SwiftPMError.outputAlreadyExists(destination) }
+        if !replacingExisting {
+            guard !FileManager.default.fileExists(atPath: destination.path)
+            else { throw SwiftPMError.outputAlreadyExists(destination) }
+        }
 
         let temporary = destination
             .deletingLastPathComponent()
@@ -19,10 +26,13 @@ enum AtomicOutputCopier {
         catch { throw SwiftPMError.outputCopyFailed(destination) }
         defer { try? FileManager.default.removeItem(at: temporary) }
 
-        let renameStatus = renameatx_np(AT_FDCWD, temporary.path, AT_FDCWD, destination.path, UInt32(RENAME_EXCL))
+        try await prepare(temporary)
+
+        let flags = replacingExisting ? 0 : UInt32(RENAME_EXCL)
+        let renameStatus = renameatx_np(AT_FDCWD, temporary.path, AT_FDCWD, destination.path, flags)
 
         if renameStatus != 0 {
-            if errno == EEXIST { throw SwiftPMError.outputAlreadyExists(destination) }
+            if !replacingExisting && errno == EEXIST { throw SwiftPMError.outputAlreadyExists(destination) }
             throw SwiftPMError.outputCopyFailed(destination)
         }
 

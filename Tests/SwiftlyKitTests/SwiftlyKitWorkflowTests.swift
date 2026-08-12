@@ -49,7 +49,7 @@ struct SwiftlyKitWorkflowTests {
         }
     }
 
-    @Test("A prepared capability carries package and target context into product discovery")
+    @Test("A discovered environment carries package and target context through preparation")
     func capabilityDrivenProductDiscovery() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in
@@ -103,7 +103,8 @@ struct SwiftlyKitWorkflowTests {
                 )
             )
 
-            let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))
+            let choices = try await kit.compatibleEnvironments(packageRoot, for: .linux(.arm64))
+            let assessment = try choices.select(.automatic)
             let environment = try await kit.prepare(assessment)
             let products = try await kit.executableProducts(using: environment)
 

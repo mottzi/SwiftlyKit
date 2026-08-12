@@ -124,21 +124,165 @@ struct EnvironmentAssessorTests {
         }
     }
 
+    @Test("Discovery returns unique compatible assessments from one installed-state observation")
+    func compatibleEnvironmentDiscovery() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.2\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            let older = assessorRelease("6.2.4")
+            let newer = assessorRelease("6.3.3")
+            let unsupported = assessorRelease("6.4.1", architectures: [.x86_64])
+            let incompatible = assessorRelease("6.1.2")
+            let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
+            let inventory = InstalledEnvironmentInventory(
+                toolchains: [older.version],
+                sdks: [InstalledStaticLinuxSDK(
+                    toolchainVersion: older.version,
+                    identifier: older.staticLinuxSDK.identifier
+                )]
+            )
+            let inspections = AssessorCounter()
+            let assessor = EnvironmentAssessor(
+                assessHost: { .ready },
+                detectSwiftly: { swiftly },
+                loadReleases: { [older, newer, newer, unsupported, incompatible] },
+                inspectInventory: { _ in
+                    await inspections.increment()
+                    return inventory
+                },
+                locateSDK: { identifier in
+                    identifier == older.staticLinuxSDK.identifier
+                        ? packageRoot.appending(path: "\(identifier).artifactbundle")
+                        : nil
+                }
+            )
+
+            let choices = try await assessor.compatibleEnvironments(packageRoot, for: .linux(.arm64))
+            let automatic = try choices.select(.automatic)
+            let exact = try choices.select(.exact(newer.version))
+
+            #expect(choices.map(\.swiftVersion) == [newer.version, older.version])
+            #expect(choices[0].requiredComponents == [.toolchain, .staticLinuxSDK])
+            #expect(choices[1].requiredComponents.isEmpty)
+            #expect(automatic.swiftVersion == older.version)
+            #expect(exact.swiftVersion == newer.version)
+            #expect(await inspections.value == 1)
+        }
+    }
+
+    @Test("An invalid automatic preference does not hide compatible exact choices")
+    func invalidAutomaticPreferencePreservesChoices() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.2\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            try Data("main-snapshot\n".utf8).write(
+                to: packageRoot.appending(path: ".swift-version")
+            )
+            let release = assessorRelease("6.3.3")
+            let assessor = EnvironmentAssessor(
+                assessHost: { .ready },
+                detectSwiftly: { nil },
+                loadReleases: { [release] },
+                locateSDK: { _ in nil }
+            )
+
+            let choices = try await assessor.compatibleEnvironments(packageRoot, for: .linux(.arm64))
+
+            #expect(choices.map(\.swiftVersion) == [release.version])
+            #expect(throws: SwiftlyKitError.compatibleReleaseUnavailable) {
+                try choices.select(.automatic)
+            }
+            #expect(try choices.select(.exact(release.version)).swiftVersion == release.version)
+        }
+    }
+
+    @Test("Discovery returns an empty collection if no release is compatible")
+    func emptyCompatibleEnvironmentDiscovery() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 7.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            let assessor = EnvironmentAssessor(
+                assessHost: { .ready },
+                detectSwiftly: { nil },
+                loadReleases: { [assessorRelease("6.3.3")] },
+                locateSDK: { _ in nil }
+            )
+
+            let choices = try await assessor.compatibleEnvironments(packageRoot, for: .linux(.arm64))
+
+            #expect(choices.isEmpty)
+            #expect(throws: SwiftlyKitError.compatibleReleaseUnavailable) {
+                try choices.select(.automatic)
+            }
+        }
+    }
+
+    @Test("Choice selection preserves exact-selection failures")
+    func choiceSelectionErrors() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.3\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            let old = assessorRelease("6.2.4")
+            let wrongArchitecture = assessorRelease("6.4.1", architectures: [.x86_64])
+            let compatible = assessorRelease("6.5.0")
+            let unavailable = SwiftVersion(major: 7, minor: 0, patch: 0)
+            let assessor = EnvironmentAssessor(
+                assessHost: { .ready },
+                detectSwiftly: { nil },
+                loadReleases: { [old, wrongArchitecture, compatible] },
+                locateSDK: { _ in nil }
+            )
+
+            let choices = try await assessor.compatibleEnvironments(packageRoot, for: .linux(.arm64))
+
+            #expect(throws: SwiftlyKitError.unsupportedToolsVersion(
+                SwiftVersion(major: 6, minor: 3, patch: 0)
+            )) {
+                try choices.select(.exact(old.version))
+            }
+            #expect(throws: SwiftlyKitError.staticLinuxSDKUnavailable) {
+                try choices.select(.exact(wrongArchitecture.version))
+            }
+            #expect(throws: SwiftlyKitError.compatibleReleaseUnavailable) {
+                try choices.select(.exact(unavailable))
+            }
+        }
+    }
+
 }
 
-private func assessorRelease() -> OfficialStableRelease {
+private func assessorRelease(
+    _ value: String = "6.3.3",
+    architectures: Set<LinuxArchitecture> = [.arm64]
+) -> OfficialStableRelease {
 
-    let version = SwiftVersion(major: 6, minor: 3, patch: 3)
+    let version = SwiftVersion(parsing: value)!
     return OfficialStableRelease(
         version: version,
         staticLinuxSDK: StaticLinuxSDK(
-            identifier: "swift-6.3.3-RELEASE_static-linux-0.1.0",
+            identifier: "swift-\(value)-RELEASE_static-linux-0.1.0",
             version: "0.1.0"
         ),
         staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
             downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
             checksum: String(repeating: "a", count: 64),
-            supportedArchitectures: [.arm64]
+            supportedArchitectures: architectures
         )!
     )
+}
+
+private actor AssessorCounter {
+
+    private(set) var value = 0
+
+    func increment() { value += 1 }
+
 }

@@ -151,7 +151,7 @@ public struct SwiftlyKit: Sendable {
 
     public func executableProducts(
         using environment: LocalBuildEnvironment
-    ) async throws -> [ExecutableProduct]
+    ) async throws -> ExecutableProducts
 
     public func resolveDependencies(
         using environment: LocalBuildEnvironment,
@@ -268,9 +268,10 @@ let environment = try await kit.prepare(assessment) { event in
 }
 
 let products = try await kit.executableProducts(using: environment)
+let product = try products.select()
 
 let request = BuildRequest(
-    products[0],
+    product,
     configuration: .release
 )
 
@@ -396,9 +397,10 @@ not manipulate Swiftly's private registry or lock-file formats.
 toolchain, using SwiftPM's package description output. It does not install
 components or resolve dependencies.
 
-The operation returns executable product names only. Manifest evaluation and
-unsupported tools-version failures are typed errors, not embedded successful
-diagnostics.
+The operation returns a name-ordered `ExecutableProducts` collection. Its
+`select(_:)` operation selects a named product, or the sole product if the name
+is `nil`. Manifest evaluation, selection, and unsupported tools-version
+failures are typed errors, not embedded successful diagnostics.
 
 Reliable product discovery requires a prepared compatible toolchain. SwiftlyKit
 does not implement its own Swift manifest parser.

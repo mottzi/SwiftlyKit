@@ -52,7 +52,7 @@ public enum SwiftlyKitError: Equatable {
     /// SwiftPM could not resolve package dependencies.
     case dependencyResolutionFailed(String)
 
-    /// The fast track cannot select one product because the package declares zero or multiple executable products.
+    /// Sole-product selection failed because the package declares zero or multiple executable products.
     /// The associated array contains available product names in name order.
     case executableProductSelectionRequired([String])
 

@@ -22,9 +22,11 @@ enum EnvironmentSelectionPolicy {
             return try selectExact(version, toolsVersion: toolsVersion, architecture: architecture, releases: releases)
         }
 
-        let compatibleReleases = releases.filter { release in
-            release.version >= toolsVersion && release.supports(architecture)
-        }
+        let compatibleReleases = compatibleReleases(
+            toolsVersion: toolsVersion,
+            architecture: architecture,
+            canonicalReleases: releases
+        )
 
         let installedRelease = compatibleReleases.first { release in
             inventory.contains(toolchain: release.version, sdk: release.staticLinuxSDK.identifier)
@@ -37,6 +39,20 @@ enum EnvironmentSelectionPolicy {
         if let compatibleRelease { return compatibleRelease }
         
         throw SelectionError.noCompatibleRelease(toolsVersion: toolsVersion, architecture: architecture)
+    }
+
+    /// Returns unique compatible official releases in newest-first order.
+    static func compatibleReleases(
+        toolsVersion: SwiftVersion,
+        architecture: LinuxArchitecture,
+        releases: [OfficialStableRelease]
+    ) -> [OfficialStableRelease] {
+
+        compatibleReleases(
+            toolsVersion: toolsVersion,
+            architecture: architecture,
+            canonicalReleases: canonicalReleases(releases)
+        )
     }
 
 }
@@ -54,6 +70,17 @@ extension EnvironmentSelectionPolicy {
 }
 
 extension EnvironmentSelectionPolicy {
+
+    private static func compatibleReleases(
+        toolsVersion: SwiftVersion,
+        architecture: LinuxArchitecture,
+        canonicalReleases: [OfficialStableRelease]
+    ) -> [OfficialStableRelease] {
+
+        canonicalReleases.filter { release in
+            release.version >= toolsVersion && release.supports(architecture)
+        }
+    }
 
     private static func canonicalReleases(_ releases: [OfficialStableRelease]) -> [OfficialStableRelease] {
 

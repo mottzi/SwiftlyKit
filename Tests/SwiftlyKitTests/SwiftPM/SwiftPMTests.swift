@@ -318,7 +318,7 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Explicit stripping is reverified and the result is copied without replacement")
+    @Test("Explicit stripping prepares an atomic copy and preserves build storage")
     func stripAndCopy() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
@@ -354,14 +354,91 @@ struct SwiftPMTests {
             #expect(try Data(contentsOf: output) == Data(contentsOf: executable))
             let commands = await runner.commands
             #expect(commands.count == 4)
-            #expect(commands[3].arguments == [
-                "run", "llvm-objcopy", "--strip-all", executable.path, "+6.2.1"
-            ])
+            let strippedExecutable = commands[3].arguments[3]
+            #expect(commands[3].arguments.prefix(3) == ["run", "llvm-objcopy", "--strip-all"])
+            #expect(commands[3].arguments.suffix(1) == ["+6.2.1"])
+            #expect(strippedExecutable != executable.path)
+            #expect(strippedExecutable != output.path)
+            #expect(strippedExecutable.hasPrefix(directory.path + "/.PublishedTool.swiftlykit-"))
+            #expect(!FileManager.default.fileExists(atPath: strippedExecutable))
             #expect(await events.operations == [.building, .stripping, .copying])
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "built"),
                 EventOutput(stream: .standardOutput, text: "stripped")
             ])
+        }
+    }
+
+    @Test("Stripped build-storage output leaves the SwiftPM executable unchanged")
+    func stripInBuildStorage() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let executable = directory.appending(path: "Tool")
+            let strippedExecutable = directory.appending(path: ".Tool.swiftlykit-stripped")
+            try writeELF(to: executable, architecture: .arm64)
+            let originalBytes = try Data(contentsOf: executable)
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: directory.path + "\n"),
+                .success(output: "stripped")
+            ])
+            let events = SwiftPMEventRecorder()
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+
+            let result = try await swiftPM.build(
+                BuildRequest(ExecutableProduct(name: "Tool"), strip: true),
+                using: buildEnvironment(in: directory),
+                onEvent: { await events.record($0) }
+            )
+
+            #expect(result == strippedExecutable)
+            #expect(try Data(contentsOf: executable) == originalBytes)
+            #expect(try Data(contentsOf: strippedExecutable) == originalBytes)
+            let commands = await runner.commands
+            #expect(commands.count == 4)
+            #expect(commands[3].arguments[3] != executable.path)
+            #expect(commands[3].arguments[3] != strippedExecutable.path)
+            #expect(await events.operations == [.building, .stripping])
+        }
+    }
+
+    @Test("Strip failure preserves build storage and publishes no output")
+    func stripFailure() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let executable = directory.appending(path: "Tool")
+            let output = directory.appending(path: "PublishedTool")
+            try writeELF(to: executable, architecture: .arm64)
+            let originalBytes = try Data(contentsOf: executable)
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
+                .success(output: "built"),
+                .success(output: directory.path + "\n"),
+                .failure(standardError: "strip failed")
+            ])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+
+            await #expect(throws: SwiftPMError.commandFailed(
+                operation: .stripping,
+                diagnostic: "strip failed"
+            )) {
+                try await swiftPM.build(
+                    BuildRequest(
+                        ExecutableProduct(name: "Tool"),
+                        output: .copy(to: output),
+                        strip: true
+                    ),
+                    using: buildEnvironment(in: directory)
+                )
+            }
+
+            #expect(try Data(contentsOf: executable) == originalBytes)
+            #expect(!FileManager.default.fileExists(atPath: output.path))
+            #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).allSatisfy {
+                !$0.hasPrefix(".PublishedTool.swiftlykit-")
+            })
         }
     }
 

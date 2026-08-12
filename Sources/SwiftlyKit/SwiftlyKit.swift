@@ -41,6 +41,16 @@ public struct SwiftlyKit: Sendable {
 
 extension SwiftlyKit {
 
+    /// Returns exact compatible environments from one read-only package and installed-state observation.
+    /// Results contain each Swift version once in newest-first order.
+    /// This call can load the Swift.org catalog and inspect installed Swiftly state.
+    public func compatibleEnvironments(
+        _ packageRoot: URL,
+        for target: BuildTarget
+    ) async throws -> EnvironmentChoices {
+        try await assessor.compatibleEnvironments(packageRoot, for: target)
+    }
+
     /// Selects an exact official toolchain and matching Static Linux SDK without changing package or installed state.
     /// Captures `Package.swift` and the nearest `.swift-version` file so preparation can validate the same inputs.
     public func assess(
@@ -69,9 +79,12 @@ extension SwiftlyKit {
     }
     
     /// Returns explicit and implicit executable products in name order without resolving package dependencies.
-    public func executableProducts(using environment: LocalBuildEnvironment) async throws -> [ExecutableProduct] {
+    public func executableProducts(using environment: LocalBuildEnvironment) async throws -> ExecutableProducts {
         
-        do { return try await swiftPM.executableProducts(using: environment) }
+        do {
+            let products = try await swiftPM.executableProducts(using: environment)
+            return ExecutableProducts(products)
+        }
         catch is CancellationError { throw CancellationError() }
         catch let error as SwiftlyKitError { throw error }
         catch let error as SwiftPMError { throw error.swiftlyKitError }
@@ -147,14 +160,16 @@ extension SwiftlyKit {
     /// Prepares the required environment, resolves dependencies if necessary, and builds one verified executable.
     /// Authorizes required component installation and resolves dependencies once before a build retry.
     /// Requires exactly one executable product if `product` is `nil`.
-    /// Copies and cleans build storage according to `output`.
+    /// Selects the requested official toolchain, strips an output copy if requested, and applies `output` storage choices.
     public static func build(
         _ packageRoot: URL,
         product: String? = nil,
         for target: BuildTarget = .linux(.x86_64),
+        toolchain: ToolchainSelection = .automatic,
         configuration: BuildConfiguration = .release,
         storage: BuildStorage = .packageDefault,
         output: BuildOutput = .buildStorage,
+        strip: Bool = false,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> URL {
 
@@ -162,9 +177,11 @@ extension SwiftlyKit {
             packageRoot,
             product: product,
             for: target,
+            toolchain: toolchain,
             configuration: configuration,
             storage: storage,
             output: output,
+            strip: strip,
             onEvent: onEvent
         )
     }
@@ -173,21 +190,24 @@ extension SwiftlyKit {
         _ packageRoot: URL,
         product productName: String?,
         for target: BuildTarget,
+        toolchain: ToolchainSelection = .automatic,
         configuration: BuildConfiguration,
         storage: BuildStorage = .packageDefault,
         output: BuildOutput = .buildStorage,
+        strip: Bool = false,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> URL {
 
-        let assessment = try await assess(packageRoot, for: target)
+        let assessment = try await assess(packageRoot, for: target, toolchain: toolchain)
         let environment = try await prepare(assessment, onEvent: onEvent)
         let products = try await executableProducts(using: environment)
-        let product = try selectProduct(named: productName, from: products)
+        let product = try products.select(productName)
         let request = BuildRequest(
             product,
             configuration: configuration,
             storage: storage,
-            output: output
+            output: output,
+            strip: strip
         )
 
         do {
@@ -196,19 +216,6 @@ extension SwiftlyKit {
             try await resolveDependencies(using: environment, onEvent: onEvent)
             return try await build(request, using: environment, onEvent: onEvent)
         }
-    }
-
-    private func selectProduct(named name: String?, from products: [ExecutableProduct]) throws -> ExecutableProduct {
-
-        if let name {
-            guard let namedProduct = products.first(where: { $0.name == name })
-            else { throw SwiftlyKitError.executableProductNotFound(name) }
-            return namedProduct
-        }
-
-        guard products.count == 1, let firstProduct = products.first
-        else { throw SwiftlyKitError.executableProductSelectionRequired(products.map(\.name)) }
-        return firstProduct
     }
 
 }

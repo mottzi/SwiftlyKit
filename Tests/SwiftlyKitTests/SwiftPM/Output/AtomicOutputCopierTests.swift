@@ -6,18 +6,18 @@ import Testing
 struct AtomicOutputCopierTests {
 
     @Test("Copies bytes and refuses replacement")
-    func copyNoReplace() throws {
+    func copyNoReplace() async throws {
 
-        try withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let source = directory.appending(path: "source")
             let output = directory.appending(path: "output")
             try Data("first".utf8).write(to: source)
-            #expect(try AtomicOutputCopier.copy(source, to: output) == output)
+            #expect(try await AtomicOutputCopier.copy(source, to: output) == output)
             #expect(try Data(contentsOf: output) == Data("first".utf8))
 
             try Data("second".utf8).write(to: source)
-            #expect(throws: SwiftPMError.outputAlreadyExists(output)) {
-                try AtomicOutputCopier.copy(source, to: output)
+            await #expect(throws: SwiftPMError.outputAlreadyExists(output)) {
+                try await AtomicOutputCopier.copy(source, to: output)
             }
             #expect(try Data(contentsOf: output) == Data("first".utf8))
         }
@@ -37,7 +37,7 @@ struct AtomicOutputCopierTests {
                 for source in [first, second] {
                     group.addTask {
                         do {
-                            _ = try AtomicOutputCopier.copy(source, to: output)
+                            _ = try await AtomicOutputCopier.copy(source, to: output)
                             return .copied
                         }
                         catch let error as SwiftPMError { return .rejected(error) }
@@ -59,6 +59,73 @@ struct AtomicOutputCopierTests {
         }
     }
 
+    @Test("Prepares only the staged copy before publication")
+    func preparedCopy() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let source = directory.appending(path: "source")
+            let output = directory.appending(path: "output")
+            try Data("source".utf8).write(to: source)
+
+            let result = try await AtomicOutputCopier.copy(
+                source,
+                to: output,
+                prepare: { stagedCopy in
+                    #expect(stagedCopy != source)
+                    #expect(stagedCopy != output)
+                    try Data("prepared".utf8).write(to: stagedCopy)
+                }
+            )
+
+            #expect(result == output)
+            #expect(try Data(contentsOf: source) == Data("source".utf8))
+            #expect(try Data(contentsOf: output) == Data("prepared".utf8))
+        }
+    }
+
+    @Test("Preparation failure publishes nothing and removes staging")
+    func preparationFailure() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let source = directory.appending(path: "source")
+            let output = directory.appending(path: "output")
+            try Data("source".utf8).write(to: source)
+
+            await #expect(throws: CopyPreparationError.failed) {
+                try await AtomicOutputCopier.copy(
+                    source,
+                    to: output,
+                    prepare: { _ in throw CopyPreparationError.failed }
+                )
+            }
+
+            #expect(!FileManager.default.fileExists(atPath: output.path))
+            #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == ["source"])
+        }
+    }
+
+    @Test("Owned output can be replaced atomically")
+    func replaceOwnedOutput() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let source = directory.appending(path: "source")
+            let output = directory.appending(path: "output")
+            try Data("first".utf8).write(to: output)
+            try Data("second".utf8).write(to: source)
+
+            #expect(try await AtomicOutputCopier.copy(
+                source,
+                to: output,
+                replacingExisting: true
+            ) == output)
+            #expect(try Data(contentsOf: output) == Data("second".utf8))
+        }
+    }
+
+}
+
+private enum CopyPreparationError: Error {
+    case failed
 }
 
 private enum CopyAttempt {

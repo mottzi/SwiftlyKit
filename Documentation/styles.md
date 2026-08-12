@@ -9,6 +9,7 @@ Apply these rules in order. A style-only pass preserves behavior, API, names, ac
 - If rules conflict or require an unstated subjective judgment, make no change.
 - Do not alter whitespace-only blank lines during a style-only pass.
 - For new behavioral type and extension declarations, place one blank line immediately inside the opening and closing braces. Case-only enums and passive nested data containers may be compact. Do not reformat an existing declaration solely to normalize brace spacing.
+- When an enum has two or more cases and every case has an immediately preceding documentation comment, place exactly one blank line after the opening brace, between adjacent cases, and before the closing brace. Treat each documentation comment and its case declaration as one unit. This rule applies to existing declarations during a style-only pass.
 - Separate consecutive documented stored properties with one blank line.
 - For new functions with more than three nonblank body lines, place one blank line immediately after the opening brace. Trivial initializers and forwarding bodies may remain compact. Do not add or remove an existing leading blank line solely from the body-line count.
 - Use blank lines to divide a body into conceptual paragraphs. Keep directly coupled statements together. Do not add a blank line or introduce a local solely to manufacture a semantic phase.

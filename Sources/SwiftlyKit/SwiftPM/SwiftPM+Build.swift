@@ -100,18 +100,47 @@ extension SwiftPM {
 
         try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
 
-        if request.strip {
-            await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
-            try await strip(executable, for: request, using: environment, onOutput: CommandOutputChunk.handler(for: onEvent))
-        }
-
         switch request.output {
             case .buildStorage:
-                return executable
+                guard request.strip else { return executable }
+
+                await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
+                return try await AtomicOutputCopier.copy(
+                    executable,
+                    to: Self.strippedBuildStorageExecutable(for: executable),
+                    replacingExisting: true,
+                    prepare: { stagedExecutable in
+                        try await strip(
+                            stagedExecutable,
+                            for: request,
+                            using: environment,
+                            onOutput: CommandOutputChunk.handler(for: onEvent)
+                        )
+                    }
+                )
 
             case .copy(let destination, let cleanup):
-                await report(.copying, detail: "Copying \(request.product.name).", to: onEvent)
-                let output = try AtomicOutputCopier.copy(executable, to: destination)
+                let output: URL
+
+                if request.strip {
+                    await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
+                    output = try await AtomicOutputCopier.copy(
+                        executable,
+                        to: destination,
+                        prepare: { stagedExecutable in
+                            try await strip(
+                                stagedExecutable,
+                                for: request,
+                                using: environment,
+                                onOutput: CommandOutputChunk.handler(for: onEvent)
+                            )
+                            await report(.copying, detail: "Copying \(request.product.name).", to: onEvent)
+                        }
+                    )
+                } else {
+                    await report(.copying, detail: "Copying \(request.product.name).", to: onEvent)
+                    output = try await AtomicOutputCopier.copy(executable, to: destination)
+                }
 
                 do {
                     try await perform(cleanup, in: request.storage, using: environment, onEvent: onEvent)
@@ -197,6 +226,12 @@ extension SwiftPM {
         return lowercased.contains("package.resolved")
             || lowercased.contains("automatic resolution is disabled")
             || lowercased.contains("dependencies could not be resolved")
+    }
+
+    private static func strippedBuildStorageExecutable(for executable: URL) -> URL {
+        executable
+            .deletingLastPathComponent()
+            .appending(path: ".\(executable.lastPathComponent).swiftlykit-stripped")
     }
 
     private static func validate(_ output: BuildOutput, outside scratchDirectory: URL) throws {

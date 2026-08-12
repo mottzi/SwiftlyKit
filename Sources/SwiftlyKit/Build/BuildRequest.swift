@@ -15,8 +15,8 @@ public struct BuildRequest: Sendable {
     /// The location and post-copy lifecycle of the executable.
     public let output: BuildOutput
     
-    /// A Boolean value that removes all symbols from the verified executable if `true`.
-    /// SwiftlyKit verifies the executable again after stripping.
+    /// A Boolean value that removes all symbols from a copy of the verified executable if `true`.
+    /// SwiftlyKit preserves the SwiftPM-produced executable and verifies the stripped result again.
     public let strip: Bool
     
     /// Additional environment values for build, bin-path, and strip commands.
