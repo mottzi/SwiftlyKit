@@ -198,8 +198,10 @@ public enum ToolchainSelection: Sendable, Hashable {
 ```
 
 `SwiftVersion` is a strongly typed, comparable semantic version for an official
-stable Swift release. The public API does not accept arbitrary Swiftly selector
-strings, snapshots, or development branches.
+stable Swift release. It conforms to `LosslessStringConvertible`, accepts two or
+three ASCII decimal components, and emits three components. The public API does
+not accept arbitrary Swiftly selector strings, snapshots, or development
+branches.
 
 ### Environment assessment
 

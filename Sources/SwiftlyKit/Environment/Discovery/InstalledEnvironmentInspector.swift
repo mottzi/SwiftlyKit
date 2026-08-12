@@ -100,7 +100,7 @@ extension InstalledEnvironmentInspector {
 
         let toolchains: Set<SwiftVersion> = Set(payload.toolchains.compactMap { item in
             guard item.version.type == "stable" else { return nil }
-            return SwiftVersion(parsing: item.version.name)
+            return SwiftVersion(item.version.name)
         })
 
         return toolchains.sorted(by: >)

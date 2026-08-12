@@ -19,7 +19,27 @@ public struct SwiftVersion: Sendable, Hashable {
 
 }
 
-extension SwiftVersion: CustomStringConvertible {
+extension SwiftVersion: LosslessStringConvertible {
+
+    /// Creates a Swift version from two or three ASCII decimal components.
+    /// Returns `nil` if the text does not use a supported format.
+    public init?(_ description: String) {
+
+        let components = description.split(separator: ".", omittingEmptySubsequences: false)
+
+        guard components.count == 2 || components.count == 3 else { return nil }
+        guard components.allSatisfy(\.isASCIIDecimal) else { return nil }
+
+        guard let major = UInt(components[0]) else { return nil }
+        guard let minor = UInt(components[1]) else { return nil }
+
+        if components.count == 3 {
+            guard let patch = UInt(components[2]) else { return nil }
+            self.init(major: major, minor: minor, patch: patch)
+        } else {
+            self.init(major: major, minor: minor, patch: 0)
+        }
+    }
 
     /// The version in `major.minor.patch` format.
     public var description: String {
@@ -36,28 +56,6 @@ extension SwiftVersion: Comparable {
         if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
 
         return lhs.patch < rhs.patch
-    }
-
-}
-
-extension SwiftVersion {
-
-    init?(parsing value: String) {
-
-        let components = value.split(separator: ".", omittingEmptySubsequences: false)
-
-        guard components.count == 2 || components.count == 3 else { return nil }
-        guard components.allSatisfy(\.isASCIIDecimal) else { return nil }
-
-        guard let major = UInt(components[0]) else { return nil }
-        guard let minor = UInt(components[1]) else { return nil }
-
-        if components.count == 3 {
-            guard let patch = UInt(components[2]) else { return nil }
-            self.init(major: major, minor: minor, patch: patch)
-        } else {
-            self.init(major: major, minor: minor, patch: 0)
-        }
     }
 
 }

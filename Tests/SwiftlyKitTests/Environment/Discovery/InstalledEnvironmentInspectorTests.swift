@@ -188,5 +188,5 @@ struct InstalledEnvironmentInspectorTests {
 }
 
 private func inspectorVersion(_ value: String) -> SwiftVersion {
-    SwiftVersion(parsing: value)!
+    SwiftVersion(value)!
 }

@@ -60,12 +60,12 @@ extension SwiftOrgReleaseCatalog {
     private static func release(from payload: ReleasePayload) -> OfficialStableRelease? {
 
         guard let name = payload.name else { return nil }
-        guard let version = SwiftVersion(parsing: name) else { return nil }
+        guard let version = SwiftVersion(name) else { return nil }
         guard payload.tag == "swift-\(name)-RELEASE" else { return nil }
         
         guard let platform = payload.platforms?.first(where: { $0.platform == "static-sdk" }) else { return nil }
         guard let sdkVersion = platform.version else { return nil }
-        guard SwiftVersion(parsing: sdkVersion) != nil else { return nil }
+        guard SwiftVersion(sdkVersion) != nil else { return nil }
         guard let checksum = platform.checksum else { return nil }
 
         let architectures = Set((platform.archs ?? []).compactMap(LinuxArchitecture.init(catalogName:)))

@@ -110,7 +110,7 @@ extension PackageInputSnapshot {
             .drop(while: isHorizontalWhitespace)
             .reversed()
 
-        return SwiftVersion(parsing: String(value))
+        return SwiftVersion(String(value))
     }
 
     private static func isHorizontalWhitespace(_ character: Character) -> Bool {

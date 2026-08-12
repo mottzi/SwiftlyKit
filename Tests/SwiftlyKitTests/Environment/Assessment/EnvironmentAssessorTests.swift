@@ -264,7 +264,7 @@ private func assessorRelease(
     architectures: Set<LinuxArchitecture> = [.arm64]
 ) -> OfficialStableRelease {
 
-    let version = SwiftVersion(parsing: value)!
+    let version = SwiftVersion(value)!
     return OfficialStableRelease(
         version: version,
         staticLinuxSDK: StaticLinuxSDK(

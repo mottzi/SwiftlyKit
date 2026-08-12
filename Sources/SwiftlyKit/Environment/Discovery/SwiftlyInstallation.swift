@@ -99,7 +99,7 @@ extension SwiftlyInstallation {
         let components = trimmed.split(separator: ".", omittingEmptySubsequences: false)
 
         guard components.count == 3 else { return false }
-        guard let version = SwiftVersion(parsing: trimmed) else { return false }
+        guard let version = SwiftVersion(trimmed) else { return false }
 
         return version.major >= 1
     }

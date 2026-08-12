@@ -17,7 +17,7 @@ enum EnvironmentSelectionPolicy {
         }
 
         if let swiftVersionPreference {
-            guard let version = SwiftVersion(parsing: swiftVersionPreference)
+            guard let version = SwiftVersion(swiftVersionPreference)
             else { throw SelectionError.invalidSwiftVersionPreference(swiftVersionPreference) }
             return try selectExact(version, toolsVersion: toolsVersion, architecture: architecture, releases: releases)
         }

@@ -18,11 +18,20 @@ struct SwiftVersionTests {
         #expect(SwiftVersion(major: 6, minor: 2, patch: 1) > minor)
     }
 
-    @Test("Parsing rejects non-semantic selectors")
-    func strictParsing() {
+    @Test("Text conversion accepts two or three numeric components")
+    func textConversion() {
 
-        #expect(SwiftVersion(parsing: "6.2") == SwiftVersion(major: 6, minor: 2, patch: 0))
-        #expect(SwiftVersion(parsing: "6.2.1") == SwiftVersion(major: 6, minor: 2, patch: 1))
+        #expect(SwiftVersion("6.2") == SwiftVersion(major: 6, minor: 2, patch: 0))
+        #expect(SwiftVersion("6.2.1") == SwiftVersion(major: 6, minor: 2, patch: 1))
+        #expect(SwiftVersion(SwiftVersion(major: 6, minor: 2, patch: 1).description) == .init(
+            major: 6,
+            minor: 2,
+            patch: 1
+        ))
+    }
+
+    @Test("Text conversion rejects non-semantic selectors")
+    func strictTextConversion() {
 
         let values = [
             "",
@@ -35,10 +44,11 @@ struct SwiftVersionTests {
             "6.2-rc1",
             "6.2+build",
             "6.2.1.0",
+            "٦.٢",
             String(repeating: "9", count: 40) + ".0"
         ]
         for value in values {
-            #expect(SwiftVersion(parsing: value) == nil)
+            #expect(SwiftVersion(value) == nil)
         }
     }
 

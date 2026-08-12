@@ -151,5 +151,5 @@ private func selectionRelease(
 }
 
 private func selectionVersion(_ value: String) -> SwiftVersion {
-    SwiftVersion(parsing: value)!
+    SwiftVersion(value)!
 }

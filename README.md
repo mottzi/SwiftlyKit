@@ -362,6 +362,22 @@ let assessment = try await kit.assess(
 )
 ```
 
+Use the lossless text initializer for a command-line argument, text field, or
+stored preference:
+
+```swift
+let versionText = "6.2.1"
+
+if let version = SwiftVersion(versionText) {
+    let assessment = try choices.select(.exact(version))
+    print("Selected Swift \(assessment.swiftVersion).")
+}
+```
+
+The initializer accepts two or three ASCII decimal components. It normalizes
+`"6.2"` to `"6.2.0"` and rejects snapshots, labels, and arbitrary Swiftly
+selectors.
+
 Use `compatibleEnvironments(_:for:)` if the caller does not know the exact
 version in advance. Iterate over the returned exact assessments, keep the user
 choice as a `ToolchainSelection`, and call `select(_:)` before preparation.
@@ -503,7 +519,7 @@ do {
 | `BuildOutput`, `BuildCleanup` | Select executable copying and retained, cleaned, or reset build storage. |
 | `BuildTarget`, `LinuxArchitecture` | Select the Linux architecture. |
 | `BuildConfiguration` | Selects a debug or release build. |
-| `ToolchainSelection`, `SwiftVersion` | Select an automatic or exact official stable Swift release. |
+| `ToolchainSelection`, `SwiftVersion` | Select a release and convert exact versions to or from text. |
 | `ExecutableProduct` | Identifies an executable product reported by SwiftPM. |
 | `SwiftlyKitEvent`, `SwiftlyKitEvent.Handler` | Report progress and delegated command output. |
 | `SwiftlyKitError` | Reports typed operational failures. |

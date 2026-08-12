@@ -98,5 +98,5 @@ struct SwiftOrgReleaseCatalogTests {
 }
 
 private func swiftVersion(_ value: String) -> SwiftVersion {
-    SwiftVersion(parsing: value)!
+    SwiftVersion(value)!
 }

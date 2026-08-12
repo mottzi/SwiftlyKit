@@ -58,6 +58,14 @@ struct PublicInterfaceTests {
         _ = inspection
     }
 
+    @Test("Swift version text conversion compiles without testable access")
+    func swiftVersionTextConversionCompiles() {
+
+        let version = SwiftVersion("6.3.3")
+        let losslessVersion: (any LosslessStringConvertible)? = version
+        _ = losslessVersion
+    }
+
     @Test("The documented Command Line Tools recovery compiles without testable access")
     func commandLineToolsRecoveryCompiles() {
 
