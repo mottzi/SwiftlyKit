@@ -32,13 +32,13 @@ private struct PackageDescriptionFixture: Encodable {
 
     struct ProductType: Encodable {
 
-        private enum CodingKeys: String, CodingKey {
-            case executable
-        }
-
         func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encodeNil(forKey: .executable)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case executable
         }
 
     }

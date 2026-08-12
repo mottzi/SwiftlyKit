@@ -220,9 +220,11 @@ struct SwiftPMCleanupTests {
             #expect(await runner.commands.isEmpty)
         }
     }
+
 }
 
 private func cleanupEnvironment(in directory: URL) -> LocalBuildEnvironment {
+
     LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
         staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
@@ -234,6 +236,7 @@ private func cleanupEnvironment(in directory: URL) -> LocalBuildEnvironment {
 }
 
 private actor CleanupEventRecorder {
+
     private(set) var operations: [OperationProgress.Operation] = []
     private(set) var output: [String] = []
 
@@ -243,4 +246,5 @@ private actor CleanupEventRecorder {
             case .output(let output): self.output.append(output.text)
         }
     }
+
 }

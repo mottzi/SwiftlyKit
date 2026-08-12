@@ -8,6 +8,7 @@ Apply these rules in order. A style-only pass preserves behavior, API, names, ac
 - Apply the narrowest matching rule. A specific exception overrides a general rule; never infer a rule's converse.
 - If rules conflict or require an unstated subjective judgment, make no change.
 - Do not alter whitespace-only blank lines during a style-only pass.
+- Declare type aliases before stored instance properties. This overrides the property-first default in `stepdown.md`.
 - For new behavioral type and extension declarations, place one blank line immediately inside the opening and closing braces. Case-only enums and passive nested data containers may be compact. Do not reformat an existing declaration solely to normalize brace spacing.
 - When an enum has two or more cases and every case has an immediately preceding documentation comment, place exactly one blank line after the opening brace, between adjacent cases, and before the closing brace. Treat each documentation comment and its case declaration as one unit. This rule applies to existing declarations during a style-only pass.
 - Separate consecutive documented stored properties with one blank line.

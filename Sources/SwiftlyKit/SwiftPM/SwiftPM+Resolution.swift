@@ -2,7 +2,10 @@ import Foundation
 
 extension SwiftPM {
 
-    func resolveDependencies(using environment: LocalBuildEnvironment, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
+    func resolveDependencies(
+        using environment: LocalBuildEnvironment,
+        onEvent: SwiftlyKitEvent.Handler? = nil
+    ) async throws {
 
         try validateEnvironment(environment)
 

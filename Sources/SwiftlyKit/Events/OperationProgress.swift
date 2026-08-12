@@ -26,6 +26,7 @@ extension OperationProgress {
     
     /// A mutating workflow activity that can emit progress.
     public enum Operation: Sendable {
+
         /// Installation of a required environment component.
         case preparingEnvironment
 
@@ -46,6 +47,7 @@ extension OperationProgress {
 
         /// Removal of the complete effective SwiftPM scratch directory.
         case resettingBuildStorage
+
     }
     
 }

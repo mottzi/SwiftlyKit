@@ -31,11 +31,13 @@ extension CommandOutputChunk {
     
     /// A standard subprocess output stream.
     public enum Stream: Sendable {
+
         /// Standard output from a delegated subprocess.
         case standardOutput
 
         /// Standard error from a delegated subprocess.
         case standardError
+
     }
     
 }

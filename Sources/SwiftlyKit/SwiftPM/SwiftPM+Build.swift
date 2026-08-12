@@ -192,6 +192,24 @@ extension SwiftPM {
 
 extension SwiftPM {
 
+    private static func validate(_ output: BuildOutput, outside scratchDirectory: URL) throws {
+
+        guard case .copy(let destination, let cleanup) = output,
+              cleanup != .retain
+        else { return }
+
+        let resolvedScratchDirectory = scratchDirectory.resolvingSymlinksInPath().standardizedFileURL
+        let resolvedDestination = destination
+            .deletingLastPathComponent()
+            .resolvingSymlinksInPath()
+            .appending(path: destination.lastPathComponent)
+            .standardizedFileURL
+
+        guard resolvedDestination != resolvedScratchDirectory,
+              !resolvedDestination.path.hasPrefix(resolvedScratchDirectory.path + "/")
+        else { throw SwiftPMError.outputInsideBuildStorage(destination) }
+    }
+
     private static func buildArguments(
         _ request: BuildRequest,
         environment: LocalBuildEnvironment,
@@ -232,23 +250,6 @@ extension SwiftPM {
         executable
             .deletingLastPathComponent()
             .appending(path: ".\(executable.lastPathComponent).swiftlykit-stripped")
-    }
-
-    private static func validate(_ output: BuildOutput, outside scratchDirectory: URL) throws {
-        guard case .copy(let destination, let cleanup) = output,
-              cleanup != .retain
-        else { return }
-
-        let resolvedScratchDirectory = scratchDirectory.resolvingSymlinksInPath().standardizedFileURL
-        let resolvedDestination = destination
-            .deletingLastPathComponent()
-            .resolvingSymlinksInPath()
-            .appending(path: destination.lastPathComponent)
-            .standardizedFileURL
-
-        guard resolvedDestination != resolvedScratchDirectory,
-              !resolvedDestination.path.hasPrefix(resolvedScratchDirectory.path + "/")
-        else { throw SwiftPMError.outputInsideBuildStorage(destination) }
     }
 
 }

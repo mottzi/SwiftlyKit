@@ -36,7 +36,10 @@ struct EnvironmentPreparer {
     }
 
     /// Revalidates first, then performs only the mutations authorized by the assessment.
-    func prepare(_ assessment: EnvironmentAssessment, onEvent: SwiftlyKitEvent.Handler? = nil) async throws -> LocalBuildEnvironment {
+    func prepare(
+        _ assessment: EnvironmentAssessment,
+        onEvent: SwiftlyKitEvent.Handler? = nil
+    ) async throws -> LocalBuildEnvironment {
 
         try (await assessHost()).requireReady()
         try await revalidate(assessment)
@@ -67,10 +70,7 @@ extension EnvironmentPreparer {
     private func installRequiredComponents(
         _ assessment: EnvironmentAssessment,
         onEvent: SwiftlyKitEvent.Handler?
-    ) async throws -> (
-        swiftly: SwiftlyInstallation,
-        inventory: InstalledEnvironmentInventory
-    ) {
+    ) async throws -> (swiftly: SwiftlyInstallation, inventory: InstalledEnvironmentInventory) {
 
         var swiftly = try await detectSwiftly()
         

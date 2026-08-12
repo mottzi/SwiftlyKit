@@ -382,13 +382,13 @@ struct PackageDescriptionTests {
 
 }
 
-private extension PackageDescriptionTests {
+extension PackageDescriptionTests {
 
-    func description(products: String, targets: String) throws -> PackageDescription {
+    private func description(products: String, targets: String) throws -> PackageDescription {
         try PackageDescription(data: Data(packageJSON(products: products, targets: targets).utf8))
     }
 
-    func packageJSON(products: String, targets: String) -> String {
+    private func packageJSON(products: String, targets: String) -> String {
         """
         {
           "products": [\(products)],
@@ -397,16 +397,16 @@ private extension PackageDescriptionTests {
         """
     }
 
-    func executableProduct(name: String, targets: [String]) -> String {
+    private func executableProduct(name: String, targets: [String]) -> String {
         let targets = targets.map { "\"\($0)\"" }.joined(separator: ",")
         return #"{"name":"\#(name)","targets":[\#(targets)],"type":{"executable":null}}"#
     }
 
-    func regularTarget(name: String) -> String {
+    private func regularTarget(name: String) -> String {
         #"{"name":"\#(name)","type":"regular","dependencies":[],"resources":[]}"#
     }
 
-    func resourceTarget(name: String) -> String {
+    private func resourceTarget(name: String) -> String {
         #"{"name":"\#(name)","type":"regular","dependencies":[],"resources":[{"rule":{"process":{}},"path":"asset.txt"}]}"#
     }
 

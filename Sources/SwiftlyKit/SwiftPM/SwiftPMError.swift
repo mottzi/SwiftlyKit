@@ -19,18 +19,39 @@ extension SwiftPMError {
 
     var swiftlyKitError: SwiftlyKitError {
         switch self {
-            case .sdkSearchPathPreparationFailed(let detail): .buildFailed(detail)
-            case .malformedPackageDescription: .packageInspectionFailed("SwiftPM returned malformed package metadata.")
-            case .dependencyResolutionRequired: .dependencyResolutionRequired
-            case .executableNotFound(let product): .executableProductNotFound(product)
-            case .unsupportedProductResources(let product): .unsupportedProductResources(product)
-            case .invalidExecutable(let detail): .executableVerificationFailed(detail)
-            case .unsafeBuildStorage(let url): .unsafeBuildStorage(url)
-            case .outputInsideBuildStorage(let url): .outputInsideBuildStorage(url)
-            case .outputAlreadyExists(let url): .outputAlreadyExists(url)
-            case .outputCopyFailed(let url): .outputCopyFailed(url)
+            case .sdkSearchPathPreparationFailed(let detail):
+                .buildFailed(detail)
+
+            case .malformedPackageDescription:
+                .packageInspectionFailed("SwiftPM returned malformed package metadata.")
+
+            case .dependencyResolutionRequired:
+                .dependencyResolutionRequired
+
+            case .executableNotFound(let product):
+                .executableProductNotFound(product)
+
+            case .unsupportedProductResources(let product):
+                .unsupportedProductResources(product)
+
+            case .invalidExecutable(let detail):
+                .executableVerificationFailed(detail)
+
+            case .unsafeBuildStorage(let url):
+                .unsafeBuildStorage(url)
+
+            case .outputInsideBuildStorage(let url):
+                .outputInsideBuildStorage(url)
+
+            case .outputAlreadyExists(let url):
+                .outputAlreadyExists(url)
+
+            case .outputCopyFailed(let url):
+                .outputCopyFailed(url)
+
             case .postBuildCleanupFailed(let output, let diagnostic):
                 .postBuildCleanupFailed(output: output, detail: diagnostic)
+
             case .commandFailed(let operation, let diagnostic):
                 switch operation {
                     case .building: .buildFailed(diagnostic)

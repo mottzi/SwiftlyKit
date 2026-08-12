@@ -84,6 +84,7 @@ extension EnvironmentAssessor {
     ) throws -> EnvironmentAssessment {
 
         let release: OfficialStableRelease
+
         do {
             release = try EnvironmentSelectionPolicy.select(
                 toolchain: toolchain,
@@ -103,11 +104,9 @@ extension EnvironmentAssessor {
     private func assessment(for release: OfficialStableRelease, from observation: Observation) -> EnvironmentAssessment {
 
         let toolchainAvailable = observation.inventory.contains(toolchain: release.version)
-        let sdkListed = observation.inventory.contains(
-            toolchain: release.version,
-            sdk: release.staticLinuxSDK.identifier
-        )
+        let sdkListed = observation.inventory.contains(toolchain: release.version, sdk: release.staticLinuxSDK.identifier)
         let sdkBundleURL = locateSDK(release.staticLinuxSDK.identifier)
+
         let sdkAvailable = sdkBundleURL != nil && (sdkListed || !toolchainAvailable)
 
         var requiredComponents: [PreparationComponent] = []
@@ -151,10 +150,10 @@ extension EnvironmentAssessor {
 
 }
 
-private extension EnvironmentAssessor {
+extension EnvironmentAssessor {
 
     /// Package, catalog, and installed state captured by one read-only observation.
-    struct Observation {
+    private struct Observation {
         let packageInputs: PackageInputSnapshot
         let releases: [OfficialStableRelease]
         let inventory: InstalledEnvironmentInventory

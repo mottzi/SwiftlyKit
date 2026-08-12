@@ -93,7 +93,10 @@ extension SwiftlyKit {
     
     /// Runs SwiftPM dependency resolution with the prepared toolchain.
     /// This operation can access the network and create or update `Package.resolved`.
-    public func resolveDependencies(using environment: LocalBuildEnvironment, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
+    public func resolveDependencies(
+        using environment: LocalBuildEnvironment,
+        onEvent: SwiftlyKitEvent.Handler? = nil
+    ) async throws {
         
         try await mutationGate.withAccess {
             do { try await swiftPM.resolveDependencies(using: environment, onEvent: onEvent) }

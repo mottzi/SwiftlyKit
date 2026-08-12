@@ -2,6 +2,7 @@ import Foundation
 
 /// Typed failures from host checks, environment preparation, package inspection, executable builds, and cleanup.
 public enum SwiftlyKitError: Equatable {
+
     /// The package root is not a readable local directory with a UTF-8 `Package.swift` file.
     case invalidPackageRoot(URL)
 
@@ -91,6 +92,7 @@ public enum SwiftlyKitError: Equatable {
 
     /// SwiftPM could not remove the complete effective scratch directory.
     case buildStorageResetFailed(String)
+
 }
 
 extension SwiftlyKitError: LocalizedError {

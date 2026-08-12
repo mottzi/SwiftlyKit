@@ -59,29 +59,6 @@ enum EnvironmentSelectionPolicy {
 
 extension EnvironmentSelectionPolicy {
 
-    enum SelectionError: Error, Equatable {
-        case invalidSwiftVersionPreference(String)
-        case unavailableRelease(SwiftVersion)
-        case incompatibleToolsVersion(requested: SwiftVersion, required: SwiftVersion)
-        case unsupportedArchitecture(version: SwiftVersion, architecture: LinuxArchitecture)
-        case noCompatibleRelease(toolsVersion: SwiftVersion, architecture: LinuxArchitecture)
-    }
-
-}
-
-extension EnvironmentSelectionPolicy {
-
-    private static func compatibleReleases(
-        toolsVersion: SwiftVersion,
-        architecture: LinuxArchitecture,
-        canonicalReleases: [OfficialStableRelease]
-    ) -> [OfficialStableRelease] {
-
-        canonicalReleases.filter { release in
-            release.version >= toolsVersion && release.supports(architecture)
-        }
-    }
-
     private static func canonicalReleases(_ releases: [OfficialStableRelease]) -> [OfficialStableRelease] {
 
         var releasesByVersion: [SwiftVersion: OfficialStableRelease] = [:]
@@ -110,6 +87,29 @@ extension EnvironmentSelectionPolicy {
         else { throw SelectionError.unsupportedArchitecture(version: version, architecture: architecture) }
 
         return release
+    }
+
+    private static func compatibleReleases(
+        toolsVersion: SwiftVersion,
+        architecture: LinuxArchitecture,
+        canonicalReleases: [OfficialStableRelease]
+    ) -> [OfficialStableRelease] {
+
+        canonicalReleases.filter { release in
+            release.version >= toolsVersion && release.supports(architecture)
+        }
+    }
+
+}
+
+extension EnvironmentSelectionPolicy {
+
+    enum SelectionError: Error, Equatable {
+        case invalidSwiftVersionPreference(String)
+        case unavailableRelease(SwiftVersion)
+        case incompatibleToolsVersion(requested: SwiftVersion, required: SwiftVersion)
+        case unsupportedArchitecture(version: SwiftVersion, architecture: LinuxArchitecture)
+        case noCompatibleRelease(toolsVersion: SwiftVersion, architecture: LinuxArchitecture)
     }
 
 }

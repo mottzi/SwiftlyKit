@@ -18,12 +18,17 @@ extension SwiftPM {
         try await perform(.reset, in: storage, using: environment, onEvent: onEvent)
     }
 
+}
+
+extension SwiftPM {
+
     func perform(
         _ cleanup: BuildCleanup,
         in storage: BuildStorage,
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws {
+
         guard cleanup != .retain else { return }
 
         let scratchDirectory = try SwiftPMScratchDirectory(
@@ -68,4 +73,5 @@ extension SwiftPM {
             throw SwiftPMError.commandFailed(operation: operation, diagnostic: boundedDiagnostic(result))
         }
     }
+
 }

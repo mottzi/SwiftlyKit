@@ -23,6 +23,10 @@ enum BuildOutputInspector {
         .sorted()
     }
 
+}
+
+extension BuildOutputInspector {
+
     private static func isPrivacyMetadataBundle(_ directory: URL) throws -> Bool {
 
         let contents = try FileManager.default.contentsOfDirectory(
