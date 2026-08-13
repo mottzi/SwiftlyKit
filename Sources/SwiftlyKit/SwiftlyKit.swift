@@ -1,8 +1,7 @@
 import Foundation
 
 /// Cross-compilation API that builds verified static Linux executables from trusted local Swift packages.
-/// Each initialization creates a mutation gate that its copies share.
-/// The gate serializes environment preparation, dependency resolution, builds, and cleanup.
+/// All values in one process share mutation coordination for preparation, dependency resolution, builds, and cleanup.
 public struct SwiftlyKit: Sendable {
     
     private let mutationGate: MutationGate
@@ -20,11 +19,12 @@ public struct SwiftlyKit: Sendable {
     }
 
     init(
+        mutationGate: MutationGate = .shared,
         assessor: EnvironmentAssessor,
         preparer: EnvironmentPreparer,
         swiftPM: SwiftPM
     ) {
-        self.mutationGate = MutationGate()
+        self.mutationGate = mutationGate
         self.assessor = assessor
         self.preparer = preparer
         self.swiftPM = swiftPM

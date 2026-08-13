@@ -558,14 +558,25 @@ wants a Build log stores received events itself.
 
 `SwiftlyKit` is a small `Sendable` value backed by private coordinated state.
 
-One instance allows read-only assessment and product discovery to run
-concurrently. It serializes mutating operations:
+All values and static fast-track calls in one process allow read-only assessment
+and product discovery to run concurrently. They share one cancellation-aware
+FIFO coordinator for mutating operations:
 
 - Environment preparation;
 - dependency resolution;
-- builds.
+- builds;
+- build artifact cleanup; and
+- build storage reset.
 
 A second mutating operation waits for the current mutating operation.
+
+The coordinator is process-local. SwiftlyKit does not serialize another
+SwiftlyKit process, direct `swift` or `swiftly` commands, or direct filesystem
+mutation. A consumer must prevent those operations from changing the same user
+installation, package, effective build storage, or output during a SwiftlyKit
+operation. Tool-owned subprocess locks, exclusive output publication, and the
+exact-SDK selection protocol do not provide a lock for the complete SwiftlyKit
+workflow.
 
 Cancelling the calling task requests cancellation of the complete subprocess
 group. SwiftlyKit retains build scratch and its exact-SDK selection metadata,
@@ -687,7 +698,8 @@ acceptance fixtures prove all of the following:
 19. Products requiring runtime resource bundles are rejected.
 20. Cancellation terminates the full subprocess tree and throws
     `CancellationError`.
-21. Mutating operations on one `SwiftlyKit` instance are serialized.
+21. Mutating SwiftlyKit operations in one process are serialized across all
+    facade values and static fast-track calls.
 22. Events stream without persisted logs, and errors contain only bounded,
     redacted process context.
 23. SwiftlyKit creates no database, ownership journal, retained Build record, or

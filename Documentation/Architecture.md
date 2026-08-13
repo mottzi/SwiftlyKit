@@ -63,16 +63,37 @@ returns when macOS accepts the request; it cannot observe license acceptance or
 installation completion. The consumer retries readiness inspection or
 assessment after the user finishes the system interaction.
 
-Each `SwiftlyKit` facade instance owns a cancellation-aware FIFO `MutationGate`.
-Preparation, dependency resolution, and builds acquire the gate because they can
-change user, package, scratch, or output state. Read-only assessment and product
-discovery do not acquire it.
+One process-wide, cancellation-aware FIFO `MutationGate` coordinates every
+production `SwiftlyKit` facade value and static fast-track call. Preparation,
+dependency resolution, builds, and explicit cleanup acquire the gate because
+they can change user, package, scratch, or output state. Read-only assessment
+and product discovery do not acquire it. Internal construction can inject a
+separate gate to isolate tests without exposing coordination through the public
+interface.
+
+The gate provides in-process coordination only. It cannot serialize another
+SwiftlyKit process, an independently launched `swift` or `swiftly` command, or
+direct filesystem mutation. Delegated tools can hold their own locks while a
+child process runs, but those locks do not span SwiftlyKit's parent-side
+executable inspection, stripping, output publication, or post-build cleanup.
+Atomic output publication and the exact-SDK selection create-or-verify protocol
+protect their individual transitions, not the complete workflow.
+
+Consumers must prevent external processes from changing the same user
+installation, package, effective scratch directory, SDK installation, or output
+destination during a SwiftlyKit mutation. A future cross-process design must use
+filesystem-backed, resource-keyed coordination that spans the complete public
+operation, defines canonical resource identities and lock ordering, recovers
+from terminated owners, preserves cancellation, and avoids serializing disjoint
+build storage. The process-wide gate remains necessary for inexpensive FIFO
+coordination between Swift tasks even if that cross-process layer is added.
 
 ## Implementation map
 
 - `SwiftlyKit.swift` is the public facade, fast-track orchestrator, and interface
   that maps internal failures to `SwiftlyKitError`.
-- `MutationGate.swift` serializes the mutating operations of one facade value.
+- `MutationGate.swift` serializes public mutating workflows across all production
+  facade values and static fast-track calls in one process.
 - `Environment/Host` represents host readiness explicitly, lets readiness-required
   operations reject unsupported hosts or missing developer tools before other
   work proceeds, and owns the adapter that requests Apple's interactive Command
@@ -113,6 +134,8 @@ discovery do not acquire it.
 
 - Test seams and infrastructure are internal and cannot configure production
   callers.
+- All production facade values in one process share one FIFO mutation gate.
+  This invariant does not claim coordination with external processes.
 - The Command Line Tools installer is requested only through the explicit public
   recovery operation. It is not part of assessment or preparation, and success
   means only that macOS accepted the request.

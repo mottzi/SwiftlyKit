@@ -117,21 +117,15 @@ struct SwiftlyKitWorkflowTests {
         }
     }
 
-    @Test("Public mutating workflows share one instance-level gate")
+    @Test("Independent facades serialize public mutating workflows within one process")
     func mutatingWorkflowsAreSerialized() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in
             let executable = packageRoot.appending(path: "Tool")
             try writeELF(to: executable, architecture: .arm64)
             let runner = WorkflowMutationRunner(binaryDirectory: packageRoot)
-            let kit = SwiftlyKit(
-                assessor: EnvironmentAssessor(),
-                preparer: EnvironmentPreparer(),
-                swiftPM: SwiftPM(
-                    runner: runner,
-                    validateEnvironment: { _ in }
-                )
-            )
+            let firstKit = workflowKit(runner: runner)
+            let secondKit = workflowKit(runner: runner)
             let environment = LocalBuildEnvironment(
                 swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
                 staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
@@ -141,12 +135,24 @@ struct SwiftlyKitWorkflowTests {
                 target: .linux(.arm64)
             )
 
-            async let resolution: Void = kit.resolveDependencies(using: environment)
-            async let build = kit.build(
-                BuildRequest(ExecutableProduct(name: "Tool")),
-                using: environment
-            )
-            let (_, built) = try await (resolution, build)
+            let resolution = Task {
+                try await firstKit.resolveDependencies(using: environment)
+            }
+            await runner.waitUntilFirstCommandStarts()
+
+            let build = Task {
+                try await secondKit.build(
+                    BuildRequest(ExecutableProduct(name: "Tool")),
+                    using: environment
+                )
+            }
+
+            let overlapped = await secondCommandStarts(within: .milliseconds(100), runner: runner)
+            #expect(!overlapped)
+
+            await runner.releaseCommands()
+            try await resolution.value
+            let built = try await build.value
 
             #expect(built == executable)
             #expect(await runner.maximumConcurrentCommands == 1)
@@ -159,6 +165,10 @@ private actor WorkflowMutationRunner: SubprocessRunning {
 
     private let binaryDirectory: URL
     private var concurrentCommands = 0
+    private var firstCommandWaiters: [CheckedContinuation<Void, Never>] = []
+    private var commandsAreReleased = false
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var commandCount = 0
     private(set) var maximumConcurrentCommands = 0
 
     init(binaryDirectory: URL) {
@@ -167,10 +177,20 @@ private actor WorkflowMutationRunner: SubprocessRunning {
 
     func run(_ command: SubprocessCommand, onOutput: SubprocessOutputHandler?) async throws -> SubprocessResult {
 
+        commandCount += 1
         concurrentCommands += 1
         maximumConcurrentCommands = max(maximumConcurrentCommands, concurrentCommands)
         defer { concurrentCommands -= 1 }
-        try await Task.sleep(for: .milliseconds(5))
+
+        let firstCommandWaiters = self.firstCommandWaiters
+        self.firstCommandWaiters.removeAll()
+        firstCommandWaiters.forEach { $0.resume() }
+
+        if !commandsAreReleased {
+            await withCheckedContinuation { continuation in
+                releaseWaiters.append(continuation)
+            }
+        }
 
         if command.arguments.contains("dump-package") {
             return .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
@@ -182,4 +202,56 @@ private actor WorkflowMutationRunner: SubprocessRunning {
         return .success()
     }
 
+    func waitUntilFirstCommandStarts() async {
+
+        guard commandCount == 0 else { return }
+        await withCheckedContinuation { continuation in
+            firstCommandWaiters.append(continuation)
+        }
+    }
+
+    func releaseCommands() {
+
+        commandsAreReleased = true
+        let releaseWaiters = self.releaseWaiters
+        self.releaseWaiters.removeAll()
+        releaseWaiters.forEach { $0.resume() }
+    }
+
+}
+
+private func workflowKit(runner: WorkflowMutationRunner) -> SwiftlyKit {
+
+    SwiftlyKit(
+        assessor: EnvironmentAssessor(),
+        preparer: EnvironmentPreparer(),
+        swiftPM: SwiftPM(
+            runner: runner,
+            validateEnvironment: { _ in }
+        )
+    )
+}
+
+private func secondCommandStarts(
+    within duration: Duration,
+    runner: WorkflowMutationRunner
+) async -> Bool {
+
+    await withTaskGroup(of: Bool.self) { group in
+        group.addTask {
+            while !Task.isCancelled {
+                if await runner.commandCount >= 2 { return true }
+                await Task.yield()
+            }
+            return false
+        }
+        group.addTask {
+            try? await Task.sleep(for: duration)
+            return false
+        }
+
+        let result = await group.next() ?? false
+        group.cancelAll()
+        return result
+    }
 }

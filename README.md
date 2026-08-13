@@ -469,8 +469,25 @@ user's permissions.
 ## Concurrency, cancellation, and errors
 
 All long operations use Swift concurrency and are `async throws` functions. One
-`SwiftlyKit` value serializes preparation, dependency resolution, builds, and
-cleanup. Read-only assessment and product discovery can run concurrently.
+process-wide coordinator serializes preparation, dependency resolution, builds,
+and cleanup across every `SwiftlyKit` value and static fast-track call in that
+process. A waiting operation observes task cancellation. Read-only assessment
+and product discovery can run concurrently.
+
+This coordination does not extend to another process. Another SwiftlyKit
+process, a direct `swift` or `swiftly` command, or direct filesystem mutation can
+still change the same user installation, package, scratch directory, or output
+while SwiftlyKit is working. Tool-owned locks can reduce overlap while a
+delegated subprocess runs, but they do not cover SwiftlyKit's later executable
+inspection, optional stripping, atomic publication, or requested cleanup.
+
+Do not mutate the same package, effective build storage, selected toolchain or
+SDK, or output destination from another process during a SwiftlyKit operation.
+If an application permits that workflow, it must provide cross-process
+coordination or use disjoint build storage and output destinations. SwiftlyKit's
+exclusive output publication and exact-SDK selection protocol protect those
+individual filesystem transitions; they are not a lock for the complete build
+workflow.
 
 Cancel the calling task to cancel the complete subprocess group. SwiftlyKit
 removes transient atomic-copy files and throws Swift's standard

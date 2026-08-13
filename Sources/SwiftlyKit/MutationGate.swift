@@ -1,7 +1,9 @@
 import Foundation
 
-/// A cancellation-aware FIFO gate for operations that may mutate shared user state.
+/// A cancellation-aware FIFO gate shared by public mutating workflows in one process.
 actor MutationGate {
+
+    static let shared = MutationGate()
     
     private var isOccupied = false
     private var waiters: [Waiter] = []
