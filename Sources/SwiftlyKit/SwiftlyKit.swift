@@ -1,7 +1,7 @@
 import Foundation
 
 /// Cross-compilation API that builds verified static Linux executables from trusted local Swift packages.
-/// All values for the current user coordinate preparation, dependency resolution, builds, and cleanup across processes.
+/// Mutating operations for one user coordinate across values and cooperating processes.
 public struct SwiftlyKit: Sendable {
     
     private let mutationGate: MutationGate
@@ -37,9 +37,9 @@ public struct SwiftlyKit: Sendable {
         try await HostPreflight().assess()
     }
 
-    /// Requests Apple's interactive Command Line Tools installer on a supported host if no usable macOS SDK is active.
+    /// Requests Apple's interactive Command Line Tools installer only if no usable macOS SDK is active.
     /// Returns after macOS accepts the request, not after the installation finishes.
-    /// Skips the request if active developer tools provide a usable SDK and never changes the active developer directory.
+    /// This request is outside mutation coordination and never changes the active developer directory.
     public static func requestCommandLineToolsInstallation() async throws {
         try await HostCLTRequest().request()
     }
@@ -50,7 +50,7 @@ extension SwiftlyKit {
 
     /// Returns exact compatible environments from one read-only package and installed-state observation.
     /// Results contain each Swift version once in newest-first order.
-    /// This call can load the Swift.org catalog and inspect installed Swiftly state.
+    /// Installed-state results can become stale before the caller selects an environment.
     public func compatibleEnvironments(
         _ packageRoot: URL,
         for target: BuildTarget

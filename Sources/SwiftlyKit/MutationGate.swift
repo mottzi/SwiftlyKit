@@ -18,9 +18,7 @@ actor MutationGate {
     }
 
     /// Runs one mutation after local FIFO admission and exclusive cross-process lease acquisition.
-    func withAccess<Result: Sendable>(
-        _ operation: @Sendable () async throws -> Result
-    ) async throws -> Result {
+    func withAccess<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
 
         for lease in MutationLeaseContext.leases {
             guard !(await lease.isActive(for: processLock.identity)) else {
@@ -33,7 +31,7 @@ actor MutationGate {
         try await acquire()
         defer { release() }
         return try await processLock.withAccess {
-            let lease = MutationLease(lockFile: processLock.identity)
+            let lease = MutationLease(identity: processLock.identity)
 
             do {
                 let result = try await MutationLeaseContext.$leases.withValue(
@@ -130,14 +128,14 @@ extension MutationGate {
 private struct ProcessMutationLock: Sendable {
 
     let file: URL
+    let identity: MutationLockIdentity
 
-    /// Returns the path identity used for task-local reentrancy detection.
-    var identity: String { file.standardizedFileURL.path }
+    init(file: URL) {
+        self.file = file
+        self.identity = MutationLockIdentity(file: file)
+    }
 
-    /// Runs one mutation while this process owns the persistent advisory lock.
-    func withAccess<Result: Sendable>(
-        _ operation: @Sendable () async throws -> Result
-    ) async throws -> Result {
+    func withAccess<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
 
         let descriptor = try await acquire()
         defer {
@@ -163,7 +161,7 @@ extension ProcessMutationLock {
         let descriptor = open(file.path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
         guard descriptor >= 0 else { throw coordinationFailure(errno) }
 
-        if fchmod(descriptor, S_IRUSR | S_IWUSR) != 0 {
+        guard fchmod(descriptor, S_IRUSR | S_IWUSR) == 0 else {
             let code = errno
             close(descriptor)
             throw coordinationFailure(code, action: "secure")
@@ -178,8 +176,9 @@ extension ProcessMutationLock {
                     return descriptor
                 }
 
-                if errno == EINTR { continue }
-                guard errno == EWOULDBLOCK else { throw coordinationFailure(errno) }
+                let code = errno
+                if code == EINTR { continue }
+                guard code == EWOULDBLOCK || code == EAGAIN else { throw coordinationFailure(code) }
                 try await Task.sleep(for: .milliseconds(50))
             }
         } catch {
@@ -203,6 +202,17 @@ extension ProcessMutationLock {
 
 }
 
+/// Canonical path identity for one mutation coordination file.
+private struct MutationLockIdentity: Sendable, Equatable {
+
+    let path: String
+
+    init(file: URL) {
+        path = file.standardizedFileURL.path
+    }
+
+}
+
 extension ProcessMutationLock {
 
     static let defaultFile = FileManager.default
@@ -222,19 +232,17 @@ private enum MutationLeaseContext {
 /// Shared lease state inherited by unstructured child tasks.
 private actor MutationLease {
 
-    private let lockFile: String
+    private let lockIdentity: MutationLockIdentity
     private var isActive = true
 
-    init(lockFile: String) {
-        self.lockFile = lockFile
+    init(identity: MutationLockIdentity) {
+        self.lockIdentity = identity
     }
 
-    /// Returns whether this lease still owns the selected lock file.
-    func isActive(for lockFile: String) -> Bool {
-        isActive && self.lockFile == lockFile
+    func isActive(for identity: MutationLockIdentity) -> Bool {
+        isActive && lockIdentity == identity
     }
 
-    /// Marks this lease inactive before the process lock is released.
     func invalidate() {
         isActive = false
     }

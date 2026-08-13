@@ -12,6 +12,7 @@ public enum SwiftlyKitEvent: Sendable {
 extension SwiftlyKitEvent {
 
     /// An asynchronous observer that SwiftlyKit awaits for each emitted event.
+    /// The observer must not await another mutating SwiftlyKit operation.
     public typealias Handler = @Sendable (SwiftlyKitEvent) async -> Void
 
 }

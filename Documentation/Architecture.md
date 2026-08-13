@@ -63,10 +63,11 @@ returns when macOS accepts the request; it cannot observe license acceptance or
 installation completion. The consumer retries readiness inspection or
 assessment after the user finishes the system interaction.
 
-One cancellation-aware `MutationGate` coordinates every production `SwiftlyKit`
-facade value and static fast-track call. Its actor provides FIFO admission inside
-one process. Before an admitted mutation starts, the gate also opens the stable
-user-scoped file at
+For one macOS user, every production `SwiftlyKit` facade value and static
+fast-track call that uses coordination protocol v1 admits at most one mutating
+public operation at a time. One cancellation-aware `MutationGate` provides FIFO
+admission inside one process. Before an admitted mutation starts, the gate opens
+the stable user-scoped file at
 `~/Library/Application Support/SwiftlyKit/Coordination/v1/mutation.lock` and
 acquires an exclusive advisory `flock`. Each open normalizes the file to
 user-only permissions. The file remains in place between operations and is never
@@ -81,15 +82,25 @@ the owner terminates, the kernel closes its descriptor and releases the lock;
 the persistent file is not stale state and must not be deleted for recovery.
 Failure to prepare or open the lock produces `mutationCoordinationFailed`.
 Reentrant mutation through the same asynchronous task context also produces
-`mutationCoordinationFailed` instead of waiting for its own active lease.
+`mutationCoordinationFailed` instead of waiting for its own active lease. A
+detached task does not inherit that context. An awaited event handler must not
+await another mutating operation, directly or through detached work.
 
 Preparation, dependency resolution, builds, and explicit cleanup each hold one
 lease for their complete public operation. The static fast track holds one lease
 across assessment, preparation, product discovery, dependency resolution, build,
 parent-side inspection, optional stripping, output publication, and requested
-cleanup. Its private under-lease mechanics do not reacquire the gate. Read-only
-assessment and product discovery remain concurrent because SwiftlyKit does not
-remove installed components or mutate package inputs through those operations.
+cleanup. Its private under-lease mechanics do not reacquire the gate. Another
+consumer can run between staged calls.
+
+Read-only assessment and product discovery remain concurrent. Their installed
+inventory can change while it is observed or before the result is used, so the
+results are not transactional snapshots. Preparation reinspects installed state
+and revalidates captured package selection inputs before it mutates anything.
+
+The Command Line Tools installation request does not use this coordinator. It
+starts machine-level system interaction and returns before installation
+finishes, so concurrent consumers can submit duplicate requests.
 
 The lock is intentionally user-wide instead of resource-keyed. Preparation can
 change shared Swiftly, toolchain, and SDK state, and one lock avoids canonical
@@ -105,6 +116,12 @@ scratch-directory lock, and Swiftly 1.1.3 has a separate install/uninstall lock;
 neither spans SwiftlyKit's complete workflow. Consumers that mix those direct
 operations with SwiftlyKit must serialize them at a higher level or keep their
 state disjoint.
+
+The lease does not freeze package sources. SwiftlyKit verifies the output format
+but does not compare the complete source tree or `Package.resolved` before and
+after compilation. Callers must keep package source and dependency state stable
+for the complete operation. Source-coherence evidence is a separate future
+capability.
 
 Abrupt owner termination can also leave an already launched tool process alive.
 `O_CLOEXEC` ensures that child does not retain SwiftlyKit's lease, which provides

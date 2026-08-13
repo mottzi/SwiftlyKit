@@ -32,6 +32,42 @@ struct MutationGateTests {
         }
     }
 
+    @Test("A sibling public workflow uses the production mutation lease")
+    func siblingPublicWorkflow() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-MutationGate") { directory in
+            let startedFile = directory.appending(path: "fixture.started")
+            let outcomeFile = directory.appending(path: "fixture.outcome")
+            let invalidPackage = directory.appending(path: "missing-package")
+
+            let fixture = try await MutationGate.shared.withAccess {
+                let fixture = try PublicMutationFixture(
+                    invalidPackage: invalidPackage,
+                    startedFile: startedFile,
+                    outcomeFile: outcomeFile
+                )
+                try await waitForFile(startedFile)
+                try await Task.sleep(for: .milliseconds(100))
+
+                #expect(fixture.isRunning)
+                #expect(!FileManager.default.fileExists(atPath: outcomeFile.path))
+
+                return fixture
+            }
+            defer { fixture.terminate() }
+
+            try await fixture.waitUntilExit()
+
+            let outcome = try String(contentsOf: outcomeFile, encoding: .utf8)
+            #expect(outcome == "invalid-package-root")
+
+            let coordinationFile = FileManager.default
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appending(path: "SwiftlyKit/Coordination/v1/mutation.lock")
+            #expect(FileManager.default.fileExists(atPath: coordinationFile.path))
+        }
+    }
+
     @Test("A cancelled sibling-process waiter does not enter the mutation")
     func siblingProcessCancellation() async throws {
 
@@ -252,6 +288,7 @@ private final class SiblingLockHolder: @unchecked Sendable {
     private let process: Process
 
     init(lockFile: URL, readyFile: URL) throws {
+
         let process = Process()
         process.executableURL = URL(filePath: "/usr/bin/python3")
         process.arguments = [
@@ -279,6 +316,43 @@ private final class SiblingLockHolder: @unchecked Sendable {
 
 }
 
+private final class PublicMutationFixture: @unchecked Sendable {
+
+    private let process: Process
+
+    var isRunning: Bool { process.isRunning }
+
+    init(invalidPackage: URL, startedFile: URL, outcomeFile: URL) throws {
+
+        let executable = coordinationPackageRoot()
+            .appending(path: ".build/debug/SwiftlyKitCoordinationFixture")
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = [invalidPackage.path, startedFile.path, outcomeFile.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        self.process = process
+    }
+
+    func waitUntilExit() async throws {
+
+        let deadline = ContinuousClock.now + .seconds(5)
+        while process.isRunning, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(!process.isRunning)
+    }
+
+    func terminate() {
+
+        guard process.isRunning else { return }
+        process.terminate()
+        process.waitUntilExit()
+    }
+
+}
+
 private func waitForFile(_ file: URL) async throws {
 
     let clock = ContinuousClock()
@@ -289,6 +363,18 @@ private func waitForFile(_ file: URL) async throws {
     }
 
     try #require(FileManager.default.fileExists(atPath: file.path))
+}
+
+private func coordinationPackageRoot() -> URL {
+
+    var candidate = URL(filePath: #filePath).deletingLastPathComponent()
+    while candidate.path != "/" {
+        if FileManager.default.fileExists(atPath: candidate.appending(path: "Package.swift").path) {
+            return candidate
+        }
+        candidate.deleteLastPathComponent()
+    }
+    return URL(filePath: "/")
 }
 
 private func spawnSleepingProcess() throws -> pid_t {

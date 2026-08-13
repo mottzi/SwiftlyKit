@@ -28,10 +28,18 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftlyKitTests",
-            dependencies: ["SwiftlyKit"],
+            dependencies: [
+                "SwiftlyKit",
+                "SwiftlyKitCoordinationFixture"
+            ],
             resources: [
                 .copy("Fixtures/CrossCompilationPackage")
             ]
+        ),
+        .executableTarget(
+            name: "SwiftlyKitCoordinationFixture",
+            dependencies: ["SwiftlyKit"],
+            path: "Tests/Fixtures/Coordination"
         )
     ],
     swiftLanguageModes: [.v6]

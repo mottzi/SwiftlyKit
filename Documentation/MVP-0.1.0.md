@@ -558,9 +558,9 @@ wants a Build log stores received events itself.
 
 `SwiftlyKit` is a small `Sendable` value backed by private coordinated state.
 
-All values and cooperating SwiftlyKit processes for one user allow read-only
-assessment and product discovery to run concurrently. They share one
-cancellation-aware coordinator for mutating operations:
+For one macOS user, SwiftlyKit consumers that use coordination protocol v1 admit
+at most one mutating public operation at a time. They share one
+cancellation-aware coordinator for these operations:
 
 - Environment preparation;
 - dependency resolution;
@@ -571,7 +571,12 @@ cancellation-aware coordinator for mutating operations:
 A second mutating operation waits for the current mutating operation. The static
 fast track holds one lease across assessment, preparation, product discovery,
 resolution, build, output publication, and cleanup. Staged mutations each hold a
-lease for one public call.
+lease for one public call, so another consumer can run between staged calls.
+
+Read-only assessment and product discovery do not acquire a mutation lease. They
+can observe installed state that changes during or after inspection. Preparation
+reinspects installed state and revalidates the package inputs that selected the
+environment. A read-only result is not a transactional environment snapshot.
 
 The coordinator combines process-local FIFO admission with one persistent,
 user-scoped advisory file lock. It opens the lock with `O_CLOEXEC`, polls
@@ -580,7 +585,13 @@ or replaces the lock file. Kernel descriptor ownership releases the lease after
 normal completion or process termination. Each open restricts an existing lock
 file to the current user. The retained file is not a stale lock. Reentrant
 mutation from the same asynchronous task context fails with
-`mutationCoordinationFailed` instead of waiting for its own lease.
+`mutationCoordinationFailed` instead of waiting for its own lease. An event
+handler must not await a mutating SwiftlyKit operation, including through
+detached work that does not inherit the reentrancy context.
+
+The Command Line Tools installation request is outside mutation coordination.
+It starts machine-level system interaction and returns before installation
+finishes. Concurrent consumers can submit duplicate requests.
 
 The lock coordinates SwiftlyKit processes only. Direct `swift` or `swiftly`
 commands, direct filesystem mutation, and other unmodified tools do not acquire
@@ -588,6 +599,11 @@ it. Consumers must prevent those operations from changing the same installation,
 package, effective build storage, SDK, or output during a SwiftlyKit operation.
 An external tool that survives abrupt owner termination can continue after the
 kernel releases SwiftlyKit's descriptor; stop it or wait for it before retrying.
+
+The lease does not freeze package sources. SwiftlyKit validates package selection
+inputs and verifies the built ELF, but it does not compare the complete source
+tree or `Package.resolved` before and after compilation. The caller must keep
+package source and dependency state stable for the complete operation.
 
 Cancelling the calling task requests cancellation of the complete subprocess
 group. SwiftlyKit retains build scratch and its exact-SDK selection metadata,

@@ -468,22 +468,33 @@ user's permissions.
 
 ## Concurrency, cancellation, and errors
 
-All long operations use Swift concurrency and are `async throws` functions. One
-user-scoped coordinator serializes preparation, dependency resolution, builds,
-and cleanup across every `SwiftlyKit` value and every cooperating SwiftlyKit
-process. A waiting operation observes task cancellation. Read-only assessment
-and product discovery can run concurrently. The static fast track holds one
-lease for its complete workflow; staged mutations each hold one lease for the
-duration of that call.
+All long operations use Swift concurrency and are `async throws` functions. For
+one macOS user, SwiftlyKit consumers that use coordination protocol v1 admit at
+most one mutating public operation at a time. The coordinated operations are
+preparation, dependency resolution, builds, and cleanup. A waiting operation
+observes task cancellation. The static fast track holds one lease for its
+complete workflow. Each staged mutation holds one lease for that public call,
+so another consumer can run between staged calls.
+
+Read-only assessment and product discovery do not acquire the mutation lease.
+They can run concurrently with preparation and can observe installed state that
+changes before the caller uses it. Preparation reinspects required state and
+rejects changed package selection inputs. These observations are not
+transactional snapshots of the user environment.
 
 SwiftlyKit uses a persistent advisory lock file in the current user's Application
 Support directory. The kernel releases ownership if a process terminates; the
 file can remain and must not be deleted as stale state. SwiftlyKit restricts the
 file to the current user each time it opens it. Child tools do not inherit the
 descriptor. This intentionally serializes even disjoint SwiftlyKit mutations to
-protect shared Swiftly, toolchain, and SDK state. A reentrant mutation from an
-event handler fails with `mutationCoordinationFailed` instead of waiting for its
-own active lease.
+protect shared Swiftly, toolchain, and SDK state. Direct and task-context-
+inheriting reentrant mutations fail with `mutationCoordinationFailed`. An event
+handler must not await another mutating SwiftlyKit operation, including through
+`Task.detached`, because detached work does not inherit reentrancy context.
+
+`requestCommandLineToolsInstallation()` does not acquire the mutation lease. It
+requests machine-level system interaction and returns before installation
+finishes. Concurrent consumers can issue duplicate requests.
 
 The lock coordinates SwiftlyKit consumers only. A direct `swift` or `swiftly`
 command and direct filesystem mutation do not acquire it. Tool-owned locks cover
@@ -491,6 +502,11 @@ only part of the workflow and do not protect SwiftlyKit's parent-side inspection
 optional stripping, atomic publication, or requested cleanup. Do not run those
 external mutations against the same user installation, package, build storage,
 SDK, or output while SwiftlyKit is working.
+
+The mutation lease does not freeze package sources. SwiftlyKit validates
+selection inputs before preparation and verifies the built ELF, but it does not
+compare the complete source tree or `Package.resolved` before and after a build.
+Keep package sources and dependency state unchanged for the complete operation.
 
 If a SwiftlyKit process terminates abruptly, an already launched tool can survive
 after the kernel releases the lease. Stop that orphan or wait for it before a

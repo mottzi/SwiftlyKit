@@ -202,13 +202,14 @@ struct SwiftlyKitWorkflowTests {
 
 private actor WorkflowMutationRunner: SubprocessRunning {
 
+    private(set) var commandCount = 0
+    private(set) var maximumConcurrentCommands = 0
+
     private let binaryDirectory: URL
     private var concurrentCommands = 0
     private var firstCommandWaiters: [CheckedContinuation<Void, Never>] = []
     private var commandsAreReleased = false
     private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
-    private(set) var commandCount = 0
-    private(set) var maximumConcurrentCommands = 0
 
     init(binaryDirectory: URL) {
         self.binaryDirectory = binaryDirectory
@@ -271,11 +272,7 @@ private func workflowKit(runner: WorkflowMutationRunner) -> SwiftlyKit {
     )
 }
 
-private func fastTrackWorkflowKit(
-    packageRoot: URL,
-    gate: MutationGate,
-    runner: WorkflowMutationRunner
-) -> SwiftlyKit {
+private func fastTrackWorkflowKit(packageRoot: URL, gate: MutationGate, runner: WorkflowMutationRunner) -> SwiftlyKit {
 
     let version = SwiftVersion(major: 6, minor: 2, patch: 1)
     let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
@@ -330,10 +327,7 @@ private func workflowEnvironment(packageRoot: URL) -> LocalBuildEnvironment {
     )
 }
 
-private func secondCommandStarts(
-    within duration: Duration,
-    runner: WorkflowMutationRunner
-) async -> Bool {
+private func secondCommandStarts(within duration: Duration, runner: WorkflowMutationRunner) async -> Bool {
 
     await withTaskGroup(of: Bool.self) { group in
         group.addTask {
