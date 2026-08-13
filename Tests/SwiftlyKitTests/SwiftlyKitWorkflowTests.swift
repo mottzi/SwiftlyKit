@@ -159,6 +159,45 @@ struct SwiftlyKitWorkflowTests {
         }
     }
 
+    @Test("The fast track holds one mutation lease for its complete workflow")
+    func fastTrackMutationLease() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            let executable = packageRoot.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let runner = WorkflowMutationRunner(binaryDirectory: packageRoot)
+            let gate = MutationGate(lockFile: packageRoot.appending(path: "mutation.lock"))
+            let kit = fastTrackWorkflowKit(packageRoot: packageRoot, gate: gate, runner: runner)
+            let environment = workflowEnvironment(packageRoot: packageRoot)
+
+            let fastTrack = Task {
+                try await kit.build(
+                    packageRoot,
+                    product: "Tool",
+                    for: .linux(.arm64),
+                    configuration: .release,
+                    onEvent: nil
+                )
+            }
+            await runner.waitUntilFirstCommandStarts()
+
+            let resolution = Task {
+                try await kit.resolveDependencies(using: environment)
+            }
+
+            let overlapped = await secondCommandStarts(within: .milliseconds(100), runner: runner)
+            #expect(!overlapped)
+
+            await runner.releaseCommands()
+            #expect(try await fastTrack.value == executable)
+            try await resolution.value
+            #expect(await runner.maximumConcurrentCommands == 1)
+        }
+    }
+
 }
 
 private actor WorkflowMutationRunner: SubprocessRunning {
@@ -229,6 +268,65 @@ private func workflowKit(runner: WorkflowMutationRunner) -> SwiftlyKit {
             runner: runner,
             validateEnvironment: { _ in }
         )
+    )
+}
+
+private func fastTrackWorkflowKit(
+    packageRoot: URL,
+    gate: MutationGate,
+    runner: WorkflowMutationRunner
+) -> SwiftlyKit {
+
+    let version = SwiftVersion(major: 6, minor: 2, patch: 1)
+    let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
+    let sdk = StaticLinuxSDK(identifier: "sdk", version: "1.0.0")
+    let inventory = InstalledEnvironmentInventory(
+        toolchains: [version],
+        sdks: [InstalledStaticLinuxSDK(toolchainVersion: version, identifier: sdk.identifier)]
+    )
+    let release = OfficialStableRelease(
+        version: version,
+        staticLinuxSDK: sdk,
+        staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
+            downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
+            checksum: String(repeating: "a", count: 64),
+            supportedArchitectures: [.arm64]
+        )!
+    )
+
+    return SwiftlyKit(
+        mutationGate: gate,
+        assessor: EnvironmentAssessor(
+            assessHost: { .ready },
+            detectSwiftly: { swiftly },
+            loadReleases: { [release] },
+            inspectInventory: { _ in inventory },
+            locateSDK: { _ in packageRoot.appending(path: "sdk.artifactbundle") }
+        ),
+        preparer: EnvironmentPreparer(
+            runner: runner,
+            assessHost: { .ready },
+            downloadPackage: { _, _ in Issue.record("download must not run") },
+            detectSwiftly: { swiftly },
+            inspect: { _, _ in inventory },
+            locateSDK: { _ in packageRoot.appending(path: "sdk.artifactbundle") }
+        ),
+        swiftPM: SwiftPM(
+            runner: runner,
+            validateEnvironment: { _ in }
+        )
+    )
+}
+
+private func workflowEnvironment(packageRoot: URL) -> LocalBuildEnvironment {
+
+    LocalBuildEnvironment(
+        swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
+        staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
+        packageRoot: packageRoot,
+        swiftly: SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly")),
+        sdkBundleURL: packageRoot.appending(path: "sdk.artifactbundle"),
+        target: .linux(.arm64)
     )
 }
 

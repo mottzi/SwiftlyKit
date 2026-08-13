@@ -1,7 +1,7 @@
 import Foundation
 
 /// Cross-compilation API that builds verified static Linux executables from trusted local Swift packages.
-/// All values in one process share mutation coordination for preparation, dependency resolution, builds, and cleanup.
+/// All values for the current user coordinate preparation, dependency resolution, builds, and cleanup across processes.
 public struct SwiftlyKit: Sendable {
     
     private let mutationGate: MutationGate
@@ -74,15 +74,8 @@ extension SwiftlyKit {
         _ assessment: EnvironmentAssessment,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> LocalBuildEnvironment {
-        
-        try await mutationGate.withAccess {
-            do { return try await preparer.prepare(assessment, onEvent: onEvent) }
-            catch is CancellationError { throw CancellationError() }
-            catch let error as SwiftlyKitError { throw error }
-            catch let error as EnvironmentPreparationError { throw error.swiftlyKitError }
-            catch let error as InstalledEnvironmentError { throw error.swiftlyKitError }
-            catch { throw SwiftlyKitError.swiftlyInstallationFailed("An unexpected environment error occurred.") }
-        }
+
+        try await mutationGate.withAccess { try await prepareUnderLease(assessment, onEvent: onEvent) }
     }
     
     /// Returns explicit and implicit executable products in name order without resolving package dependencies.
@@ -104,14 +97,8 @@ extension SwiftlyKit {
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws {
-        
-        try await mutationGate.withAccess {
-            do { try await swiftPM.resolveDependencies(using: environment, onEvent: onEvent) }
-            catch is CancellationError { throw CancellationError() }
-            catch let error as SwiftlyKitError { throw error }
-            catch let error as SwiftPMError { throw error.swiftlyKitError }
-            catch { throw SwiftlyKitError.dependencyResolutionFailed("An unexpected dependency resolution error occurred.") }
-        }
+
+        try await mutationGate.withAccess { try await resolveDependenciesUnderLease(using: environment, onEvent: onEvent) }
     }
     
     /// Builds and verifies one executable with the prepared toolchain and SDK.
@@ -122,14 +109,8 @@ extension SwiftlyKit {
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> URL {
-        
-        try await mutationGate.withAccess {
-            do { return try await swiftPM.build(request, using: environment, onEvent: onEvent) }
-            catch is CancellationError { throw CancellationError() }
-            catch let error as SwiftlyKitError { throw error }
-            catch let error as SwiftPMError { throw error.swiftlyKitError }
-            catch { throw SwiftlyKitError.buildFailed("An unexpected build error occurred.") }
-        }
+
+        try await mutationGate.withAccess { try await buildUnderLease(request, using: environment, onEvent: onEvent) }
     }
 
     /// Removes compiled products and intermediates from the selected SwiftPM scratch storage.
@@ -141,10 +122,7 @@ extension SwiftlyKit {
     ) async throws {
 
         try await mutationGate.withAccess {
-            do { try await swiftPM.cleanBuildArtifacts(in: storage, using: environment, onEvent: onEvent) }
-            catch is CancellationError { throw CancellationError() }
-            catch let error as SwiftPMError { throw error.swiftlyKitError }
-            catch { throw SwiftlyKitError.buildArtifactCleanupFailed("An unexpected cleanup error occurred.") }
+            try await cleanBuildArtifactsUnderLease(in: storage, using: environment, onEvent: onEvent)
         }
     }
 
@@ -156,13 +134,76 @@ extension SwiftlyKit {
     ) async throws {
 
         try await mutationGate.withAccess {
-            do { try await swiftPM.resetBuildStorage(in: storage, using: environment, onEvent: onEvent) }
-            catch is CancellationError { throw CancellationError() }
-            catch let error as SwiftPMError { throw error.swiftlyKitError }
-            catch { throw SwiftlyKitError.buildStorageResetFailed("An unexpected cleanup error occurred.") }
+            try await resetBuildStorageUnderLease(in: storage, using: environment, onEvent: onEvent)
         }
     }
-    
+
+}
+
+extension SwiftlyKit {
+
+    private func prepareUnderLease(
+        _ assessment: EnvironmentAssessment,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws -> LocalBuildEnvironment {
+
+        do { return try await preparer.prepare(assessment, onEvent: onEvent) }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as SwiftlyKitError { throw error }
+        catch let error as EnvironmentPreparationError { throw error.swiftlyKitError }
+        catch let error as InstalledEnvironmentError { throw error.swiftlyKitError }
+        catch { throw SwiftlyKitError.swiftlyInstallationFailed("An unexpected environment error occurred.") }
+    }
+
+    private func resolveDependenciesUnderLease(
+        using environment: LocalBuildEnvironment,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws {
+
+        do { try await swiftPM.resolveDependencies(using: environment, onEvent: onEvent) }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as SwiftlyKitError { throw error }
+        catch let error as SwiftPMError { throw error.swiftlyKitError }
+        catch { throw SwiftlyKitError.dependencyResolutionFailed("An unexpected dependency resolution error occurred.") }
+    }
+
+    private func buildUnderLease(
+        _ request: BuildRequest,
+        using environment: LocalBuildEnvironment,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws -> URL {
+
+        do { return try await swiftPM.build(request, using: environment, onEvent: onEvent) }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as SwiftlyKitError { throw error }
+        catch let error as SwiftPMError { throw error.swiftlyKitError }
+        catch { throw SwiftlyKitError.buildFailed("An unexpected build error occurred.") }
+    }
+
+    private func cleanBuildArtifactsUnderLease(
+        in storage: BuildStorage,
+        using environment: LocalBuildEnvironment,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws {
+
+        do { try await swiftPM.cleanBuildArtifacts(in: storage, using: environment, onEvent: onEvent) }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as SwiftPMError { throw error.swiftlyKitError }
+        catch { throw SwiftlyKitError.buildArtifactCleanupFailed("An unexpected cleanup error occurred.") }
+    }
+
+    private func resetBuildStorageUnderLease(
+        in storage: BuildStorage,
+        using environment: LocalBuildEnvironment,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws {
+
+        do { try await swiftPM.resetBuildStorage(in: storage, using: environment, onEvent: onEvent) }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as SwiftPMError { throw error.swiftlyKitError }
+        catch { throw SwiftlyKitError.buildStorageResetFailed("An unexpected cleanup error occurred.") }
+    }
+
 }
 
 extension SwiftlyKit {
@@ -171,6 +212,7 @@ extension SwiftlyKit {
     /// Authorizes required component installation and resolves dependencies once before a build retry.
     /// Requires exactly one executable product if `product` is `nil`.
     /// Selects the requested official toolchain, strips an output copy if requested, and applies `output` storage choices.
+    /// Holds one mutation lease for the complete workflow across cooperating SwiftlyKit processes.
     public static func build(
         _ packageRoot: URL,
         product: String? = nil,
@@ -196,6 +238,7 @@ extension SwiftlyKit {
         )
     }
     
+    /// Runs the fast-track workflow with this facade's dependencies under one mutation lease.
     func build(
         _ packageRoot: URL,
         product productName: String?,
@@ -208,8 +251,35 @@ extension SwiftlyKit {
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> URL {
 
+        try await mutationGate.withAccess {
+            try await buildUnderLease(
+                packageRoot,
+                product: productName,
+                for: target,
+                toolchain: toolchain,
+                configuration: configuration,
+                storage: storage,
+                output: output,
+                strip: strip,
+                onEvent: onEvent
+            )
+        }
+    }
+
+    private func buildUnderLease(
+        _ packageRoot: URL,
+        product productName: String?,
+        for target: BuildTarget,
+        toolchain: ToolchainSelection,
+        configuration: BuildConfiguration,
+        storage: BuildStorage,
+        output: BuildOutput,
+        strip: Bool,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws -> URL {
+
         let assessment = try await assess(packageRoot, for: target, toolchain: toolchain)
-        let environment = try await prepare(assessment, onEvent: onEvent)
+        let environment = try await prepareUnderLease(assessment, onEvent: onEvent)
         let products = try await executableProducts(using: environment)
         let product = try products.select(productName)
         let request = BuildRequest(
@@ -221,10 +291,10 @@ extension SwiftlyKit {
         )
 
         do {
-            return try await build(request, using: environment, onEvent: onEvent)
+            return try await buildUnderLease(request, using: environment, onEvent: onEvent)
         } catch SwiftlyKitError.dependencyResolutionRequired {
-            try await resolveDependencies(using: environment, onEvent: onEvent)
-            return try await build(request, using: environment, onEvent: onEvent)
+            try await resolveDependenciesUnderLease(using: environment, onEvent: onEvent)
+            return try await buildUnderLease(request, using: environment, onEvent: onEvent)
         }
     }
 

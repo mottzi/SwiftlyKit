@@ -1,7 +1,10 @@
 import Foundation
 
-/// Typed failures from host checks, environment preparation, package inspection, executable builds, and cleanup.
+/// Typed failures from coordination, host checks, environment preparation, package inspection, builds, and cleanup.
 public enum SwiftlyKitError: Equatable {
+
+    /// SwiftlyKit could not establish safe coordination for a mutating workflow.
+    case mutationCoordinationFailed(String)
 
     /// The package root is not a readable local directory with a UTF-8 `Package.swift` file.
     case invalidPackageRoot(URL)
@@ -100,6 +103,9 @@ extension SwiftlyKitError: LocalizedError {
     /// A user-facing description of the failure.
     public var errorDescription: String? {
         switch self {
+            case .mutationCoordinationFailed(let detail):
+                "SwiftlyKit could not coordinate mutations: \(detail)"
+
             case .invalidPackageRoot:
                 "The package root must be a readable local directory containing Package.swift."
 

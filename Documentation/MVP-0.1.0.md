@@ -558,9 +558,9 @@ wants a Build log stores received events itself.
 
 `SwiftlyKit` is a small `Sendable` value backed by private coordinated state.
 
-All values and static fast-track calls in one process allow read-only assessment
-and product discovery to run concurrently. They share one cancellation-aware
-FIFO coordinator for mutating operations:
+All values and cooperating SwiftlyKit processes for one user allow read-only
+assessment and product discovery to run concurrently. They share one
+cancellation-aware coordinator for mutating operations:
 
 - Environment preparation;
 - dependency resolution;
@@ -568,15 +568,26 @@ FIFO coordinator for mutating operations:
 - build artifact cleanup; and
 - build storage reset.
 
-A second mutating operation waits for the current mutating operation.
+A second mutating operation waits for the current mutating operation. The static
+fast track holds one lease across assessment, preparation, product discovery,
+resolution, build, output publication, and cleanup. Staged mutations each hold a
+lease for one public call.
 
-The coordinator is process-local. SwiftlyKit does not serialize another
-SwiftlyKit process, direct `swift` or `swiftly` commands, or direct filesystem
-mutation. A consumer must prevent those operations from changing the same user
-installation, package, effective build storage, or output during a SwiftlyKit
-operation. Tool-owned subprocess locks, exclusive output publication, and the
-exact-SDK selection protocol do not provide a lock for the complete SwiftlyKit
-workflow.
+The coordinator combines process-local FIFO admission with one persistent,
+user-scoped advisory file lock. It opens the lock with `O_CLOEXEC`, polls
+nonblocking acquisition so cancellation remains observable, and never removes
+or replaces the lock file. Kernel descriptor ownership releases the lease after
+normal completion or process termination. Each open restricts an existing lock
+file to the current user. The retained file is not a stale lock. Reentrant
+mutation from the same asynchronous task context fails with
+`mutationCoordinationFailed` instead of waiting for its own lease.
+
+The lock coordinates SwiftlyKit processes only. Direct `swift` or `swiftly`
+commands, direct filesystem mutation, and other unmodified tools do not acquire
+it. Consumers must prevent those operations from changing the same installation,
+package, effective build storage, SDK, or output during a SwiftlyKit operation.
+An external tool that survives abrupt owner termination can continue after the
+kernel releases SwiftlyKit's descriptor; stop it or wait for it before retrying.
 
 Cancelling the calling task requests cancellation of the complete subprocess
 group. SwiftlyKit retains build scratch and its exact-SDK selection metadata,
@@ -698,8 +709,8 @@ acceptance fixtures prove all of the following:
 19. Products requiring runtime resource bundles are rejected.
 20. Cancellation terminates the full subprocess tree and throws
     `CancellationError`.
-21. Mutating SwiftlyKit operations in one process are serialized across all
-    facade values and static fast-track calls.
+21. Mutating operations are serialized across facade values and cooperating
+    SwiftlyKit processes for one user; the fast track holds one lease throughout.
 22. Events stream without persisted logs, and errors contain only bounded,
     redacted process context.
 23. SwiftlyKit creates no database, ownership journal, retained Build record, or

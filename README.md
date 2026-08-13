@@ -469,25 +469,33 @@ user's permissions.
 ## Concurrency, cancellation, and errors
 
 All long operations use Swift concurrency and are `async throws` functions. One
-process-wide coordinator serializes preparation, dependency resolution, builds,
-and cleanup across every `SwiftlyKit` value and static fast-track call in that
+user-scoped coordinator serializes preparation, dependency resolution, builds,
+and cleanup across every `SwiftlyKit` value and every cooperating SwiftlyKit
 process. A waiting operation observes task cancellation. Read-only assessment
-and product discovery can run concurrently.
+and product discovery can run concurrently. The static fast track holds one
+lease for its complete workflow; staged mutations each hold one lease for the
+duration of that call.
 
-This coordination does not extend to another process. Another SwiftlyKit
-process, a direct `swift` or `swiftly` command, or direct filesystem mutation can
-still change the same user installation, package, scratch directory, or output
-while SwiftlyKit is working. Tool-owned locks can reduce overlap while a
-delegated subprocess runs, but they do not cover SwiftlyKit's later executable
-inspection, optional stripping, atomic publication, or requested cleanup.
+SwiftlyKit uses a persistent advisory lock file in the current user's Application
+Support directory. The kernel releases ownership if a process terminates; the
+file can remain and must not be deleted as stale state. SwiftlyKit restricts the
+file to the current user each time it opens it. Child tools do not inherit the
+descriptor. This intentionally serializes even disjoint SwiftlyKit mutations to
+protect shared Swiftly, toolchain, and SDK state. A reentrant mutation from an
+event handler fails with `mutationCoordinationFailed` instead of waiting for its
+own active lease.
 
-Do not mutate the same package, effective build storage, selected toolchain or
-SDK, or output destination from another process during a SwiftlyKit operation.
-If an application permits that workflow, it must provide cross-process
-coordination or use disjoint build storage and output destinations. SwiftlyKit's
-exclusive output publication and exact-SDK selection protocol protect those
-individual filesystem transitions; they are not a lock for the complete build
-workflow.
+The lock coordinates SwiftlyKit consumers only. A direct `swift` or `swiftly`
+command and direct filesystem mutation do not acquire it. Tool-owned locks cover
+only part of the workflow and do not protect SwiftlyKit's parent-side inspection,
+optional stripping, atomic publication, or requested cleanup. Do not run those
+external mutations against the same user installation, package, build storage,
+SDK, or output while SwiftlyKit is working.
+
+If a SwiftlyKit process terminates abruptly, an already launched tool can survive
+after the kernel releases the lease. Stop that orphan or wait for it before a
+retry. SwiftlyKit cannot coordinate or detect arbitrary unmodified external
+processes.
 
 Cancel the calling task to cancel the complete subprocess group. SwiftlyKit
 removes transient atomic-copy files and throws Swift's standard
@@ -496,6 +504,7 @@ removes transient atomic-copy files and throws Swift's standard
 Operational failures use `SwiftlyKitError`. It conforms to `LocalizedError` and
 provides a user-facing description. Common control-flow errors include:
 
+- `mutationCoordinationFailed`
 - `dependencyResolutionRequired`
 - `developerToolsUnavailable`
 - `commandLineToolsInstallationRequestFailed`

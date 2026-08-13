@@ -63,37 +63,71 @@ returns when macOS accepts the request; it cannot observe license acceptance or
 installation completion. The consumer retries readiness inspection or
 assessment after the user finishes the system interaction.
 
-One process-wide, cancellation-aware FIFO `MutationGate` coordinates every
-production `SwiftlyKit` facade value and static fast-track call. Preparation,
-dependency resolution, builds, and explicit cleanup acquire the gate because
-they can change user, package, scratch, or output state. Read-only assessment
-and product discovery do not acquire it. Internal construction can inject a
-separate gate to isolate tests without exposing coordination through the public
-interface.
+One cancellation-aware `MutationGate` coordinates every production `SwiftlyKit`
+facade value and static fast-track call. Its actor provides FIFO admission inside
+one process. Before an admitted mutation starts, the gate also opens the stable
+user-scoped file at
+`~/Library/Application Support/SwiftlyKit/Coordination/v1/mutation.lock` and
+acquires an exclusive advisory `flock`. Each open normalizes the file to
+user-only permissions. The file remains in place between operations and is never
+removed or replaced. A persistent inode prevents two cooperating processes from
+locking different files during release and acquisition.
 
-The gate provides in-process coordination only. It cannot serialize another
-SwiftlyKit process, an independently launched `swift` or `swiftly` command, or
-direct filesystem mutation. Delegated tools can hold their own locks while a
-child process runs, but those locks do not span SwiftlyKit's parent-side
-executable inspection, stripping, output publication, or post-build cleanup.
-Atomic output publication and the exact-SDK selection create-or-verify protocol
-protect their individual transitions, not the complete workflow.
+Lock acquisition uses nonblocking attempts and an asynchronous polling interval
+so a waiting task remains cancellable. The descriptor uses `O_CLOEXEC`, which
+prevents delegated tools from retaining the lease after process execution. The
+gate unlocks and closes the descriptor on success, failure, or cancellation. If
+the owner terminates, the kernel closes its descriptor and releases the lock;
+the persistent file is not stale state and must not be deleted for recovery.
+Failure to prepare or open the lock produces `mutationCoordinationFailed`.
+Reentrant mutation through the same asynchronous task context also produces
+`mutationCoordinationFailed` instead of waiting for its own active lease.
 
-Consumers must prevent external processes from changing the same user
-installation, package, effective scratch directory, SDK installation, or output
-destination during a SwiftlyKit mutation. A future cross-process design must use
-filesystem-backed, resource-keyed coordination that spans the complete public
-operation, defines canonical resource identities and lock ordering, recovers
-from terminated owners, preserves cancellation, and avoids serializing disjoint
-build storage. The process-wide gate remains necessary for inexpensive FIFO
-coordination between Swift tasks even if that cross-process layer is added.
+Preparation, dependency resolution, builds, and explicit cleanup each hold one
+lease for their complete public operation. The static fast track holds one lease
+across assessment, preparation, product discovery, dependency resolution, build,
+parent-side inspection, optional stripping, output publication, and requested
+cleanup. Its private under-lease mechanics do not reacquire the gate. Read-only
+assessment and product discovery remain concurrent because SwiftlyKit does not
+remove installed components or mutate package inputs through those operations.
+
+The lock is intentionally user-wide instead of resource-keyed. Preparation can
+change shared Swiftly, toolchain, and SDK state, and one lock avoids canonical
+resource identities and multi-lock ordering. It conservatively serializes
+mutations that use disjoint packages and scratch directories. Resource-keyed
+coordination is an optimization to consider only if measured contention earns
+the added interface and deadlock risk.
+
+The kernel lock is advisory. It coordinates cooperating SwiftlyKit processes for
+the same user environment, but an independently launched `swift` or `swiftly`
+command and direct filesystem mutation do not acquire it. SwiftPM has its own
+scratch-directory lock, and Swiftly 1.1.3 has a separate install/uninstall lock;
+neither spans SwiftlyKit's complete workflow. Consumers that mix those direct
+operations with SwiftlyKit must serialize them at a higher level or keep their
+state disjoint.
+
+Abrupt owner termination can also leave an already launched tool process alive.
+`O_CLOEXEC` ensures that child does not retain SwiftlyKit's lease, which provides
+deterministic crash recovery but cannot prove that the orphan stopped mutating
+external state. A consumer that knows an external tool survived must stop it or
+wait for it before retrying. Durable orphan detection and coordination with
+unmodified external tools remain outside the current interface.
+
+Design references: Apple's [`flock(2)` manual](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/flock.2.html)
+defines the advisory, kernel-owned behavior; Apple documents
+[`O_CLOEXEC`](https://developer.apple.com/documentation/system/filedescriptor/pipeoptions/closeonexec);
+SwiftPM uses an exclusive scratch-directory lock in
+[`SwiftCommandState`](https://github.com/swiftlang/swift-package-manager/blob/222d17bc672b283dd4b846d12322085c5d3ff753/Sources/CoreCommands/SwiftCommandState.swift#L1253-L1336);
+and Swiftly 1.1.3 limits its independent lock to
+[`install`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592da96b7c1de058c360a8f/Sources/Swiftly/Install.swift#L370-L390)
+and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592da96b7c1de058c360a8f/Sources/Swiftly/Uninstall.swift#L140-L155).
 
 ## Implementation map
 
 - `SwiftlyKit.swift` is the public facade, fast-track orchestrator, and interface
   that maps internal failures to `SwiftlyKitError`.
-- `MutationGate.swift` serializes public mutating workflows across all production
-  facade values and static fast-track calls in one process.
+- `MutationGate.swift` combines process-local FIFO admission with a persistent
+  user-scoped advisory file lock for complete public mutating workflows.
 - `Environment/Host` represents host readiness explicitly, lets readiness-required
   operations reject unsupported hosts or missing developer tools before other
   work proceeds, and owns the adapter that requests Apple's interactive Command
@@ -134,8 +168,10 @@ coordination between Swift tasks even if that cross-process layer is added.
 
 - Test seams and infrastructure are internal and cannot configure production
   callers.
-- All production facade values in one process share one FIFO mutation gate.
-  This invariant does not claim coordination with external processes.
+- All production facade values and cooperating SwiftlyKit processes for one user
+  share one mutation lease. Uncooperative tools do not share this invariant.
+- The static fast track holds one lease for its complete workflow. Staged
+  mutations each hold one lease for the duration of that public call.
 - The Command Line Tools installer is requested only through the explicit public
   recovery operation. It is not part of assessment or preparation, and success
   means only that macOS accepted the request.
