@@ -11,10 +11,10 @@ struct LiveSubprocessRunner: SubprocessRunning {
 
         do {
             let result = try await Subprocess.run(
-                .path(FilePath(command.executableURL.path)),
+                .path(FilePath(command.executableURL.path(percentEncoded: false))),
                 arguments: Arguments(command.arguments),
                 environment: Self.processEnvironment(command.environment),
-                workingDirectory: command.workingDirectory.map { FilePath($0.path) },
+                workingDirectory: command.workingDirectory.map { FilePath($0.path(percentEncoded: false)) },
                 platformOptions: Self.processPlatformOptions,
                 input: .none,
                 output: .sequence,

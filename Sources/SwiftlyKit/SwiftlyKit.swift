@@ -103,6 +103,7 @@ extension SwiftlyKit {
     
     /// Builds and verifies one executable with the prepared toolchain and SDK.
     /// Disables automatic dependency resolution and throws `dependencyResolutionRequired` if resolution is necessary.
+    /// Rejects the result if package sources or resolved dependency state change during compilation.
     /// Strips the executable if requested, copies it atomically if requested, and then performs requested cleanup.
     public func build(
         _ request: BuildRequest,
@@ -212,6 +213,7 @@ extension SwiftlyKit {
     /// Authorizes required component installation and resolves dependencies once before a build retry.
     /// Requires exactly one executable product if `product` is `nil`.
     /// Selects the requested official toolchain, strips an output copy if requested, and applies `output` storage choices.
+    /// Rejects the result if package sources or resolved dependency state change during compilation.
     /// Holds one mutation lease for the complete workflow across cooperating SwiftlyKit processes.
     public static func build(
         _ packageRoot: URL,

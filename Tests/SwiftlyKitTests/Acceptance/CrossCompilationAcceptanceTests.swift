@@ -48,8 +48,10 @@ struct CrossCompilationAcceptanceTests {
                     using: environment
                 )
 
-                #expect(FileManager.default.isExecutableFile(atPath: executable.path))
-                #expect(executable.path.hasPrefix(scratchDirectory.path + "/"))
+                #expect(FileManager.default.isExecutableFile(atPath: executable.path(percentEncoded: false)))
+                #expect(executable.path(percentEncoded: false).hasPrefix(
+                    scratchDirectory.path(percentEncoded: false) + "/"
+                ))
             }
         }
     }
@@ -115,7 +117,7 @@ struct CrossCompilationAcceptanceTests {
 
 private func executableIdentity(at url: URL) throws -> ExecutableIdentity {
 
-    let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+    let attributes = try FileManager.default.attributesOfItem(atPath: url.path(percentEncoded: false))
     return ExecutableIdentity(
         inode: try #require(attributes[.systemFileNumber] as? NSNumber).uint64Value,
         modificationDate: try #require(attributes[.modificationDate] as? Date)

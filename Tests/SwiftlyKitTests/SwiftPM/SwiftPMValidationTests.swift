@@ -38,7 +38,7 @@ struct SwiftPMValidationTests {
             let valid = try validationEnvironment(in: directory, toolsVersion: "6.0")
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o644],
-                ofItemAtPath: valid.swiftly.executableURL.path
+                ofItemAtPath: valid.swiftly.executableURL.path(percentEncoded: false)
             )
             #expect(throws: SwiftlyKitError.incompatibleSwiftly) {
                 try SwiftPMEnvironmentValidator.validate(valid, locateSDK: { _ in valid.sdkBundleURL })
@@ -46,7 +46,7 @@ struct SwiftPMValidationTests {
 
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o755],
-                ofItemAtPath: valid.swiftly.executableURL.path
+                ofItemAtPath: valid.swiftly.executableURL.path(percentEncoded: false)
             )
             #expect(throws: SwiftlyKitError.staticLinuxSDKUnavailable) {
                 try SwiftPMEnvironmentValidator.validate(
@@ -65,10 +65,10 @@ private func validationEnvironment(in directory: URL, toolsVersion: String) thro
         .write(to: directory.appending(path: "Package.swift"))
 
     let swiftly = directory.appending(path: "swiftly")
-    if !FileManager.default.fileExists(atPath: swiftly.path) {
+    if !FileManager.default.fileExists(atPath: swiftly.path(percentEncoded: false)) {
         try Data("#!/bin/sh\nexit 0\n".utf8).write(to: swiftly)
     }
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: swiftly.path)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: swiftly.path(percentEncoded: false))
 
     return LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),

@@ -27,7 +27,7 @@ struct SwiftPMCleanupTests {
             #expect(commands.count == 1)
             #expect(commands[0].arguments == [
                 "run", "swift", "package", "clean", "--scratch-path",
-                directory.appending(path: ".build").path, "+6.2.1"
+                directory.appending(path: ".build").path(percentEncoded: false), "+6.2.1"
             ])
             #expect(commands[0].workingDirectory == directory)
             #expect(await events.operations == [.cleaningBuildArtifacts])
@@ -54,7 +54,7 @@ struct SwiftPMCleanupTests {
             #expect(commands.count == 1)
             #expect(commands[0].arguments == [
                 "run", "swift", "package", "reset", "--scratch-path",
-                scratch.path, "+6.2.1"
+                scratch.path(percentEncoded: false), "+6.2.1"
             ])
             #expect(await events.operations == [.resettingBuildStorage])
         }
@@ -95,7 +95,7 @@ struct SwiftPMCleanupTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
                 .success(output: "built"),
-                .success(output: binaryDirectory.path + "\n"),
+                .success(output: binaryDirectory.path(percentEncoded: false) + "\n"),
                 .success(output: "reset")
             ])
             let events = CleanupEventRecorder()
@@ -117,7 +117,9 @@ struct SwiftPMCleanupTests {
             let commands = await runner.commands
             #expect(commands.count == 4)
             #expect(commands[3].arguments.contains("reset"))
-            #expect(commands[3].arguments.contains(scratch.path))
+            let scratchOption = try #require(commands[3].arguments.firstIndex(of: "--scratch-path"))
+            let scratchArgument = try #require(commands[3].arguments.dropFirst(scratchOption + 1).first)
+            #expect(URL(filePath: scratchArgument).pathComponents == scratch.pathComponents)
             #expect(await events.operations == [.building, .copying, .resettingBuildStorage])
         }
     }
@@ -136,7 +138,7 @@ struct SwiftPMCleanupTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
                 .success(output: "built"),
-                .success(output: binaryDirectory.path + "\n"),
+                .success(output: binaryDirectory.path(percentEncoded: false) + "\n"),
                 .failure(standardError: "could not reset")
             ])
             let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
@@ -155,7 +157,7 @@ struct SwiftPMCleanupTests {
                 )
             }
 
-            #expect(FileManager.default.fileExists(atPath: output.path))
+            #expect(FileManager.default.fileExists(atPath: output.path(percentEncoded: false)))
         }
     }
 

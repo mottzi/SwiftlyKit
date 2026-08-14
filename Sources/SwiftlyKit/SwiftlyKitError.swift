@@ -69,6 +69,12 @@ public enum SwiftlyKitError: Equatable {
     /// SwiftPM could not prepare the exact SDK search path or build the executable.
     case buildFailed(String)
 
+    /// Relevant package source or dependency state changed while SwiftlyKit built the executable.
+    case packageChangedDuringBuild
+
+    /// SwiftlyKit could not establish build-time source stability for the associated reason.
+    case packageSourceStabilityUnavailable(String)
+
     /// The selected toolchain could not strip the executable.
     case stripFailed(String)
 
@@ -169,6 +175,12 @@ extension SwiftlyKitError: LocalizedError {
             case .buildFailed(let detail):
                 "SwiftPM could not build the executable: \(detail)"
 
+            case .packageChangedDuringBuild:
+                "Package source or dependency state changed during the build; build again from stable inputs."
+
+            case .packageSourceStabilityUnavailable(let detail):
+                "SwiftlyKit could not establish package-source stability: \(detail)"
+
             case .stripFailed(let detail):
                 "The executable could not be stripped: \(detail)"
 
@@ -176,19 +188,22 @@ extension SwiftlyKitError: LocalizedError {
                 "The produced executable failed verification: \(detail)"
 
             case .unsafeBuildStorage(let url):
-                "Build storage at \(url.path) must not contain the package root."
+                "Build storage at \(url.path(percentEncoded: false)) must not contain the package root."
 
             case .outputInsideBuildStorage(let url):
-                "The output at \(url.path) must be outside build storage when cleanup is requested."
+                "The output at \(url.path(percentEncoded: false)) must be outside build storage when cleanup is requested."
 
             case .outputAlreadyExists(let url):
-                "The output already exists at \(url.path)."
+                "The output already exists at \(url.path(percentEncoded: false))."
 
             case .outputCopyFailed(let url):
-                "The executable could not be copied to \(url.path)."
+                "The executable could not be copied to \(url.path(percentEncoded: false))."
 
             case .postBuildCleanupFailed(let output, let detail):
-                "The executable was copied to \(output.path), but build storage cleanup failed: \(detail)"
+                """
+                The executable was copied to \(output.path(percentEncoded: false)), \
+                but build storage cleanup failed: \(detail)
+                """
 
             case .buildArtifactCleanupFailed(let detail):
                 "SwiftPM could not clean build artifacts: \(detail)"

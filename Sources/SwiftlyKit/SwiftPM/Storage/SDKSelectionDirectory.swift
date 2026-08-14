@@ -15,7 +15,7 @@ enum SDKSelectionDirectory {
 
         let scratchDirectory = scratchDirectory.standardizedFileURL
         do { try fileManager.createDirectory(at: scratchDirectory, withIntermediateDirectories: true) }
-        catch { throw Error.couldNotCreateDirectory(scratchDirectory.path) }
+        catch { throw Error.couldNotCreateDirectory(scratchDirectory.path(percentEncoded: false)) }
 
         let sdkSelectionsDirectory = scratchDirectory
             .appending(path: ".swiftlykit", directoryHint: .isDirectory)
@@ -71,7 +71,7 @@ extension SDKSelectionDirectory {
         canonicalBundleURL: URL
     ) -> String {
         
-        let digest = SHA256.hash(data: Data(canonicalBundleURL.path.utf8))
+        let digest = SHA256.hash(data: Data(canonicalBundleURL.path(percentEncoded: false).utf8))
             .map { String(format: "%02x", $0) }
             .joined()
 
@@ -100,7 +100,7 @@ extension SDKSelectionDirectory {
                 fileManager: fileManager
             )
         } catch {
-            throw Error.couldNotCreateSelection(linkURL.path)
+            throw Error.couldNotCreateSelection(linkURL.path(percentEncoded: false))
         }
 
         return try requireReadySelection(
@@ -125,7 +125,7 @@ extension SDKSelectionDirectory {
             fileManager: fileManager
         ) {
             case .ready: return searchDirectory
-            case .absent: throw Error.couldNotCreateSelection(linkURL.path)
+            case .absent: throw Error.couldNotCreateSelection(linkURL.path(percentEncoded: false))
         }
     }
 
@@ -143,7 +143,7 @@ extension SDKSelectionDirectory {
                 includingPropertiesForKeys: [.isSymbolicLinkKey]
             )
         } catch {
-            throw Error.couldNotCreateDirectory(searchDirectory.path)
+            throw Error.couldNotCreateDirectory(searchDirectory.path(percentEncoded: false))
         }
 
         guard !entries.isEmpty else { return .absent }
@@ -151,22 +151,26 @@ extension SDKSelectionDirectory {
               entries[0].lastPathComponent == linkURL.lastPathComponent else {
             let unexpectedEntry = entries.first { $0.lastPathComponent != linkURL.lastPathComponent }
                 ?? entries.first
-            throw Error.unexpectedItem(unexpectedEntry?.path ?? searchDirectory.path)
+            throw Error.unexpectedItem(
+                unexpectedEntry?.path(percentEncoded: false)
+                    ?? searchDirectory.path(percentEncoded: false)
+            )
         }
 
         let destinationURL: URL
         do {
             destinationURL = try URL(
-                filePath: fileManager.destinationOfSymbolicLink(atPath: linkURL.path),
+                filePath: fileManager.destinationOfSymbolicLink(atPath: linkURL.path(percentEncoded: false)),
                 relativeTo: searchDirectory
             )
             .resolvingSymlinksInPath()
             .standardizedFileURL
         } catch {
-            throw Error.unexpectedItem(linkURL.path)
+            throw Error.unexpectedItem(linkURL.path(percentEncoded: false))
         }
 
-        guard destinationURL.path == canonicalBundleURL.path else { throw Error.unexpectedItem(linkURL.path) }
+        guard destinationURL.pathComponents == canonicalBundleURL.pathComponents
+        else { throw Error.unexpectedItem(linkURL.path(percentEncoded: false)) }
 
         return .ready
     }
@@ -198,12 +202,12 @@ extension SDKSelectionDirectory {
         } catch let error as CocoaError where error.code == .fileWriteFileExists {
             let values: URLResourceValues
             do { values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) }
-            catch { throw Error.couldNotCreateDirectory(url.path) }
+            catch { throw Error.couldNotCreateDirectory(url.path(percentEncoded: false)) }
             guard values.isDirectory == true,
                   values.isSymbolicLink != true
-            else { throw Error.unexpectedItem(url.path) }
+            else { throw Error.unexpectedItem(url.path(percentEncoded: false)) }
         } catch {
-            throw Error.couldNotCreateDirectory(url.path)
+            throw Error.couldNotCreateDirectory(url.path(percentEncoded: false))
         }
     }
 

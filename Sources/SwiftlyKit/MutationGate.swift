@@ -1,23 +1,36 @@
 import Darwin
 import Foundation
 
-/// A cancellation-aware local FIFO gate with an exclusive lease across cooperating processes.
+/// Mutation gate for one user. It queues local operations and excludes other SwiftlyKit processes.
 actor MutationGate {
 
+    /// Gate used by default SwiftlyKit values and static workflows.
     static let shared = MutationGate()
 
+    /// Lock that excludes other SwiftlyKit processes after local admission.
     private let processLock: ProcessMutationLock
+
+    /// True if a local operation has admission.
     private var isOccupied = false
+
+    /// Local callers that wait in FIFO order.
     private var waiters: [Waiter] = []
+
+    /// Waiter IDs canceled before waiter registration completes.
     private var cancelledWaiters: Set<UUID> = []
+
+    /// Waiter IDs granted while cancellation can still arrive.
     private var grantedWaiters: Set<UUID> = []
+
+    /// Waiter IDs that cancellation can still affect.
     private var registeredWaiters: Set<UUID> = []
 
     init(lockFile: URL = ProcessMutationLock.defaultFile) {
         processLock = ProcessMutationLock(file: lockFile)
     }
 
-    /// Runs one mutation after local FIFO admission and exclusive cross-process lease acquisition.
+    /// Waits for local and process admission, rejects reentry from the current task context, and runs the operation.
+    /// Throws `CancellationError` if the task is canceled while it waits.
     func withAccess<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
 
         for lease in MutationLeaseContext.leases {
@@ -52,6 +65,7 @@ actor MutationGate {
 
 extension MutationGate {
 
+    /// Gets local admission or waits in FIFO order until admission or cancellation.
     private func acquire() async throws {
 
         try Task.checkCancellation()
@@ -88,6 +102,7 @@ extension MutationGate {
         }
     }
 
+    /// Cancels a registered waiter. Does not resume the waiter after admission was granted.
     private func cancel(_ id: UUID) {
 
         guard registeredWaiters.contains(id) else { return }
@@ -103,6 +118,7 @@ extension MutationGate {
         waiter.continuation.resume(returning: false)
     }
 
+    /// Gives admission to the first waiter not canceled. Makes the gate idle if no waiter remains.
     private func release() {
 
         while !waiters.isEmpty {
@@ -124,10 +140,13 @@ extension MutationGate {
 
 }
 
-/// A persistent advisory file lock for one user-scoped mutation lease.
+/// File lock that excludes other SwiftlyKit processes for one operation.
 private struct ProcessMutationLock: Sendable {
 
+    /// File used for cross-process coordination.
     let file: URL
+
+    /// Identity used to detect reentry in a task context.
     let identity: MutationLockIdentity
 
     init(file: URL) {
@@ -135,6 +154,7 @@ private struct ProcessMutationLock: Sendable {
         self.identity = MutationLockIdentity(file: file)
     }
 
+    /// Locks the file for the operation. Always unlocks and closes the file descriptor.
     func withAccess<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
 
         let descriptor = try await acquire()
@@ -149,16 +169,18 @@ private struct ProcessMutationLock: Sendable {
 
 extension ProcessMutationLock {
 
+    /// Opens the user-only file without following a final symlink and waits for an exclusive lock.
+    /// The wait supports cancellation, and child processes do not inherit the file descriptor.
     private func acquire() async throws -> CInt {
 
         do { try prepareDirectory() }
         catch {
             throw SwiftlyKitError.mutationCoordinationFailed(
-                "Could not prepare \(file.path): \(error.localizedDescription)"
+                "Could not prepare \(file.path(percentEncoded: false)): \(error.localizedDescription)"
             )
         }
 
-        let descriptor = open(file.path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        let descriptor = open(file.path(percentEncoded: false), O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0o600)
         guard descriptor >= 0 else { throw coordinationFailure(errno) }
 
         guard fchmod(descriptor, S_IRUSR | S_IWUSR) == 0 else {
@@ -187,6 +209,7 @@ extension ProcessMutationLock {
         }
     }
 
+    /// Creates the coordination directory for the current user if it does not exist.
     private func prepareDirectory() throws {
         try FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(),
@@ -195,26 +218,29 @@ extension ProcessMutationLock {
         )
     }
 
+    /// Converts a POSIX error to a SwiftlyKit coordination error.
     private func coordinationFailure(_ code: CInt, action: String = "lock") -> SwiftlyKitError {
         let description = String(cString: strerror(code))
-        return .mutationCoordinationFailed("Could not \(action) \(file.path): \(description)")
+        return .mutationCoordinationFailed("Could not \(action) \(file.path(percentEncoded: false)): \(description)")
     }
 
 }
 
-/// Canonical path identity for one mutation coordination file.
+/// File-path identity used to detect reentry in a task context.
 private struct MutationLockIdentity: Sendable, Equatable {
 
+    /// Standardized path used for equality checks.
     let path: String
 
     init(file: URL) {
-        path = file.standardizedFileURL.path
+        path = file.standardizedFileURL.path(percentEncoded: false)
     }
 
 }
 
 extension ProcessMutationLock {
 
+    /// Protocol-v1 file used by cooperating SwiftlyKit processes for the current user.
     static let defaultFile = FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appending(path: "SwiftlyKit/Coordination/v1", directoryHint: .isDirectory)
@@ -222,27 +248,33 @@ extension ProcessMutationLock {
 
 }
 
-/// Task-local leases that reject nested acquisition while their outer mutation remains active.
+/// Task-local storage for active mutation leases.
 private enum MutationLeaseContext {
 
+    /// Active leases inherited by child tasks.
     @TaskLocal static var leases: [MutationLease] = []
 
 }
 
-/// Shared lease state inherited by unstructured child tasks.
+/// Revocable marker for one held process lock.
 private actor MutationLease {
 
+    /// Identity of the held process lock.
     private let lockIdentity: MutationLockIdentity
+
+    /// True until the outer mutation ends.
     private var isActive = true
 
     init(identity: MutationLockIdentity) {
         self.lockIdentity = identity
     }
 
+    /// Returns true if this lease is active for the specified lock.
     func isActive(for identity: MutationLockIdentity) -> Bool {
         isActive && lockIdentity == identity
     }
 
+    /// Marks the lease as inactive before the process lock is released.
     func invalidate() {
         isActive = false
     }
@@ -251,9 +283,13 @@ private actor MutationLease {
 
 extension MutationGate {
 
+    /// Local request that waits for admission or cancellation.
     private struct Waiter {
 
+        /// ID used to coordinate cancellation.
         let id: UUID
+
+        /// Returns true for admission and false for cancellation.
         let continuation: CheckedContinuation<Bool, Never>
 
     }

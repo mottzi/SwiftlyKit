@@ -178,7 +178,7 @@ extension EnvironmentPreparer {
 
         let verifySignatureCommand = SubprocessCommand(
             executableURL: URL(filePath: "/usr/sbin/pkgutil"),
-            arguments: ["--check-signature", packageURL.path],
+            arguments: ["--check-signature", packageURL.path(percentEncoded: false)],
             workingDirectory: stagingDirectory
         )
         
@@ -196,7 +196,7 @@ extension EnvironmentPreparer {
 
         let installPackageCommand = SubprocessCommand(
             executableURL: URL(filePath: "/usr/sbin/installer"),
-            arguments: ["-pkg", packageURL.path, "-target", "CurrentUserHomeDirectory"],
+            arguments: ["-pkg", packageURL.path(percentEncoded: false), "-target", "CurrentUserHomeDirectory"],
             workingDirectory: stagingDirectory
         )
         try await checkedRun(installPackageCommand, onEvent: onEvent)

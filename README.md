@@ -267,6 +267,29 @@ A staged build never resolves dependencies automatically. The separate
 `resolveDependencies(using:)` call can access the network and can update
 `Package.resolved`.
 
+Every build establishes source stability before compilation. SwiftlyKit observes
+the root package and every package in SwiftPM's resolved dependency graph. It
+compares deterministic snapshots before and after compilation and also records
+recursive filesystem events, including a change that is reverted before the
+build finishes. A relevant change withholds the result and throws
+`SwiftlyKitError.packageChangedDuringBuild`. If SwiftlyKit cannot establish or
+recapture the evidence, it fails closed with
+`SwiftlyKitError.packageSourceStabilityUnavailable`.
+
+The observation includes file paths, contents, executable permissions, safe
+symbolic-link destinations, `Package.swift`, and `Package.resolved`. It excludes
+each package root's top-level `.build`, `.git`, and `.swiftpm` directories and
+the selected scratch directory. Resolved dependency roots inside scratch remain
+included. Observation ends after compilation and executable verification;
+optional stripping, copying, and cleanup do not read package source.
+One observation accepts at most 200,000 regular files and symbolic links and
+8 GiB of regular-file contents across all source roots. Larger graphs fail with
+`packageSourceStabilityUnavailable` before compilation.
+
+This guarantee detects source changes during a build. It does not build from an
+immutable source copy, retain a source fingerprint, or create durable provenance
+for the returned executable.
+
 ### Build request options
 
 | Option | Default | Behavior |
@@ -503,10 +526,11 @@ optional stripping, atomic publication, or requested cleanup. Do not run those
 external mutations against the same user installation, package, build storage,
 SDK, or output while SwiftlyKit is working.
 
-The mutation lease does not freeze package sources. SwiftlyKit validates
-selection inputs before preparation and verifies the built ELF, but it does not
-compare the complete source tree or `Package.resolved` before and after a build.
-Keep package sources and dependency state unchanged for the complete operation.
+The mutation lease does not freeze package sources. Builds separately monitor
+and compare the complete resolved package graph during compilation. A detected
+source or dependency-state mutation withholds the result. Source observation
+does not coordinate the editor or process that made the change, and it does not
+protect unrelated direct mutations of build storage, SDK state, or output paths.
 
 If a SwiftlyKit process terminates abruptly, an already launched tool can survive
 after the kernel releases the lease. Stop that orphan or wait for it before a
@@ -526,6 +550,8 @@ provides a user-facing description. Common control-flow errors include:
 - `commandLineToolsInstallationRequestFailed`
 - `executableProductSelectionRequired`
 - `staleAssessment`
+- `packageChangedDuringBuild`
+- `packageSourceStabilityUnavailable`
 - `outputAlreadyExists`
 - `unsafeBuildStorage`
 - `outputInsideBuildStorage`

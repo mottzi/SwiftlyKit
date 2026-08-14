@@ -16,7 +16,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: packageJSON),
                 .success(output: packageJSON),
                 .success(output: "built"),
-                .success(output: packageRoot.path + "\n")
+                .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
 
@@ -69,7 +69,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: packageJSON),
                 .success(output: packageJSON),
                 .success(output: "built"),
-                .success(output: packageRoot.path + "\n")
+                .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
 
@@ -100,7 +100,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: "resolved"),
                 .success(output: packageJSON),
                 .success(output: "built"),
-                .success(output: packageRoot.path + "\n")
+                .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
 
@@ -132,7 +132,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: packageJSON),
                 .success(output: packageJSON),
                 .success(output: "built"),
-                .success(output: packageRoot.path + "\n"),
+                .success(output: packageRoot.path(percentEncoded: false) + "\n"),
                 .success(output: "reset")
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
@@ -150,9 +150,13 @@ struct SwiftlyKitFastTrackTests {
             #expect(result == output)
             let commands = await runner.commands
             #expect(commands.count == 5)
-            #expect(commands[2].arguments.contains(scratch.path))
+            let buildScratchOption = try #require(commands[2].arguments.firstIndex(of: "--scratch-path"))
+            let buildScratchArgument = try #require(commands[2].arguments.dropFirst(buildScratchOption + 1).first)
+            #expect(URL(filePath: buildScratchArgument).pathComponents == scratch.pathComponents)
             #expect(commands[4].arguments.contains("reset"))
-            #expect(commands[4].arguments.contains(scratch.path))
+            let resetScratchOption = try #require(commands[4].arguments.firstIndex(of: "--scratch-path"))
+            let resetScratchArgument = try #require(commands[4].arguments.dropFirst(resetScratchOption + 1).first)
+            #expect(URL(filePath: resetScratchArgument).pathComponents == scratch.pathComponents)
         }
     }
 
@@ -169,7 +173,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: packageJSON),
                 .success(output: packageJSON),
                 .success(output: "built"),
-                .success(output: packageRoot.path + "\n")
+                .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
             let kit = fastTrackKit(
                 packageRoot: packageRoot,
@@ -204,7 +208,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: packageJSON),
                 .success(output: packageJSON),
                 .success(output: "built"),
-                .success(output: packageRoot.path + "\n"),
+                .success(output: packageRoot.path(percentEncoded: false) + "\n"),
                 .success(output: "stripped")
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
@@ -224,7 +228,7 @@ struct SwiftlyKitFastTrackTests {
             let commands = await runner.commands
             #expect(commands.count == 5)
             #expect(commands[4].arguments.prefix(3) == ["run", "llvm-objcopy", "--strip-all"])
-            #expect(commands[4].arguments[3] != executable.path)
+            #expect(commands[4].arguments[3] != executable.path(percentEncoded: false))
         }
     }
 

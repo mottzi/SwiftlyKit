@@ -99,8 +99,10 @@ struct AtomicOutputCopierTests {
                 )
             }
 
-            #expect(!FileManager.default.fileExists(atPath: output.path))
-            #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == ["source"])
+            #expect(!FileManager.default.fileExists(atPath: output.path(percentEncoded: false)))
+            #expect(
+                try FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false)) == ["source"]
+            )
         }
     }
 

@@ -30,11 +30,16 @@ struct SDKSelectionDirectoryTests {
             let link = try #require(entries.first)
 
             #expect(firstSelection == secondSelection)
-            #expect(firstSelection.path.hasPrefix(scratch.path + "/.swiftlykit/sdk-selections/"))
+            #expect(firstSelection.pathComponents.starts(with: scratch.pathComponents + [
+                ".swiftlykit", "sdk-selections"
+            ]))
             #expect(entries.count == 1)
             #expect(link.lastPathComponent == bundle.lastPathComponent)
             #expect(try link.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true)
-            #expect(link.resolvingSymlinksInPath().path == bundle.resolvingSymlinksInPath().path)
+            #expect(
+                link.resolvingSymlinksInPath().pathComponents
+                    == bundle.resolvingSymlinksInPath().pathComponents
+            )
         }
     }
 
@@ -60,10 +65,10 @@ struct SDKSelectionDirectoryTests {
             )
 
             #expect(firstSelection != secondSelection)
-            #expect(try FileManager.default.contentsOfDirectory(atPath: firstSelection.path) == [
+            #expect(try FileManager.default.contentsOfDirectory(atPath: firstSelection.path(percentEncoded: false)) == [
                 firstBundle.lastPathComponent
             ])
-            #expect(try FileManager.default.contentsOfDirectory(atPath: secondSelection.path) == [
+            #expect(try FileManager.default.contentsOfDirectory(atPath: secondSelection.path(percentEncoded: false)) == [
                 secondBundle.lastPathComponent
             ])
         }
@@ -118,7 +123,7 @@ struct SDKSelectionDirectoryTests {
 
             #expect(Set(selections).count == 1)
             let selection = try #require(selections.first)
-            #expect(try FileManager.default.contentsOfDirectory(atPath: selection.path) == [
+            #expect(try FileManager.default.contentsOfDirectory(atPath: selection.path(percentEncoded: false)) == [
                 bundle.lastPathComponent
             ])
         }
@@ -146,7 +151,10 @@ struct SDKSelectionDirectoryTests {
             let link = try #require(entries.first)
 
             #expect(entries.count == 1)
-            #expect(link.resolvingSymlinksInPath().path == bundle.resolvingSymlinksInPath().path)
+            #expect(
+                link.resolvingSymlinksInPath().pathComponents
+                    == bundle.resolvingSymlinksInPath().pathComponents
+            )
         }
     }
 
@@ -172,7 +180,7 @@ struct SDKSelectionDirectoryTests {
                     scratchDirectory: scratch
                 )
             }
-            #expect(FileManager.default.fileExists(atPath: unexpectedEntry.path))
+            #expect(FileManager.default.fileExists(atPath: unexpectedEntry.path(percentEncoded: false)))
         }
     }
 
@@ -192,14 +200,15 @@ struct SDKSelectionDirectoryTests {
             let identifier = "swift-6.3.3-RELEASE_static-linux-0.1.0"
             let bundle = try createBundle(identifier: identifier, in: directory)
 
-            #expect(throws: SDKSelectionDirectory.Error.unexpectedItem(redirectedComponent.path)) {
+            let managedComponent = scratch.appending(path: ".swiftlykit", directoryHint: .isDirectory)
+            #expect(throws: SDKSelectionDirectory.Error.unexpectedItem(managedComponent.path(percentEncoded: false))) {
                 try SDKSelectionDirectory.resolve(
                     sdkIdentifier: identifier,
                     sdkBundleURL: bundle,
                     scratchDirectory: scratch
                 )
             }
-            #expect(try FileManager.default.contentsOfDirectory(atPath: redirectedRoot.path).isEmpty)
+            #expect(try FileManager.default.contentsOfDirectory(atPath: redirectedRoot.path(percentEncoded: false)).isEmpty)
         }
     }
 
@@ -217,7 +226,7 @@ struct SDKSelectionDirectoryTests {
                     scratchDirectory: scratch
                 )
             }
-            #expect(!FileManager.default.fileExists(atPath: scratch.path))
+            #expect(!FileManager.default.fileExists(atPath: scratch.path(percentEncoded: false)))
         }
     }
 
@@ -238,14 +247,17 @@ struct SDKSelectionDirectoryTests {
             let conflictingBundle = try createBundle(identifier: "conflicting", in: directory)
             try FileManager.default.createSymbolicLink(at: link, withDestinationURL: conflictingBundle)
 
-            #expect(throws: SDKSelectionDirectory.Error.unexpectedItem(link.path)) {
+            #expect(throws: SDKSelectionDirectory.Error.unexpectedItem(link.path(percentEncoded: false))) {
                 try SDKSelectionDirectory.resolve(
                     sdkIdentifier: identifier,
                     sdkBundleURL: bundle,
                     scratchDirectory: scratch
                 )
             }
-            #expect(link.resolvingSymlinksInPath().path == conflictingBundle.resolvingSymlinksInPath().path)
+            #expect(
+                link.resolvingSymlinksInPath().pathComponents
+                    == conflictingBundle.resolvingSymlinksInPath().pathComponents
+            )
         }
     }
 

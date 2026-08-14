@@ -25,7 +25,7 @@ func writeELF(
         writeLittleEndian(UInt64(dynamicTag), at: 176, into: &data)
     }
     try data.write(to: url)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path(percentEncoded: false))
 }
 
 func writeLittleEndian<T: FixedWidthInteger>(_ value: T, at offset: Int, into data: inout Data) {

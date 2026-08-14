@@ -20,7 +20,7 @@ extension ELFExecutableVerifier {
 
         guard values.isRegularFile == true,
               values.isSymbolicLink == false,
-              FileManager.default.isExecutableFile(atPath: url.path)
+              FileManager.default.isExecutableFile(atPath: url.path(percentEncoded: false))
         else { throw SwiftPMError.invalidExecutable("The output is not an executable regular file.") }
 
         let data = try Data(contentsOf: url, options: .mappedIfSafe)

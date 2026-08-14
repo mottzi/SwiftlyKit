@@ -58,19 +58,19 @@ extension SwiftPM {
 
         await report(progress, detail: detail, to: onEvent)
 
-        let cleanupCommand = command(
+        let cleanupCommand = Self.command(
             environment,
             swiftArguments: [
                 "package",
                 subcommand,
-                "--scratch-path", scratchDirectory.url.path
+                "--scratch-path", scratchDirectory.url.path(percentEncoded: false)
             ]
         )
 
         let result = try await runner.run(cleanupCommand, onOutput: CommandOutputChunk.handler(for: onEvent))
 
         guard result.succeeded else {
-            throw SwiftPMError.commandFailed(operation: operation, diagnostic: boundedDiagnostic(result))
+            throw SwiftPMError.commandFailed(operation: operation, diagnostic: Self.boundedDiagnostic(result))
         }
     }
 

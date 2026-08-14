@@ -163,7 +163,7 @@ struct EnvironmentPreparerTests {
             _ = try await preparer.prepare(try assessment(requires: [.swiftly]))
 
             let recorded = await commands.commands
-            #expect(recorded[0].executableURL.path == "/usr/sbin/pkgutil")
+            #expect(recorded[0].executableURL.path(percentEncoded: false) == "/usr/sbin/pkgutil")
             #expect(recorded[0].arguments.first == "--check-signature")
             #expect(recorded[1].arguments.suffix(2) == ["-target", "CurrentUserHomeDirectory"])
             #expect(recorded[2].arguments == [
@@ -215,7 +215,7 @@ struct EnvironmentPreparerTests {
 
             let recorded = await commands.commands
             #expect(recorded.count == 1)
-            #expect(recorded[0].executableURL.path == "/usr/sbin/pkgutil")
+            #expect(recorded[0].executableURL.path(percentEncoded: false) == "/usr/sbin/pkgutil")
         }
     }
 

@@ -236,7 +236,7 @@ private actor WorkflowMutationRunner: SubprocessRunning {
             return .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
         }
         if command.arguments.contains("--show-bin-path") {
-            return .success(output: binaryDirectory.path + "\n")
+            return .success(output: binaryDirectory.path(percentEncoded: false) + "\n")
         }
 
         return .success()

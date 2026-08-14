@@ -137,7 +137,7 @@ extension InstalledEnvironmentInspector {
         
         let executable = toolchainsDirectory.appending(path: "swift-\(version)-RELEASE.xctoolchain/usr/bin/swift")
 
-        return FileManager.default.isExecutableFile(atPath: executable.path)
+        return FileManager.default.isExecutableFile(atPath: executable.path(percentEncoded: false))
     }
 
 }

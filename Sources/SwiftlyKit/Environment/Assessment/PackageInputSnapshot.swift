@@ -32,7 +32,7 @@ extension PackageInputSnapshot {
 
         let manifestURL = canonicalRoot.appending(path: "Package.swift")
 
-        guard FileManager.default.fileExists(atPath: manifestURL.path)
+        guard FileManager.default.fileExists(atPath: manifestURL.path(percentEncoded: false))
         else { throw .invalidPackageRoot(packageRoot) }
 
         guard isRegularReadableFile(at: manifestURL)
@@ -123,17 +123,23 @@ extension PackageInputSnapshot {
 
     private static func isDirectory(at url: URL) -> Bool {
         var isDirectory: ObjCBool = false
-        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+        let exists = FileManager.default.fileExists(
+            atPath: url.path(percentEncoded: false),
+            isDirectory: &isDirectory
+        )
+        return exists && isDirectory.boolValue
     }
 
     private static func isRegularReadableFile(at url: URL) -> Bool {
 
-        guard FileManager.default.fileExists(atPath: url.path) else { return false }
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return false }
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return false }
+        guard let attributes = try? FileManager.default.attributesOfItem(
+            atPath: url.path(percentEncoded: false)
+        ) else { return false }
         guard let type = attributes[.type] as? FileAttributeType else { return false }
         guard type == .typeRegular else { return false }
 
-        return FileManager.default.isReadableFile(atPath: url.path)
+        return FileManager.default.isReadableFile(atPath: url.path(percentEncoded: false))
     }
 
     private static func nearestSwiftVersionFile(
@@ -145,7 +151,7 @@ extension PackageInputSnapshot {
         while true {
             let candidate = directory.appending(path: ".swift-version")
 
-            if FileManager.default.fileExists(atPath: candidate.path) {
+            if FileManager.default.fileExists(atPath: candidate.path(percentEncoded: false)) {
                 let canonicalCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL
 
                 guard isRegularReadableFile(at: canonicalCandidate)
@@ -166,7 +172,7 @@ extension PackageInputSnapshot {
             }
 
             let parent = directory.deletingLastPathComponent().standardizedFileURL
-            guard parent.path != directory.path else { break }
+            guard parent.pathComponents != directory.pathComponents else { break }
 
             directory = parent
         }

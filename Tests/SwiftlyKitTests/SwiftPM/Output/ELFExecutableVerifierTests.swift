@@ -55,7 +55,7 @@ struct ELFExecutableVerifierTests {
             try writeELF(to: nonExecutable, architecture: .arm64)
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o644],
-                ofItemAtPath: nonExecutable.path
+                ofItemAtPath: nonExecutable.path(percentEncoded: false)
             )
             #expect(throws: SwiftPMError.invalidExecutable(
                 "The output is not an executable regular file."
@@ -65,7 +65,10 @@ struct ELFExecutableVerifierTests {
 
             let truncated = directory.appending(path: "truncated")
             try Data([0x7f, 0x45, 0x4c, 0x46]).write(to: truncated)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: truncated.path)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: truncated.path(percentEncoded: false)
+            )
             #expect(throws: SwiftPMError.invalidExecutable(
                 "The output is not a little-endian ELF64 file."
             )) {

@@ -4,14 +4,21 @@ actor RecordingSubprocessRunner: SubprocessRunning {
 
     private var pendingResults: [SubprocessResult]
     private(set) var commands: [SubprocessCommand] = []
+    private let onRun: @Sendable (SubprocessCommand) async throws -> Void
 
-    init(results: [SubprocessResult]) {
+    init(
+        results: [SubprocessResult],
+        onRun: @escaping @Sendable (SubprocessCommand) async throws -> Void = { _ in }
+    ) {
         self.pendingResults = results
+        self.onRun = onRun
     }
 
     func run(_ command: SubprocessCommand, onOutput: SubprocessOutputHandler?) async throws -> SubprocessResult {
 
         commands.append(command)
+
+        try await onRun(command)
 
         guard !pendingResults.isEmpty else { throw RecordingSubprocessRunnerError.unexpectedCommand(command) }
 

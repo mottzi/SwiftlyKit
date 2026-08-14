@@ -5,6 +5,8 @@ enum SwiftPMError: Error, Equatable {
     case sdkSearchPathPreparationFailed(String)
     case malformedPackageDescription
     case dependencyResolutionRequired
+    case packageChangedDuringBuild
+    case packageSourceStabilityUnavailable(String)
     case executableNotFound(String)
     case unsupportedProductResources(String)
     case invalidExecutable(String)
@@ -27,6 +29,12 @@ extension SwiftPMError {
 
             case .dependencyResolutionRequired:
                 .dependencyResolutionRequired
+
+            case .packageChangedDuringBuild:
+                .packageChangedDuringBuild
+
+            case .packageSourceStabilityUnavailable(let detail):
+                .packageSourceStabilityUnavailable(detail)
 
             case .executableNotFound(let product):
                 .executableProductNotFound(product)

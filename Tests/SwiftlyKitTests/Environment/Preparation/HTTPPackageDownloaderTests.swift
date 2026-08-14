@@ -23,7 +23,7 @@ struct HTTPPackageDownloaderTests {
                 try await downloader.download(from: source, to: destination)
             }
 
-            #expect(!FileManager.default.fileExists(atPath: destination.path))
+            #expect(!FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)))
         }
     }
 

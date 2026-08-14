@@ -2,7 +2,8 @@ import Foundation
 
 extension SwiftPM {
 
-    func boundedDiagnostic(_ result: SubprocessResult) -> String {
+    /// Returns one bounded diagnostic from a subprocess result.
+    static func boundedDiagnostic(_ result: SubprocessResult) -> String {
         String((result.standardError + "\n" + result.standardOutput).suffix(16_384))
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -11,13 +12,14 @@ extension SwiftPM {
 
 extension SwiftPM {
 
-    func command(
+    /// Creates a Swift command for the prepared toolchain and protected environment.
+    static func command(
         _ environment: LocalBuildEnvironment,
         swiftArguments: [String],
         additions: [String: String] = [:]
     ) -> SubprocessCommand {
 
-        command(
+        Self.command(
             environment,
             tool: "swift",
             toolArguments: swiftArguments,
@@ -25,7 +27,8 @@ extension SwiftPM {
         )
     }
 
-    func command(
+    /// Creates a selected-tool command for the prepared toolchain and protected environment.
+    static func command(
         _ environment: LocalBuildEnvironment,
         tool: String,
         toolArguments: [String],
@@ -48,7 +51,9 @@ extension SwiftPM {
             processEnvironment[protectedKey] = inheritedEnvironment[protectedKey]
         }
 
-        processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftly.executableURL.deletingLastPathComponent().path
+        processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftly.executableURL
+            .deletingLastPathComponent()
+            .path(percentEncoded: false)
 
         return environment.swiftly.command(
             tool: tool,

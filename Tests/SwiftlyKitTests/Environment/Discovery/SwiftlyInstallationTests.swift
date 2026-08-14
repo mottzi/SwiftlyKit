@@ -22,7 +22,7 @@ struct SwiftlyInstallationTests {
             try FileManager.default.createSymbolicLink(at: configuredBin, withDestinationURL: configuredTarget)
 
             let installation = try await SwiftlyInstallation.detect(
-                environment: ["SWIFTLY_BIN_DIR": configuredBin.path],
+                environment: ["SWIFTLY_BIN_DIR": configuredBin.path(percentEncoded: false)],
                 homeDirectory: homeDirectory,
                 versionProbe: { _ in "1.1.3" }
             )
@@ -57,8 +57,9 @@ struct SwiftlyInstallationTests {
     func noExecutableReturnsNil() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftlyInstallation") { temporaryDirectory in
+            let configuredBin = temporaryDirectory.appending(path: "configured")
             let result = try await SwiftlyInstallation.detect(
-                environment: ["SWIFTLY_BIN_DIR": temporaryDirectory.appending(path: "configured").path],
+                environment: ["SWIFTLY_BIN_DIR": configuredBin.path(percentEncoded: false)],
                 homeDirectory: temporaryDirectory.appending(path: "home"),
                 versionProbe: { _ in fatalError("version probe must not run without a candidate") }
             )
@@ -78,10 +79,13 @@ struct SwiftlyInstallationTests {
             try FileManager.default.createDirectory(at: nonRegularCandidate, withIntermediateDirectories: false)
             let nonExecutableCandidate = homeBin.appending(path: "swiftly")
             try Data("not executable".utf8).write(to: nonExecutableCandidate)
-            try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: nonExecutableCandidate.path)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o644],
+                ofItemAtPath: nonExecutableCandidate.path(percentEncoded: false)
+            )
 
             let result = try await SwiftlyInstallation.detect(
-                environment: ["SWIFTLY_BIN_DIR": configuredBin.path],
+                environment: ["SWIFTLY_BIN_DIR": configuredBin.path(percentEncoded: false)],
                 homeDirectory: temporaryDirectory.appending(path: "home"),
                 versionProbe: { _ in fatalError("invalid candidates must not be probed") }
             )
@@ -95,7 +99,7 @@ struct SwiftlyInstallationTests {
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftlyInstallation") { temporaryDirectory in
             let executable = temporaryDirectory.appending(path: "swiftly")
             try makeExecutable(at: executable)
-            let environment = ["SWIFTLY_BIN_DIR": temporaryDirectory.path]
+            let environment = ["SWIFTLY_BIN_DIR": temporaryDirectory.path(percentEncoded: false)]
 
             let outputs = [
                 "",
@@ -143,7 +147,7 @@ struct SwiftlyInstallationTests {
             let recorder = ProbeRecorder()
             await #expect(throws: SwiftlyKitError.incompatibleSwiftly) {
                 try await SwiftlyInstallation.detect(
-                    environment: ["SWIFTLY_BIN_DIR": configuredBin.path],
+                    environment: ["SWIFTLY_BIN_DIR": configuredBin.path(percentEncoded: false)],
                     homeDirectory: homeDirectory,
                     versionProbe: { url in
                         await recorder.record(url)
@@ -165,7 +169,7 @@ struct SwiftlyInstallationTests {
 
             await #expect(throws: CancellationError.self) {
                 try await SwiftlyInstallation.detect(
-                    environment: ["SWIFTLY_BIN_DIR": temporaryDirectory.path],
+                    environment: ["SWIFTLY_BIN_DIR": temporaryDirectory.path(percentEncoded: false)],
                     homeDirectory: temporaryDirectory.appending(path: "home"),
                     versionProbe: { _ in throw CancellationError() }
                 )
@@ -182,10 +186,13 @@ struct SwiftlyInstallationTests {
                 "#!/bin/sh\nif [ \"$1\" != \"--version\" ]; then exit 2; fi\nprintf ' 1.2.3\\n'\n",
                 to: executable
             )
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: executable.path(percentEncoded: false)
+            )
 
             let installation = try await SwiftlyInstallation.detect(
-                environment: ["SWIFTLY_BIN_DIR": temporaryDirectory.path],
+                environment: ["SWIFTLY_BIN_DIR": temporaryDirectory.path(percentEncoded: false)],
                 homeDirectory: temporaryDirectory.appending(path: "home")
             )
 
@@ -207,7 +214,7 @@ private actor ProbeRecorder {
 
 private func makeExecutable(at url: URL) throws {
     try write("#!/bin/sh\nexit 0\n", to: url)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path(percentEncoded: false))
 }
 
 private func write(_ value: String, to url: URL) throws {

@@ -20,6 +20,7 @@ flowchart LR
     Environment --> SwiftPM
     SwiftPM --> Products[ExecutableProducts]
     Products -->|select| Product[ExecutableProduct]
+    SwiftPM --> Stability[PackageSourceStability]
     Facade -->|prepare / resolve / build| Gate[MutationGate]
     Gate --> Preparer
     Gate --> SwiftPM
@@ -117,11 +118,22 @@ neither spans SwiftlyKit's complete workflow. Consumers that mix those direct
 operations with SwiftlyKit must serialize them at a higher level or keep their
 state disjoint.
 
-The lease does not freeze package sources. SwiftlyKit verifies the output format
-but does not compare the complete source tree or `Package.resolved` before and
-after compilation. Callers must keep package source and dependency state stable
-for the complete operation. Source-coherence evidence is a separate future
-capability.
+The lease does not freeze package sources. `PackageSourceStability` provides a
+separate build-scoped guarantee. SwiftPM first returns the complete resolved
+package graph without automatic resolution. SwiftlyKit starts recursive FSEvents
+observation, captures deterministic source evidence, compiles and verifies the
+executable, captures the evidence again, and drains the event stream. A lasting
+change, a reverted change, an unreliable event stream, or a failed capture
+withholds the result. The selected scratch directory and each source root's
+top-level `.build`, `.git`, and `.swiftpm` entries are excluded, but resolved
+dependency roots nested inside scratch override that exclusion.
+
+Source evidence covers paths, bytes, executable permissions, and safe symbolic-
+link destinations across the root package and resolved local or checkout
+dependencies. This includes `Package.swift` and `Package.resolved`. Observation
+ends after compilation and executable verification because stripping, output
+publication, and cleanup do not read source. The module does not build from an
+immutable copy, retain fingerprints, or create durable artifact provenance.
 
 Abrupt owner termination can also leave an already launched tool process alive.
 `O_CLOEXEC` ensures that child does not retain SwiftlyKit's lease, which provides
@@ -173,6 +185,9 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   selection policy.
 - `SwiftPM/Output` owns runtime-resource inspection, ELF verification, and
   staged output transformation and atomic publication.
+- `SwiftPM/SourceStability` owns resolved-graph source discovery, canonical path
+  identity, deterministic snapshots, recursive event observation, and the
+  build-scoped accept-or-withhold decision.
 - `SwiftPM/Storage` converts a public `BuildStorage` choice into a canonical,
   safety-checked scratch directory and hides the retained exact-SDK directory
   layout and its cross-process create-or-verify protocol.
@@ -229,6 +244,9 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   are bounded.
 - A build result must be an executable, static, little-endian ELF64 file for the
   requested architecture. Stripped results are verified again.
+- A successful build has unchanged source evidence across the complete resolved
+  package graph from its initial snapshot through compilation and executable
+  verification. A reverted mutation also rejects the result.
 - Stripping operates on a SwiftlyKit-owned copy and never changes SwiftPM's
   produced executable in build storage.
 - Requested output publication occurs only after optional stripping and

@@ -50,7 +50,7 @@ struct MutationGateTests {
                 try await Task.sleep(for: .milliseconds(100))
 
                 #expect(fixture.isRunning)
-                #expect(!FileManager.default.fileExists(atPath: outcomeFile.path))
+                #expect(!FileManager.default.fileExists(atPath: outcomeFile.path(percentEncoded: false)))
 
                 return fixture
             }
@@ -64,7 +64,7 @@ struct MutationGateTests {
             let coordinationFile = FileManager.default
                 .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appending(path: "SwiftlyKit/Coordination/v1/mutation.lock")
-            #expect(FileManager.default.fileExists(atPath: coordinationFile.path))
+            #expect(FileManager.default.fileExists(atPath: coordinationFile.path(percentEncoded: false)))
         }
     }
 
@@ -108,7 +108,7 @@ struct MutationGateTests {
                     Issue.record("Expected mutationCoordinationFailed, got \(error).")
                     return
                 }
-                #expect(error.errorDescription?.contains(lockFile.path) == true)
+                #expect(error.errorDescription?.contains(lockFile.path(percentEncoded: false)) == true)
             }
         }
     }
@@ -180,12 +180,12 @@ struct MutationGateTests {
             try Data().write(to: lockFile)
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o666],
-                ofItemAtPath: lockFile.path
+                ofItemAtPath: lockFile.path(percentEncoded: false)
             )
 
             try await MutationGate(lockFile: lockFile).withAccess { }
 
-            let attributes = try FileManager.default.attributesOfItem(atPath: lockFile.path)
+            let attributes = try FileManager.default.attributesOfItem(atPath: lockFile.path(percentEncoded: false))
             let permissions = try #require(attributes[.posixPermissions] as? NSNumber)
             #expect(permissions.intValue & 0o777 == 0o600)
         }
@@ -300,8 +300,8 @@ private final class SiblingLockHolder: @unchecked Sendable {
             os.close(os.open(sys.argv[2], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
             time.sleep(30)
             """,
-            lockFile.path,
-            readyFile.path
+            lockFile.path(percentEncoded: false),
+            readyFile.path(percentEncoded: false)
         ]
         try process.run()
         self.process = process
@@ -328,7 +328,11 @@ private final class PublicMutationFixture: @unchecked Sendable {
             .appending(path: ".build/debug/SwiftlyKitCoordinationFixture")
         let process = Process()
         process.executableURL = executable
-        process.arguments = [invalidPackage.path, startedFile.path, outcomeFile.path]
+        process.arguments = [
+            invalidPackage.path(percentEncoded: false),
+            startedFile.path(percentEncoded: false),
+            outcomeFile.path(percentEncoded: false)
+        ]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
@@ -358,18 +362,18 @@ private func waitForFile(_ file: URL) async throws {
     let clock = ContinuousClock()
     let deadline = clock.now.advanced(by: .seconds(5))
 
-    while !FileManager.default.fileExists(atPath: file.path), clock.now < deadline {
+    while !FileManager.default.fileExists(atPath: file.path(percentEncoded: false)), clock.now < deadline {
         try await Task.sleep(for: .milliseconds(10))
     }
 
-    try #require(FileManager.default.fileExists(atPath: file.path))
+    try #require(FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
 }
 
 private func coordinationPackageRoot() -> URL {
 
     var candidate = URL(filePath: #filePath).deletingLastPathComponent()
-    while candidate.path != "/" {
-        if FileManager.default.fileExists(atPath: candidate.appending(path: "Package.swift").path) {
+    while candidate.path(percentEncoded: false) != "/" {
+        if FileManager.default.fileExists(atPath: candidate.appending(path: "Package.swift").path(percentEncoded: false)) {
             return candidate
         }
         candidate.deleteLastPathComponent()

@@ -80,17 +80,22 @@ extension SwiftlyInstallation {
     private static func isExecutableRegularFile(at url: URL) -> Bool {
 
         guard url.isFileURL else { return false }
-        guard url.path.hasPrefix("/") else { return false }
+        guard url.path(percentEncoded: false).hasPrefix("/") else { return false }
 
         var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return false }
+        guard FileManager.default.fileExists(
+            atPath: url.path(percentEncoded: false),
+            isDirectory: &isDirectory
+        ) else { return false }
         guard !isDirectory.boolValue else { return false }
         
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return false }
+        guard let attributes = try? FileManager.default.attributesOfItem(
+            atPath: url.path(percentEncoded: false)
+        ) else { return false }
         guard let type = attributes[.type] as? FileAttributeType else { return false }
         guard type == .typeRegular else { return false }
 
-        return FileManager.default.isExecutableFile(atPath: url.path)
+        return FileManager.default.isExecutableFile(atPath: url.path(percentEncoded: false))
     }
 
     private static func isCompatibleVersion(_ output: String) -> Bool {

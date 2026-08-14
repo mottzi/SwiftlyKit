@@ -26,6 +26,13 @@ extension SwiftPM {
         
         guard !description.requiresRuntimeResources(request.product.name)
         else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
+
+        let roots = try await sourceRoots(environment, scratchDirectory, runner)
+        let stability = try await Self.startSourceStability(
+            roots: roots,
+            scratchDirectory: scratchDirectory.url
+        )
+        defer { stability.cancel() }
         
         let sdkSearchDirectory: URL
         do {
@@ -51,7 +58,7 @@ extension SwiftPM {
             scratchDirectory: scratchDirectory
         )
 
-        let buildCommand = command(
+        let buildCommand = Self.command(
             environment,
             swiftArguments: ["build"] + commonArguments,
             additions: request.environment
@@ -60,12 +67,12 @@ extension SwiftPM {
         let buildResult = try await runner.run(buildCommand, onOutput: CommandOutputChunk.handler(for: onEvent))
 
         guard buildResult.succeeded else {
-            let diagnostic = boundedDiagnostic(buildResult)
+            let diagnostic = Self.boundedDiagnostic(buildResult)
             if Self.indicatesRequiredResolution(diagnostic) { throw SwiftPMError.dependencyResolutionRequired }
             else { throw SwiftPMError.commandFailed(operation: .building, diagnostic: diagnostic) }
         }
 
-        let pathCommand = command(
+        let pathCommand = Self.command(
             environment,
             swiftArguments: ["build"] + commonArguments + ["--show-bin-path"],
             additions: request.environment
@@ -74,7 +81,7 @@ extension SwiftPM {
         let pathResult = try await runner.run(pathCommand, onOutput: nil)
 
         guard pathResult.succeeded
-        else { throw SwiftPMError.commandFailed(operation: .building, diagnostic: boundedDiagnostic(pathResult)) }
+        else { throw SwiftPMError.commandFailed(operation: .building, diagnostic: Self.boundedDiagnostic(pathResult)) }
 
         let binaryDirectory = pathResult.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !binaryDirectory.isEmpty else { throw SwiftPMError.executableNotFound(request.product.name) }
@@ -95,10 +102,12 @@ extension SwiftPM {
         }
 
         let executable = binaryDirectoryURL.appending(path: request.product.name)
-        guard FileManager.default.fileExists(atPath: executable.path)
+        guard FileManager.default.fileExists(atPath: executable.path(percentEncoded: false))
         else { throw SwiftPMError.executableNotFound(request.product.name) }
 
         try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
+
+        try await Self.finishSourceStability(stability)
 
         switch request.output {
             case .buildStorage:
@@ -173,17 +182,17 @@ extension SwiftPM {
         onOutput: SubprocessOutputHandler?
     ) async throws {
 
-        let stripCommand = command(
+        let stripCommand = Self.command(
             environment,
             tool: "llvm-objcopy",
-            toolArguments: ["--strip-all", executable.path],
+            toolArguments: ["--strip-all", executable.path(percentEncoded: false)],
             additions: request.environment
         )
 
         let result = try await runner.run(stripCommand, onOutput: onOutput)
 
         guard result.succeeded
-        else { throw SwiftPMError.commandFailed(operation: .stripping, diagnostic: boundedDiagnostic(result)) }
+        else { throw SwiftPMError.commandFailed(operation: .stripping, diagnostic: Self.boundedDiagnostic(result)) }
 
         try ELFExecutableVerifier.verify(executable, architecture: environment.target.architecture)
     }
@@ -205,8 +214,9 @@ extension SwiftPM {
             .appending(path: destination.lastPathComponent)
             .standardizedFileURL
 
-        guard resolvedDestination != resolvedScratchDirectory,
-              !resolvedDestination.path.hasPrefix(resolvedScratchDirectory.path + "/")
+        guard !resolvedDestination.pathComponents.starts(
+            with: resolvedScratchDirectory.pathComponents
+        )
         else { throw SwiftPMError.outputInsideBuildStorage(destination) }
     }
 
@@ -224,20 +234,20 @@ extension SwiftPM {
 
         var arguments = [
             "--disable-automatic-resolution",
-            "--swift-sdks-path", sdkSearchDirectory.path,
+            "--swift-sdks-path", sdkSearchDirectory.path(percentEncoded: false),
             "--swift-sdk", environment.target.architecture.swiftSDKSelector,
             "--product", request.product.name,
             "--configuration", configurationArgument
         ]
 
         if scratchDirectory.isExplicit {
-            arguments += ["--scratch-path", scratchDirectory.url.path]
+            arguments += ["--scratch-path", scratchDirectory.url.path(percentEncoded: false)]
         }
 
         return arguments
     }
 
-    private static func indicatesRequiredResolution(_ diagnostic: String) -> Bool {
+    static func indicatesRequiredResolution(_ diagnostic: String) -> Bool {
 
         let lowercased = diagnostic.lowercased()
         
@@ -250,6 +260,35 @@ extension SwiftPM {
         executable
             .deletingLastPathComponent()
             .appending(path: ".\(executable.lastPathComponent).swiftlykit-stripped")
+    }
+
+    private static func startSourceStability(
+        roots: [URL],
+        scratchDirectory: URL
+    ) async throws -> PackageSourceStability {
+
+        do {
+            return try await PackageSourceStability.start(
+                roots: roots,
+                excluding: [scratchDirectory]
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch PackageSourceStabilityError.sourceChanged {
+            throw SwiftPMError.packageChangedDuringBuild
+        } catch PackageSourceStabilityError.observationFailed(let detail) {
+            throw SwiftPMError.packageSourceStabilityUnavailable(detail)
+        }
+    }
+
+    private static func finishSourceStability(_ stability: PackageSourceStability) async throws {
+
+        do { try await stability.finish() }
+        catch is CancellationError { throw CancellationError() }
+        catch PackageSourceStabilityError.sourceChanged { throw SwiftPMError.packageChangedDuringBuild }
+        catch PackageSourceStabilityError.observationFailed(let detail) {
+            throw SwiftPMError.packageSourceStabilityUnavailable(detail)
+        }
     }
 
 }

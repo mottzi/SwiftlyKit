@@ -13,6 +13,11 @@ struct SwiftPMTests {
             (.sdkSearchPathPreparationFailed("unavailable"), .buildFailed("unavailable")),
             (.malformedPackageDescription, .packageInspectionFailed("SwiftPM returned malformed package metadata.")),
             (.dependencyResolutionRequired, .dependencyResolutionRequired),
+            (.packageChangedDuringBuild, .packageChangedDuringBuild),
+            (
+                .packageSourceStabilityUnavailable("unavailable"),
+                .packageSourceStabilityUnavailable("unavailable")
+            ),
             (.executableNotFound("Tool"), .executableProductNotFound("Tool")),
             (.unsupportedProductResources("Tool"), .unsupportedProductResources("Tool")),
             (.invalidExecutable("invalid"), .executableVerificationFailed("invalid")),
@@ -61,7 +66,7 @@ struct SwiftPMTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
                 .success(output: "built"),
-                .success(output: directory.path + "\n")
+                .success(output: directory.path(percentEncoded: false) + "\n")
             ])
             let environment = buildEnvironment(in: directory)
             let scratch = directory.appending(path: "scratch")
@@ -96,7 +101,7 @@ struct SwiftPMTests {
             #expect(build.arguments.contains("Tool"))
             let configurationIndex = try #require(build.arguments.firstIndex(of: "--configuration"))
             #expect(build.arguments.dropFirst(configurationIndex + 1).first == mapping.argument)
-            #expect(build.arguments.contains(scratch.path))
+            #expect(build.arguments.contains(scratch.path(percentEncoded: false)))
             #expect(build.environment?["CUSTOM"] == "value")
             #expect(build.environment?["HOME"] == ProcessInfo.processInfo.environment["HOME"])
             #expect(build.environment?["SWIFTLY_HOME_DIR"] == ProcessInfo.processInfo.environment["SWIFTLY_HOME_DIR"])
@@ -117,10 +122,10 @@ struct SwiftPMTests {
                 results: [
                     .success(output: packageJSON),
                     .success(output: "first build"),
-                    .success(output: directory.path + "\n"),
+                    .success(output: directory.path(percentEncoded: false) + "\n"),
                     .success(output: packageJSON),
                     .success(output: "second build"),
-                    .success(output: directory.path + "\n")
+                    .success(output: directory.path(percentEncoded: false) + "\n")
                 ]
             )
             let scratch = directory.appending(path: "scratch", directoryHint: .isDirectory)
@@ -147,7 +152,7 @@ struct SwiftPMTests {
             #expect(firstPath == (try argument(after: "--swift-sdks-path", in: commands[2].arguments)))
             #expect(firstPath == (try argument(after: "--swift-sdks-path", in: secondBuild.arguments)))
             #expect(firstPath == (try argument(after: "--swift-sdks-path", in: commands[5].arguments)))
-            #expect(firstPath.hasPrefix(scratch.path + "/"))
+            #expect(URL(filePath: firstPath).pathComponents.starts(with: scratch.pathComponents))
         }
     }
 
@@ -161,7 +166,7 @@ struct SwiftPMTests {
                 results: [
                     .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
                     .success(output: "built"),
-                    .success(output: directory.path + "\n")
+                    .success(output: directory.path(percentEncoded: false) + "\n")
                 ]
             )
             let swiftPM = SwiftPM(
@@ -177,7 +182,7 @@ struct SwiftPMTests {
             let commands = await runner.commands
             #expect(
                 try argument(after: "--swift-sdks-path", in: commands[1].arguments)
-                    .hasPrefix(directory.appending(path: ".build").path + "/")
+                    .hasPrefix(directory.appending(path: ".build").path(percentEncoded: false) + "/")
             )
         }
     }
@@ -204,6 +209,119 @@ struct SwiftPMTests {
         }
     }
 
+    @Test("A source mutation withholds copied output and reports a typed failure")
+    func sourceMutationWithholdsOutput() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let source = directory.appending(path: "Sources/Tool/main.swift")
+            let executable = directory.appending(path: "Tool")
+            let output = directory.appending(path: "PublishedTool")
+            try FileManager.default.createDirectory(
+                at: source.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("print(1)\n".utf8).write(to: source)
+            try writeELF(to: executable, architecture: .arm64)
+            let runner = RecordingSubprocessRunner(
+                results: [
+                    .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
+                    .success(output: "built"),
+                    .success(output: directory.path(percentEncoded: false) + "\n")
+                ],
+                onRun: { command in
+                    guard command.arguments.contains("build"),
+                          !command.arguments.contains("--show-bin-path")
+                    else { return }
+                    try Data("print(2)\n".utf8).write(to: source)
+                }
+            )
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+
+            await #expect(throws: SwiftPMError.packageChangedDuringBuild) {
+                try await swiftPM.build(
+                    BuildRequest(
+                        ExecutableProduct(name: "Tool"),
+                        output: .copy(to: output)
+                    ),
+                    using: buildEnvironment(in: directory)
+                )
+            }
+
+            #expect(!FileManager.default.fileExists(atPath: output.path(percentEncoded: false)))
+        }
+    }
+
+    @Test("Unobservable source fails closed before compilation")
+    func sourceObservationFailure() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let outside = directory.deletingLastPathComponent().appending(path: UUID().uuidString)
+            try Data("outside".utf8).write(to: outside)
+            defer { try? FileManager.default.removeItem(at: outside) }
+            try FileManager.default.createSymbolicLink(
+                at: directory.appending(path: "escaping-source"),
+                withDestinationURL: outside
+            )
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
+            ])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+
+            await #expect(throws: SwiftPMError.packageSourceStabilityUnavailable(
+                "A package-source symbolic link resolves outside the observed package roots."
+            )) {
+                try await swiftPM.build(
+                    BuildRequest(ExecutableProduct(name: "Tool")),
+                    using: buildEnvironment(in: directory)
+                )
+            }
+
+            #expect(await runner.commands.count == 1)
+        }
+    }
+
+    @Test("A local dependency mutation rejects the build result")
+    func localDependencyMutation() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let dependency = directory.deletingLastPathComponent().appending(
+                path: "SwiftlyKit-LocalDependency-\(UUID().uuidString)",
+                directoryHint: .isDirectory
+            )
+            try FileManager.default.createDirectory(at: dependency, withIntermediateDirectories: false)
+            defer { try? FileManager.default.removeItem(at: dependency) }
+            let dependencySource = dependency.appending(path: "source.swift")
+            let executable = directory.appending(path: "Tool")
+            try Data("let value = 1\n".utf8).write(to: dependencySource)
+            try writeELF(to: executable, architecture: .arm64)
+            let runner = RecordingSubprocessRunner(
+                results: [
+                    .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
+                    .success(output: "built"),
+                    .success(output: directory.path(percentEncoded: false) + "\n")
+                ],
+                onRun: { command in
+                    guard command.arguments.contains("build"),
+                          !command.arguments.contains("--show-bin-path")
+                    else { return }
+                    try Data("let value = 2\n".utf8).write(to: dependencySource)
+                }
+            )
+            let swiftPM = SwiftPM(
+                runner: runner,
+                validateEnvironment: { _ in },
+                sourceRoots: { environment, _, _ in [environment.packageRoot, dependency] }
+            )
+
+            await #expect(throws: SwiftPMError.packageChangedDuringBuild) {
+                try await swiftPM.build(
+                    BuildRequest(ExecutableProduct(name: "Tool")),
+                    using: buildEnvironment(in: directory)
+                )
+            }
+        }
+    }
+
     @Test("Build rejects runtime resource bundles emitted by dependency products")
     func transitiveResources() async throws {
 
@@ -215,7 +333,7 @@ struct SwiftPMTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
                 .success(output: "built"),
-                .success(output: directory.path + "\n")
+                .success(output: directory.path(percentEncoded: false) + "\n")
             ])
             let events = SwiftPMEventRecorder()
             let environment = buildEnvironment(in: directory)
@@ -248,7 +366,7 @@ struct SwiftPMTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
                 .success(output: "built"),
-                .success(output: directory.path + "\n")
+                .success(output: directory.path(percentEncoded: false) + "\n")
             ])
             let swiftPM = SwiftPM(
                 runner: runner,
@@ -329,7 +447,7 @@ struct SwiftPMTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
                 .success(output: "built"),
-                .success(output: directory.path + "\n"),
+                .success(output: directory.path(percentEncoded: false) + "\n"),
                 .success(output: "stripped")
             ])
             let events = SwiftPMEventRecorder()
@@ -357,9 +475,9 @@ struct SwiftPMTests {
             let strippedExecutable = commands[3].arguments[3]
             #expect(commands[3].arguments.prefix(3) == ["run", "llvm-objcopy", "--strip-all"])
             #expect(commands[3].arguments.suffix(1) == ["+6.2.1"])
-            #expect(strippedExecutable != executable.path)
-            #expect(strippedExecutable != output.path)
-            #expect(strippedExecutable.hasPrefix(directory.path + "/.PublishedTool.swiftlykit-"))
+            #expect(strippedExecutable != executable.path(percentEncoded: false))
+            #expect(strippedExecutable != output.path(percentEncoded: false))
+            #expect(strippedExecutable.hasPrefix(directory.path(percentEncoded: false) + "/.PublishedTool.swiftlykit-"))
             #expect(!FileManager.default.fileExists(atPath: strippedExecutable))
             #expect(await events.operations == [.building, .stripping, .copying])
             #expect(await events.outputs == [
@@ -381,7 +499,7 @@ struct SwiftPMTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
                 .success(output: "built"),
-                .success(output: directory.path + "\n"),
+                .success(output: directory.path(percentEncoded: false) + "\n"),
                 .success(output: "stripped")
             ])
             let events = SwiftPMEventRecorder()
@@ -398,8 +516,8 @@ struct SwiftPMTests {
             #expect(try Data(contentsOf: strippedExecutable) == originalBytes)
             let commands = await runner.commands
             #expect(commands.count == 4)
-            #expect(commands[3].arguments[3] != executable.path)
-            #expect(commands[3].arguments[3] != strippedExecutable.path)
+            #expect(commands[3].arguments[3] != executable.path(percentEncoded: false))
+            #expect(commands[3].arguments[3] != strippedExecutable.path(percentEncoded: false))
             #expect(await events.operations == [.building, .stripping])
         }
     }
@@ -415,7 +533,7 @@ struct SwiftPMTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
                 .success(output: "built"),
-                .success(output: directory.path + "\n"),
+                .success(output: directory.path(percentEncoded: false) + "\n"),
                 .failure(standardError: "strip failed")
             ])
             let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
@@ -435,8 +553,8 @@ struct SwiftPMTests {
             }
 
             #expect(try Data(contentsOf: executable) == originalBytes)
-            #expect(!FileManager.default.fileExists(atPath: output.path))
-            #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).allSatisfy {
+            #expect(!FileManager.default.fileExists(atPath: output.path(percentEncoded: false)))
+            #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false)).allSatisfy {
                 !$0.hasPrefix(".PublishedTool.swiftlykit-")
             })
         }

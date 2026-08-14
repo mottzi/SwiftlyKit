@@ -14,7 +14,10 @@ enum SDKBundleLocator {
         for candidate in candidates {
             var isDirectory: ObjCBool = false
 
-            guard FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory) else { continue }
+            guard FileManager.default.fileExists(
+                atPath: candidate.path(percentEncoded: false),
+                isDirectory: &isDirectory
+            ) else { continue }
             guard isDirectory.boolValue else { continue }
 
             return candidate.resolvingSymlinksInPath().standardizedFileURL

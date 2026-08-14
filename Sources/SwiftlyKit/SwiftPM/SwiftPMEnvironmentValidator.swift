@@ -12,7 +12,7 @@ enum SwiftPMEnvironmentValidator {
         guard packageInputs.toolsVersion <= environment.swiftVersion
         else { throw SwiftlyKitError.unsupportedToolsVersion(packageInputs.toolsVersion) }
 
-        guard FileManager.default.isExecutableFile(atPath: environment.swiftly.executableURL.path)
+        guard FileManager.default.isExecutableFile(atPath: environment.swiftly.executableURL.path(percentEncoded: false))
         else { throw SwiftlyKitError.incompatibleSwiftly }
 
         let locatedSDKBundleURL = locateSDK(environment.staticLinuxSDK.identifier)

@@ -107,7 +107,7 @@ struct LiveSubprocessRunnerTests {
                 executableURL: URL(filePath: "/bin/sh"),
                 arguments: [
                     "-c",
-                    "(sleep 0.4; /usr/bin/touch '\(sentinel.path)') & wait"
+                    "(sleep 0.4; /usr/bin/touch '\(sentinel.path(percentEncoded: false))') & wait"
                 ]
             )
             let task = Task { try await LiveSubprocessRunner().run(command, onOutput: nil) }
@@ -119,7 +119,7 @@ struct LiveSubprocessRunnerTests {
                 try await task.value
             }
             try await Task.sleep(for: .milliseconds(500))
-            #expect(!FileManager.default.fileExists(atPath: sentinel.path))
+            #expect(!FileManager.default.fileExists(atPath: sentinel.path(percentEncoded: false)))
         }
     }
 

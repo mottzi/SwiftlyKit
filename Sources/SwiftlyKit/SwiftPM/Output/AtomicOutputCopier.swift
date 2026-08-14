@@ -14,7 +14,7 @@ enum AtomicOutputCopier {
         else { throw SwiftPMError.outputCopyFailed(destination) }
 
         if !replacingExisting {
-            guard !FileManager.default.fileExists(atPath: destination.path)
+            guard !FileManager.default.fileExists(atPath: destination.path(percentEncoded: false))
             else { throw SwiftPMError.outputAlreadyExists(destination) }
         }
 
@@ -29,7 +29,13 @@ enum AtomicOutputCopier {
         try await prepare(temporary)
 
         let flags = replacingExisting ? 0 : UInt32(RENAME_EXCL)
-        let renameStatus = renameatx_np(AT_FDCWD, temporary.path, AT_FDCWD, destination.path, flags)
+        let renameStatus = renameatx_np(
+            AT_FDCWD,
+            temporary.path(percentEncoded: false),
+            AT_FDCWD,
+            destination.path(percentEncoded: false),
+            flags
+        )
 
         if renameStatus != 0 {
             if !replacingExisting && errno == EEXIST { throw SwiftPMError.outputAlreadyExists(destination) }

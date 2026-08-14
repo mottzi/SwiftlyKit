@@ -15,7 +15,7 @@ extension SwiftPM {
             to: onEvent
         )
 
-        let resolutionCommand = command(
+        let resolutionCommand = Self.command(
             environment,
             swiftArguments: [
                 "package",
@@ -25,8 +25,12 @@ extension SwiftPM {
 
         let result = try await runner.run(resolutionCommand, onOutput: CommandOutputChunk.handler(for: onEvent))
 
-        guard result.succeeded
-        else { throw SwiftPMError.commandFailed(operation: .resolvingDependencies, diagnostic: boundedDiagnostic(result)) }
+        guard result.succeeded else {
+            throw SwiftPMError.commandFailed(
+                operation: .resolvingDependencies,
+                diagnostic: Self.boundedDiagnostic(result)
+            )
+        }
     }
 
 }
