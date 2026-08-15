@@ -50,6 +50,9 @@ public enum SwiftlyKitError: Equatable {
     /// A SwiftPM process value has an invalid name, value, or protected purpose.
     case invalidSwiftPMEnvironmentVariable(String)
 
+    /// A SwiftPM package trait has an invalid or reserved name.
+    case invalidSwiftPMTrait(String)
+
     /// SwiftPM could not return usable package metadata.
     case packageInspectionFailed(String)
 
@@ -159,6 +162,9 @@ extension SwiftlyKitError: LocalizedError {
 
             case .invalidSwiftPMEnvironmentVariable(let name):
                 "The SwiftPM environment variable “\(name)” is invalid or protected."
+
+            case .invalidSwiftPMTrait(let name):
+                "The SwiftPM package trait “\(name)” has an invalid or reserved name."
 
             case .packageInspectionFailed(let detail):
                 "SwiftPM could not inspect the package: \(detail)"

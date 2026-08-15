@@ -71,10 +71,12 @@ struct EnvironmentPreparerTests {
         ]
         let values = try SwiftPMEnvironment(entries)
         let snapshot = values.snapshot(inheriting: ["CAPTURED": "initial"])
+        let traits = try SwiftPMTraits(["PreparationFeature"], includingDefaults: false)
 
         let environment = try await preparer.prepare(
             try assessment(requires: [.toolchain, .staticLinuxSDK]),
-            swiftPMEnvironment: snapshot
+            swiftPMEnvironment: snapshot,
+            swiftPMTraits: traits
         )
         entries["PREPARATION_SECRET"] = .sensitive("changed")
 
@@ -82,8 +84,10 @@ struct EnvironmentPreparerTests {
         #expect(await inspections.callCount == 3)
         #expect(environment.swiftPMEnvironment.values["CAPTURED"] == "initial")
         #expect(environment.swiftPMEnvironment.values["PREPARATION_SECRET"] == "private")
+        #expect(environment.swiftPMTraits.arguments == traits.arguments)
         #expect(recorded.allSatisfy { $0.environment == nil })
         #expect(recorded.allSatisfy { $0.sensitiveEnvironmentKeys.isEmpty })
+        #expect(recorded.allSatisfy { !$0.arguments.contains("--traits") })
         #expect(recorded[0].arguments == ["install", "6.2.1", "--verify", "--assume-yes"])
         #expect(!recorded[0].arguments.contains("--use"))
         #expect(recorded[1].arguments == [

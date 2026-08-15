@@ -120,6 +120,7 @@ This fast track uses these defaults:
 - SwiftlyKit selects the toolchain automatically.
 - The executable is not stripped.
 - The executable stays in SwiftPM scratch storage.
+- The package's default traits remain enabled.
 
 Specify a product, target, toolchain, or configuration when you need a different
 result:
@@ -170,7 +171,7 @@ let executable = try await SwiftlyKit.build(
 The staged API separates read-only assessment from operations that can change
 the environment or package. One `LocalBuildEnvironment` binds all later
 operations to the assessed package, target, toolchain, SDK, and SwiftPM process
-environment snapshot.
+environment snapshot and package-trait configuration.
 
 ### 1. Assess the environment
 
@@ -235,10 +236,15 @@ let values = try SwiftPMEnvironment([
     "SWIFTPM_REGISTRY_TOKEN": .sensitive(token),
     "UNWANTED_PARENT_VALUE": .unset
 ])
+let traits = try SwiftPMTraits(
+    ["Production"],
+    includingDefaults: true
+)
 
 let environment = try await kit.prepare(
     assessment,
-    swiftPMEnvironment: values
+    swiftPMEnvironment: values,
+    swiftPMTraits: traits
 )
 ```
 
@@ -246,6 +252,14 @@ You must call `prepare(_:)` even when `requiresInstallation` is `false`. The
 returned environment is the capability that the other staged operations need.
 SwiftlyKit captures the host environment during this call. Later changes to the
 host environment or the input dictionary do not change the prepared snapshot.
+
+`SwiftPMTraits.packageDefaults` is the default and keeps the package's declared
+default traits. Use `.none` to disable all traits or `.all` to enable every
+declared trait. Create an explicit selection with
+`SwiftPMTraits(_:includingDefaults:)`. The required Boolean makes retention of
+package defaults intentional. SwiftlyKit validates names, removes duplicates,
+and orders them deterministically. SwiftPM reports whether each valid name is
+declared by the package.
 
 `.plain` adds or replaces a nonsecret value, `.sensitive` adds or replaces a
 value that SwiftlyKit redacts from its output, and `.unset` removes an inherited
@@ -262,9 +276,10 @@ toolchain-directory names, compiler and linker selectors such as `SWIFT_EXEC`,
 `CC`, `AR`, and `LIBTOOL`, SDK and toolchain selectors, and SwiftPM custom tool
 directories.
 
-The snapshot applies to package inspection, graph discovery, dependency
-resolution, build, bin-path lookup, clean, and reset. Caller changes do not
-reach Swiftly preparation, downloads, stripping, copying, or verification.
+The environment snapshot and trait configuration apply to package inspection,
+graph discovery, dependency resolution, build, bin-path lookup, clean, and
+reset. They do not reach Swiftly preparation, downloads, stripping, copying, or
+verification.
 
 > [!WARNING]
 > Redaction protects output returned or streamed by SwiftlyKit. A trusted
@@ -605,6 +620,7 @@ provides a user-facing description. Common control-flow errors include:
 - `developerToolsUnavailable`
 - `commandLineToolsInstallationRequestFailed`
 - `invalidSwiftPMEnvironmentVariable`
+- `invalidSwiftPMTrait`
 - `executableProductSelectionRequired`
 - `staleAssessment`
 - `packageChangedDuringBuild`
@@ -638,7 +654,8 @@ do {
 | `EnvironmentChoices` | Lists exact compatible assessments and applies automatic or exact selection without more I/O. |
 | `EnvironmentAssessment` | Describes the selected environment and required installations. |
 | `SwiftPMEnvironment` | Adds, redacts, or removes values for one complete SwiftPM workflow. |
-| `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, SDK, and process snapshot. |
+| `SwiftPMTraits` | Selects package defaults, no traits, all traits, or a validated explicit set. |
+| `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, SDK, and SwiftPM configuration. |
 | `ExecutableProducts` | Lists discovered products and selects a named or sole executable. |
 | `BuildRequest` | Selects one product and its build options. |
 | `BuildStorage` | Selects package-default or explicit SwiftPM scratch storage. |

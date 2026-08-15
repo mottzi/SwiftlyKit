@@ -1,6 +1,6 @@
 import Foundation
 
-/// A prepared capability that binds operations to one package, target, toolchain, SDK, and SwiftPM environment snapshot.
+/// A prepared capability that binds operations to one package, target, toolchain, SDK, and SwiftPM workflow configuration.
 public struct LocalBuildEnvironment: Sendable {
 
     /// The exact Swift toolchain version that is bound to build operations.
@@ -14,6 +14,7 @@ public struct LocalBuildEnvironment: Sendable {
     let sdkBundleURL: URL
     let target: BuildTarget
     let swiftPMEnvironment: SwiftPMEnvironment.Snapshot
+    let swiftPMTraits: SwiftPMTraits
 
     init(
         swiftVersion: SwiftVersion,
@@ -22,7 +23,8 @@ public struct LocalBuildEnvironment: Sendable {
         swiftly: SwiftlyInstallation,
         sdkBundleURL: URL,
         target: BuildTarget,
-        swiftPMEnvironment: SwiftPMEnvironment.Snapshot
+        swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
+        swiftPMTraits: SwiftPMTraits = .packageDefaults
     ) {
         self.swiftVersion = swiftVersion
         self.staticLinuxSDK = staticLinuxSDK
@@ -31,6 +33,7 @@ public struct LocalBuildEnvironment: Sendable {
         self.sdkBundleURL = sdkBundleURL
         self.target = target
         self.swiftPMEnvironment = swiftPMEnvironment
+        self.swiftPMTraits = swiftPMTraits
     }
 
 }

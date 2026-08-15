@@ -251,6 +251,8 @@ extension SwiftPM {
             arguments += ["--jobs", String(jobs)]
         }
 
+        arguments += environment.swiftPMTraits.arguments
+
         return arguments
     }
 

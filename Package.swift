@@ -34,7 +34,8 @@ let package = Package(
             ],
             resources: [
                 .copy("Fixtures/CrossCompilationPackage"),
-                .copy("Fixtures/EnvironmentConditionalPackage")
+                .copy("Fixtures/EnvironmentConditionalPackage"),
+                .copy("Fixtures/TraitConditionalPackage")
             ]
         ),
         .executableTarget(

@@ -35,10 +35,11 @@ struct EnvironmentPreparer {
         try $0.packageInputs.validateCurrent()
     }
 
-    /// Revalidates first, performs only authorized mutations, and binds the supplied SwiftPM environment snapshot.
+    /// Revalidates first, performs only authorized mutations, and binds the supplied SwiftPM workflow configuration.
     func prepare(
         _ assessment: EnvironmentAssessment,
         swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot(),
+        swiftPMTraits: SwiftPMTraits = .packageDefaults,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> LocalBuildEnvironment {
 
@@ -61,7 +62,8 @@ struct EnvironmentPreparer {
             swiftly: swiftly,
             sdkBundleURL: sdkBundleURL,
             target: assessment.target,
-            swiftPMEnvironment: swiftPMEnvironment
+            swiftPMEnvironment: swiftPMEnvironment,
+            swiftPMTraits: swiftPMTraits
         )
     }
 

@@ -19,7 +19,8 @@ struct SwiftPMCleanupTests {
             let values = try SwiftPMEnvironment(["CLEAN_VALUE": .plain("enabled")])
             let environment = cleanupEnvironment(
                 in: directory,
-                swiftPMEnvironment: values.snapshot(inheriting: [:])
+                swiftPMEnvironment: values.snapshot(inheriting: [:]),
+                swiftPMTraits: try SwiftPMTraits(["CleanupFeature"], includingDefaults: false)
             )
 
             try await swiftPM.cleanBuildArtifacts(
@@ -31,8 +32,8 @@ struct SwiftPMCleanupTests {
             let commands = await runner.commands
             #expect(commands.count == 1)
             #expect(commands[0].arguments == [
-                "run", "swift", "package", "clean", "--scratch-path",
-                directory.appending(path: ".build").path(percentEncoded: false), "+6.2.1"
+                "run", "swift", "package", "--traits", "CleanupFeature", "--scratch-path",
+                directory.appending(path: ".build").path(percentEncoded: false), "clean", "+6.2.1"
             ])
             #expect(commands[0].workingDirectory == directory)
             #expect(commands[0].environment?["CLEAN_VALUE"] == "enabled")
@@ -52,7 +53,8 @@ struct SwiftPMCleanupTests {
             let values = try SwiftPMEnvironment(["RESET_VALUE": .plain("enabled")])
             let environment = cleanupEnvironment(
                 in: directory,
-                swiftPMEnvironment: values.snapshot(inheriting: [:])
+                swiftPMEnvironment: values.snapshot(inheriting: [:]),
+                swiftPMTraits: .none
             )
 
             try await swiftPM.resetBuildStorage(
@@ -64,8 +66,8 @@ struct SwiftPMCleanupTests {
             let commands = await runner.commands
             #expect(commands.count == 1)
             #expect(commands[0].arguments == [
-                "run", "swift", "package", "reset", "--scratch-path",
-                scratch.path(percentEncoded: false), "+6.2.1"
+                "run", "swift", "package", "--disable-default-traits", "--scratch-path",
+                scratch.path(percentEncoded: false), "reset", "+6.2.1"
             ])
             #expect(commands[0].environment?["RESET_VALUE"] == "enabled")
             #expect(await events.operations == [.resettingBuildStorage])
@@ -240,7 +242,8 @@ struct SwiftPMCleanupTests {
 
 private func cleanupEnvironment(
     in directory: URL,
-    swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot()
+    swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot(),
+    swiftPMTraits: SwiftPMTraits = .packageDefaults
 ) -> LocalBuildEnvironment {
 
     LocalBuildEnvironment(
@@ -250,7 +253,8 @@ private func cleanupEnvironment(
         swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64),
-        swiftPMEnvironment: swiftPMEnvironment
+        swiftPMEnvironment: swiftPMEnvironment,
+        swiftPMTraits: swiftPMTraits
     )
 }
 

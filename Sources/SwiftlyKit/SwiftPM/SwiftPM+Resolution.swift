@@ -15,12 +15,10 @@ extension SwiftPM {
             to: onEvent
         )
 
+        let arguments = ["package"] + environment.swiftPMTraits.arguments + ["resolve"]
         let resolutionCommand = Self.command(
             environment,
-            swiftArguments: [
-                "package",
-                "resolve"
-            ]
+            swiftArguments: arguments
         )
 
         let result = try await runner.run(resolutionCommand, onOutput: CommandOutputChunk.handler(for: onEvent))

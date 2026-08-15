@@ -78,7 +78,8 @@ struct SwiftPMTests {
             ])
             let environment = buildEnvironment(
                 in: directory,
-                swiftPMEnvironment: snapshot
+                swiftPMEnvironment: snapshot,
+                swiftPMTraits: try SwiftPMTraits(["Beta", "Alpha"], includingDefaults: true)
             )
             let scratch = directory.appending(path: "scratch")
             let request = BuildRequest(
@@ -114,6 +115,12 @@ struct SwiftPMTests {
             #expect(build.environment?["SWIFTLY_TOOLCHAINS_DIR"] == "/trusted/toolchains")
             #expect(build.environment?["SWIFTLY_BIN_DIR"] == "/")
             #expect(commands[0].environment?["CUSTOM"] == "value")
+            #expect(try argument(after: "--traits", in: commands[0].arguments) == "Alpha,Beta,default")
+            #expect(try argument(after: "--traits", in: commands[1].arguments) == "Alpha,Beta,default")
+            #expect(try argument(after: "--traits", in: commands[2].arguments) == "Alpha,Beta,default")
+            let dumpIndex = try #require(commands[0].arguments.firstIndex(of: "dump-package"))
+            let dumpTraitsIndex = try #require(commands[0].arguments.firstIndex(of: "--traits"))
+            #expect(dumpTraitsIndex < dumpIndex)
             #expect(commands[2].environment?["CUSTOM"] == "value")
             #expect(commands[2].arguments.contains("--show-bin-path"))
             #expect(try argument(after: "--jobs", in: commands[2].arguments) == "3")
@@ -447,7 +454,8 @@ struct SwiftPMTests {
             let values = try SwiftPMEnvironment(["RESOLUTION_VALUE": .plain("enabled")])
             let environment = buildEnvironment(
                 in: directory,
-                swiftPMEnvironment: values.snapshot(inheriting: [:])
+                swiftPMEnvironment: values.snapshot(inheriting: [:]),
+                swiftPMTraits: .all
             )
             let swiftPM = SwiftPM(
                 runner: runner,
@@ -462,7 +470,7 @@ struct SwiftPMTests {
             let commands = await runner.commands
             #expect(commands.count == 1)
             #expect(commands[0].arguments == [
-                "run", "swift", "package", "resolve", "+6.2.1"
+                "run", "swift", "package", "--enable-all-traits", "resolve", "+6.2.1"
             ])
             #expect(commands[0].workingDirectory == directory)
             #expect(commands[0].environment?["RESOLUTION_VALUE"] == "enabled")
@@ -522,7 +530,8 @@ struct SwiftPMTests {
             ])
             let environment = buildEnvironment(
                 in: directory,
-                swiftPMEnvironment: values.snapshot(inheriting: ["BASE": "value"])
+                swiftPMEnvironment: values.snapshot(inheriting: ["BASE": "value"]),
+                swiftPMTraits: try SwiftPMTraits(["StripFeature"], includingDefaults: false)
             )
             let swiftPM = SwiftPM(
                 runner: runner,
@@ -551,6 +560,8 @@ struct SwiftPMTests {
             #expect(commands[3].environment?["BUILD_SECRET"] == nil)
             #expect(commands[3].environment?["BASE"] == "value")
             #expect(commands[3].sensitiveEnvironmentKeys.isEmpty)
+            #expect(!commands[3].arguments.contains("--traits"))
+            #expect(!commands[3].arguments.contains("StripFeature"))
             #expect(await events.operations == [.building, .stripping, .copying])
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "built"),
@@ -671,7 +682,8 @@ struct SwiftPMTests {
 
 private func buildEnvironment(
     in directory: URL,
-    swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot()
+    swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot(),
+    swiftPMTraits: SwiftPMTraits = .packageDefaults
 ) -> LocalBuildEnvironment {
 
     LocalBuildEnvironment(
@@ -681,7 +693,8 @@ private func buildEnvironment(
         swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64),
-        swiftPMEnvironment: swiftPMEnvironment
+        swiftPMEnvironment: swiftPMEnvironment,
+        swiftPMTraits: swiftPMTraits
     )
 }
 

@@ -14,13 +14,13 @@ extension SwiftPM {
 
     func packageDescription(using environment: LocalBuildEnvironment) async throws -> PackageDescription {
 
+        let arguments = [
+            "package",
+            "--disable-automatic-resolution"
+        ] + environment.swiftPMTraits.arguments + ["dump-package"]
         let packageCommand = Self.command(
             environment,
-            swiftArguments: [
-                "package",
-                "--disable-automatic-resolution",
-                "dump-package"
-            ]
+            swiftArguments: arguments
         )
 
         let result = try await runner.run(packageCommand, onOutput: nil)

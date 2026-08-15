@@ -13,6 +13,7 @@ extension SwiftPM {
             "package",
             "--disable-automatic-resolution"
         ]
+        arguments += environment.swiftPMTraits.arguments
         if scratchDirectory.isExplicit {
             arguments += [
                 "--scratch-path",

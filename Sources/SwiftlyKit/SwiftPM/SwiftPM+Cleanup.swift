@@ -58,13 +58,13 @@ extension SwiftPM {
 
         await report(progress, detail: detail, to: onEvent)
 
+        let arguments = ["package"] + environment.swiftPMTraits.arguments + [
+            "--scratch-path", scratchDirectory.url.path(percentEncoded: false),
+            subcommand
+        ]
         let cleanupCommand = Self.command(
             environment,
-            swiftArguments: [
-                "package",
-                subcommand,
-                "--scratch-path", scratchDirectory.url.path(percentEncoded: false)
-            ]
+            swiftArguments: arguments
         )
 
         let result = try await runner.run(cleanupCommand, onOutput: CommandOutputChunk.handler(for: onEvent))

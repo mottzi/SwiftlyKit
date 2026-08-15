@@ -68,11 +68,12 @@ extension SwiftlyKit {
         try await assessor.assess(packageRoot, for: target, toolchain: toolchain)
     }
     
-    /// Prepares the accepted components and binds one SwiftPM process environment snapshot to later operations.
-    /// Caller-supplied values do not reach installation or download processes.
+    /// Prepares accepted components and binds one SwiftPM environment snapshot and trait configuration to later operations.
+    /// Caller-supplied SwiftPM workflow values do not reach installation or download processes.
     public func prepare(
         _ assessment: EnvironmentAssessment,
         swiftPMEnvironment: SwiftPMEnvironment = .inherited,
+        swiftPMTraits: SwiftPMTraits = .packageDefaults,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> LocalBuildEnvironment {
 
@@ -81,6 +82,7 @@ extension SwiftlyKit {
             try await prepareUnderLease(
                 assessment,
                 swiftPMEnvironment: snapshot,
+                swiftPMTraits: swiftPMTraits,
                 onEvent: onEvent
             )
         }
@@ -156,6 +158,7 @@ extension SwiftlyKit {
     private func prepareUnderLease(
         _ assessment: EnvironmentAssessment,
         swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
+        swiftPMTraits: SwiftPMTraits,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> LocalBuildEnvironment {
 
@@ -163,6 +166,7 @@ extension SwiftlyKit {
             return try await preparer.prepare(
                 assessment,
                 swiftPMEnvironment: swiftPMEnvironment,
+                swiftPMTraits: swiftPMTraits,
                 onEvent: onEvent
             )
         } catch is CancellationError {
@@ -232,8 +236,8 @@ extension SwiftlyKit {
 extension SwiftlyKit {
     
     /// Runs assessment, authorized preparation, product selection, required dependency resolution, and one verified build.
-    /// Uses one SwiftPM environment snapshot and one mutation lease for the complete workflow.
-    /// Applies toolchain and output choices and rejects package source changes during compilation.
+    /// Uses one SwiftPM environment snapshot, trait configuration, and mutation lease for the complete workflow.
+    /// Applies toolchain, build resource, and output choices and rejects package source changes during compilation.
     public static func build(
         _ packageRoot: URL,
         product: String? = nil,
@@ -245,6 +249,7 @@ extension SwiftlyKit {
         output: BuildOutput = .buildStorage,
         strip: Bool = false,
         swiftPMEnvironment: SwiftPMEnvironment = .inherited,
+        swiftPMTraits: SwiftPMTraits = .packageDefaults,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> URL {
 
@@ -259,6 +264,7 @@ extension SwiftlyKit {
             output: output,
             strip: strip,
             swiftPMEnvironment: swiftPMEnvironment,
+            swiftPMTraits: swiftPMTraits,
             onEvent: onEvent
         )
     }
@@ -275,6 +281,7 @@ extension SwiftlyKit {
         output: BuildOutput = .buildStorage,
         strip: Bool = false,
         swiftPMEnvironment: SwiftPMEnvironment = .inherited,
+        swiftPMTraits: SwiftPMTraits = .packageDefaults,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> URL {
 
@@ -292,6 +299,7 @@ extension SwiftlyKit {
                 output: output,
                 strip: strip,
                 swiftPMEnvironment: snapshot,
+                swiftPMTraits: swiftPMTraits,
                 onEvent: onEvent
             )
         }
@@ -308,6 +316,7 @@ extension SwiftlyKit {
         output: BuildOutput,
         strip: Bool,
         swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
+        swiftPMTraits: SwiftPMTraits,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> URL {
 
@@ -315,6 +324,7 @@ extension SwiftlyKit {
         let environment = try await prepareUnderLease(
             assessment,
             swiftPMEnvironment: swiftPMEnvironment,
+            swiftPMTraits: swiftPMTraits,
             onEvent: onEvent
         )
         let products = try await executableProducts(using: environment)

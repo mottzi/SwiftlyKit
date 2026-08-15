@@ -46,8 +46,9 @@ observes installed environment state, and retains the target and selected
 official release. Passing that assessment to `prepare` authorizes only its
 `requiredComponents`. Preparation returns an immutable `LocalBuildEnvironment`
 capability containing the exact package, target, Swiftly executable, toolchain,
-SDK, and SwiftPM process environment snapshot used by later operations.
-`BuildRequest` then contains only output choices for one build.
+SDK, SwiftPM process environment snapshot, and package-trait configuration used
+by later operations. `BuildRequest` then contains only the choices for one
+product build.
 
 Compatible-environment discovery uses the same read-only observation and
 materializes each exact compatible assessment once in newest-first order.
@@ -175,6 +176,8 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - `Environment/Preparation` revalidates the assessment, performs only authorized
   installations, refreshes installed inventory after mutations, and returns the
   prepared capability.
+- `Environment/SwiftPMEnvironment` and `Environment/SwiftPMTraits` validate and
+  normalize workflow-scoped SwiftPM process and package-graph configuration.
 - `Build` contains the public build value types.
 - `SwiftPM` validates a prepared capability and coordinates product discovery,
   explicit dependency resolution, build execution, optional stripping, and
@@ -230,6 +233,9 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   only the prepared SDK through a deterministic, isolated SDK search directory
   retained inside the effective build scratch directory. The prepared SwiftPM
   environment cannot replace protected host, Swiftly, compiler, or SDK values.
+- One immutable trait configuration reaches package inspection, resolved-graph
+  discovery, explicit resolution, build, bin-path lookup, clean, and reset. Its
+  arguments never reach Swiftly or selected non-SwiftPM tools.
 - SDK selection resolves only after the retained directory is verified. If
   another process wins atomic link creation, SwiftlyKit verifies and reuses that
   exact selection; conflicting filesystem state is never accepted.

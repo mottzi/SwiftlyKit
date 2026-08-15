@@ -167,12 +167,14 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let traits = try SwiftPMTraits(["RetryFeature"], includingDefaults: true)
 
             let result = try await kit.build(
                 packageRoot,
                 product: nil,
                 for: .linux(.x86_64),
                 configuration: .release,
+                swiftPMTraits: traits,
                 onEvent: nil
             )
 
@@ -180,6 +182,8 @@ struct SwiftlyKitFastTrackTests {
             let commands = await runner.commands
             #expect(commands[3].arguments.contains("resolve"))
             #expect(commands.count == 7)
+            #expect(commands.allSatisfy { $0.arguments.contains("--traits") })
+            #expect(commands.allSatisfy { $0.arguments.contains("RetryFeature,default") })
         }
     }
 
@@ -210,6 +214,7 @@ struct SwiftlyKitFastTrackTests {
                 jobs: 2,
                 storage: .directory(scratch),
                 output: .copy(to: output, replacingExisting: true, cleanup: .reset),
+                swiftPMTraits: try SwiftPMTraits(["PublishFeature"], includingDefaults: false),
                 onEvent: nil
             )
 
@@ -219,7 +224,10 @@ struct SwiftlyKitFastTrackTests {
             let buildScratchOption = try #require(commands[2].arguments.firstIndex(of: "--scratch-path"))
             let buildScratchArgument = try #require(commands[2].arguments.dropFirst(buildScratchOption + 1).first)
             #expect(URL(filePath: buildScratchArgument).pathComponents == scratch.pathComponents)
+            #expect(try argument(after: "--jobs", in: commands[2].arguments) == "2")
+            #expect(try argument(after: "--traits", in: commands[2].arguments) == "PublishFeature")
             #expect(commands[4].arguments.contains("reset"))
+            #expect(try argument(after: "--traits", in: commands[4].arguments) == "PublishFeature")
             let resetScratchOption = try #require(commands[4].arguments.firstIndex(of: "--scratch-path"))
             let resetScratchArgument = try #require(commands[4].arguments.dropFirst(resetScratchOption + 1).first)
             #expect(URL(filePath: resetScratchArgument).pathComponents == scratch.pathComponents)

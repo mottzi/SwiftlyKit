@@ -53,6 +53,31 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("Package traits compile in staged and fast-track workflows")
+    func swiftPMTraitsCompile() {
+
+        let selection: ([String], Bool) throws(SwiftlyKitError) -> SwiftPMTraits = { names, includingDefaults in
+            try SwiftPMTraits(names, includingDefaults: includingDefaults)
+        }
+        let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
+            let traits = try SwiftPMTraits(["Production"], includingDefaults: true)
+            return try await SwiftlyKit().prepare(assessment, swiftPMTraits: traits)
+        }
+        let fastTrack: @Sendable (URL) async throws -> URL = { packageRoot in
+            try await SwiftlyKit.build(
+                packageRoot,
+                swiftPMTraits: try SwiftPMTraits(["Production"], includingDefaults: false)
+            )
+        }
+
+        _ = selection
+        _ = staged
+        _ = fastTrack
+        _ = SwiftPMTraits.packageDefaults
+        _ = SwiftPMTraits.none
+        _ = SwiftPMTraits.all
+    }
+
     @Test("The fast track exposes exact toolchain selection and stripping")
     func fastTrackToolchainAndStrippingCompile() {
 

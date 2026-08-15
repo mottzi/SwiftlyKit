@@ -30,7 +30,8 @@ struct PackageGraphSourceRootsTests {
             let values = try SwiftPMEnvironment(["GRAPH_VALUE": .plain("enabled")])
             let environment = packageGraphEnvironment(
                 in: directory,
-                swiftPMEnvironment: values.snapshot(inheriting: [:])
+                swiftPMEnvironment: values.snapshot(inheriting: [:]),
+                swiftPMTraits: try SwiftPMTraits(["GraphFeature"], includingDefaults: true)
             )
             let scratch = try SwiftPMScratchDirectory(
                 storage: .directory(directory.appending(path: "scratch")),
@@ -48,6 +49,10 @@ struct PackageGraphSourceRootsTests {
             #expect(command.arguments.prefix(4) == [
                 "run", "swift", "package", "--disable-automatic-resolution"
             ])
+            #expect(try argument(after: "--traits", in: command.arguments) == "GraphFeature,default")
+            let subcommandIndex = try #require(command.arguments.firstIndex(of: "show-dependencies"))
+            let traitsIndex = try #require(command.arguments.firstIndex(of: "--traits"))
+            #expect(traitsIndex < subcommandIndex)
             #expect(command.arguments.contains("show-dependencies"))
             #expect(command.arguments.contains("--format"))
             #expect(command.arguments.contains("json"))
@@ -60,7 +65,8 @@ struct PackageGraphSourceRootsTests {
 
 private func packageGraphEnvironment(
     in directory: URL,
-    swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot()
+    swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot(),
+    swiftPMTraits: SwiftPMTraits = .packageDefaults
 ) -> LocalBuildEnvironment {
     LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
@@ -69,6 +75,12 @@ private func packageGraphEnvironment(
         swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64),
-        swiftPMEnvironment: swiftPMEnvironment
+        swiftPMEnvironment: swiftPMEnvironment,
+        swiftPMTraits: swiftPMTraits
     )
+}
+
+private func argument(after option: String, in arguments: [String]) throws -> String {
+    let optionIndex = try #require(arguments.firstIndex(of: option))
+    return try #require(arguments.dropFirst(optionIndex + 1).first)
 }
