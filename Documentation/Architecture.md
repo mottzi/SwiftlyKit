@@ -50,6 +50,16 @@ SDK, SwiftPM process environment snapshot, and package-trait configuration used
 by later operations. `BuildRequest` then contains only the choices for one
 product build.
 
+Release-catalog observation is process-wide and single-flight. One validated
+live result remains in memory for one hour and atomically replaces one raw,
+disposable snapshot in the user's cache directory. A catalog network failure
+can use that persistent snapshot only to assess a toolchain and matching SDK
+that the same installed-state observation reports as complete. This fallback
+cannot authorize installation. Cancellation and invalid live metadata never
+fall back. The cache contains no package or credential data and does not defend
+against a process that can modify files as the same user. Cache replacement does
+not change package or installed environment state.
+
 Compatible-environment discovery uses the same read-only observation and
 materializes each exact compatible assessment once in newest-first order.
 `EnvironmentChoices.select` applies automatic or exact policy to that captured
@@ -172,7 +182,8 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   SDK representation.
 - `Environment/Selection` deterministically selects one exact official stable
   release and matching SDK, preferring a compatible installed pair for automatic
-  selection.
+  selection. It also coalesces live catalog requests and owns the bounded,
+  private, disposable release-catalog snapshot.
 - `Environment/Preparation` revalidates the assessment, performs only authorized
   installations, refreshes installed inventory after mutations, and returns the
   prepared capability.
@@ -216,6 +227,10 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - Assessment derives its values from one captured `Package.swift` and nearest
   `.swift-version` state. Preparation compares the same inputs byte-for-byte
   before any mutation.
+- Persistent release metadata is parsed with the live catalog parser and can
+  recover assessment only for one exact pair that Swiftly reports as fully
+  installed. It cannot authorize a download or installation. Cache failure is
+  nonfatal after a valid live observation.
 - Compatible environment choices are unique by Swift version, ordered newest
   first, and derived from one package, catalog, target, and installed-state
   observation. Selection from the snapshot performs no I/O.

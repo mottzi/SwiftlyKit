@@ -59,6 +59,7 @@ extension SwiftlyKit {
     }
 
     /// Selects an exact official toolchain and matching Static Linux SDK without changing package or installed state.
+    /// Uses validated cached metadata only to reuse a complete installed pair during a catalog outage.
     /// Captures `Package.swift` and the nearest `.swift-version` file so preparation can validate the same inputs.
     public func assess(
         _ packageRoot: URL,

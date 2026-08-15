@@ -70,7 +70,11 @@ struct EnvironmentAssessorTests {
             let invalidCatalog = EnvironmentAssessor(
                 assessHost: { .ready },
                 detectSwiftly: { nil },
-                loadReleases: { throw SwiftOrgReleaseCatalog.CatalogError.invalidPayload }
+                loadReleases: { throw SwiftOrgReleaseCatalog.CatalogError.invalidPayload },
+                loadCachedReleases: {
+                    Issue.record("An invalid live payload must not use cached metadata.")
+                    return nil
+                }
             )
             await #expect(throws: SwiftlyKitError.integrityCheckFailed(
                 "Swift.org returned unsupported release metadata."
@@ -95,6 +99,156 @@ struct EnvironmentAssessorTests {
                     for: .linux(.arm64),
                     toolchain: .automatic
                 )
+            }
+        }
+    }
+
+    @Test("A network failure reuses one exact fully installed cached pair")
+    func networkFailureReusesInstalledPair() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+
+            let release = assessorRelease()
+            let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
+            let inventory = InstalledEnvironmentInventory(
+                toolchains: [release.version],
+                sdks: [InstalledStaticLinuxSDK(
+                    toolchainVersion: release.version,
+                    identifier: release.staticLinuxSDK.identifier
+                )]
+            )
+            let assessor = EnvironmentAssessor(
+                assessHost: { .ready },
+                detectSwiftly: { swiftly },
+                loadReleases: { throw SwiftOrgReleaseCatalog.CatalogError.networkFailure },
+                loadCachedReleases: { [release] },
+                inspectInventory: { _ in inventory },
+                locateSDK: { _ in packageRoot.appending(path: "sdk.artifactbundle") }
+            )
+
+            let assessment = try await assessor.assess(
+                packageRoot,
+                for: .linux(.arm64),
+                toolchain: .exact(release.version)
+            )
+
+            #expect(assessment.swiftVersion == release.version)
+            #expect(assessment.requiredComponents.isEmpty)
+        }
+    }
+
+    @Test("Automatic cached selection honors the nearest Swift version preference")
+    func automaticFallbackHonorsPreference() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            try Data("6.2.4\n".utf8).write(
+                to: packageRoot.appending(path: ".swift-version")
+            )
+
+            let preferred = assessorRelease("6.2.4")
+            let newer = assessorRelease("6.3.3")
+            let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
+            let inventory = InstalledEnvironmentInventory(
+                toolchains: [preferred.version, newer.version],
+                sdks: [preferred, newer].map {
+                    InstalledStaticLinuxSDK(
+                        toolchainVersion: $0.version,
+                        identifier: $0.staticLinuxSDK.identifier
+                    )
+                }
+            )
+            let assessor = EnvironmentAssessor(
+                assessHost: { .ready },
+                detectSwiftly: { swiftly },
+                loadReleases: { throw SwiftOrgReleaseCatalog.CatalogError.networkFailure },
+                loadCachedReleases: { [preferred, newer] },
+                inspectInventory: { _ in inventory },
+                locateSDK: { _ in packageRoot.appending(path: "sdk.artifactbundle") }
+            )
+
+            let assessment = try await assessor.assess(
+                packageRoot,
+                for: .linux(.arm64),
+                toolchain: .automatic
+            )
+
+            #expect(assessment.swiftVersion == preferred.version)
+            #expect(assessment.requiredComponents.isEmpty)
+        }
+    }
+
+    @Test("Cached metadata cannot authorize a missing SDK or a different exact release")
+    func cachedMetadataCannotAuthorizeMutation() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+
+            let installed = assessorRelease("6.2.4")
+            let requested = assessorRelease("6.3.3")
+            let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
+            let inventory = InstalledEnvironmentInventory(
+                toolchains: [installed.version, requested.version],
+                sdks: [InstalledStaticLinuxSDK(
+                    toolchainVersion: installed.version,
+                    identifier: installed.staticLinuxSDK.identifier
+                )]
+            )
+            let assessor = EnvironmentAssessor(
+                assessHost: { .ready },
+                detectSwiftly: { swiftly },
+                loadReleases: { throw SwiftOrgReleaseCatalog.CatalogError.networkFailure },
+                loadCachedReleases: { [installed, requested] },
+                inspectInventory: { _ in inventory },
+                locateSDK: { identifier in
+                    identifier == installed.staticLinuxSDK.identifier
+                        ? packageRoot.appending(path: "sdk.artifactbundle")
+                        : nil
+                }
+            )
+
+            await #expect(throws: SwiftlyKitError.networkFailure(
+                "The Swift.org release catalog is unavailable."
+            )) {
+                try await assessor.assess(
+                    packageRoot,
+                    for: .linux(.arm64),
+                    toolchain: .exact(requested.version)
+                )
+            }
+        }
+    }
+
+    @Test("Discovery does not present a persistent fallback as a complete catalog")
+    func discoveryRequiresLiveCatalog() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+
+            let release = assessorRelease()
+            let assessor = EnvironmentAssessor(
+                assessHost: { .ready },
+                detectSwiftly: { nil },
+                loadReleases: { throw SwiftOrgReleaseCatalog.CatalogError.networkFailure },
+                loadCachedReleases: {
+                    Issue.record("Discovery must not load the persistent fallback.")
+                    return [release]
+                }
+            )
+
+            await #expect(throws: SwiftlyKitError.networkFailure(
+                "The Swift.org release catalog is unavailable."
+            )) {
+                try await assessor.compatibleEnvironments(packageRoot, for: .linux(.arm64))
             }
         }
     }

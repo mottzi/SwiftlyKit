@@ -12,7 +12,11 @@ struct EnvironmentAssessor {
     }
 
     private(set) var loadReleases: @Sendable () async throws -> [OfficialStableRelease] = {
-        try await SwiftOrgReleaseCatalog().stableReleases()
+        try await SwiftOrgReleaseCatalog.shared.stableReleases()
+    }
+
+    private(set) var loadCachedReleases: @Sendable () async -> [OfficialStableRelease]? = {
+        await SwiftOrgReleaseCatalog.shared.cachedReleases()
     }
 
     private(set) var inspectInventory: @Sendable (SwiftlyInstallation) async throws -> InstalledEnvironmentInventory = {
@@ -30,17 +34,31 @@ struct EnvironmentAssessor {
     ) async throws -> EnvironmentAssessment {
 
         let observation = try await observe(packageRoot, for: target)
-        return try assessment(selecting: toolchain, from: observation)
+
+        do {
+            let releases = try await officialReleases()
+            return try assessment(
+                selecting: toolchain,
+                releases: releases,
+                from: observation
+            )
+        } catch SwiftlyKitError.networkFailure {
+            return try await cachedAssessment(
+                selecting: toolchain,
+                from: observation
+            )
+        }
     }
 
     /// Captures one observation and returns each exact compatible environment in newest-first order.
     func compatibleEnvironments(_ packageRoot: URL, for target: BuildTarget) async throws -> EnvironmentChoices {
 
         let observation = try await observe(packageRoot, for: target)
+        let observedReleases = try await officialReleases()
         let releases = EnvironmentSelectionPolicy.compatibleReleases(
             toolsVersion: observation.packageInputs.toolsVersion,
             architecture: target.architecture,
-            releases: observation.releases
+            releases: observedReleases
         )
         let assessments = releases.map { release in
             assessment(for: release, from: observation)
@@ -51,7 +69,7 @@ struct EnvironmentAssessor {
             toolsVersion: observation.packageInputs.toolsVersion,
             swiftVersionPreference: observation.packageInputs.swiftVersion,
             architecture: target.architecture,
-            releases: observation.releases,
+            releases: observedReleases,
             inventory: observation.inventory
         )
     }
@@ -66,12 +84,10 @@ extension EnvironmentAssessor {
 
         let packageInputs = try PackageInputSnapshot.capture(at: packageRoot)
         let swiftly = try await detectSwiftly()
-        let releases = try await officialReleases()
         let inventory = try await installedInventory(swiftly)
 
         return Observation(
             packageInputs: packageInputs,
-            releases: releases,
             inventory: inventory,
             isSwiftlyAvailable: swiftly != nil,
             target: target
@@ -80,6 +96,7 @@ extension EnvironmentAssessor {
 
     private func assessment(
         selecting toolchain: ToolchainSelection,
+        releases: [OfficialStableRelease],
         from observation: Observation
     ) throws -> EnvironmentAssessment {
 
@@ -91,7 +108,7 @@ extension EnvironmentAssessor {
                 toolsVersion: observation.packageInputs.toolsVersion,
                 swiftVersionPreference: observation.packageInputs.swiftVersion,
                 architecture: observation.target.architecture,
-                releases: observation.releases,
+                releases: releases,
                 inventory: observation.inventory
             )
         } catch {
@@ -99,6 +116,38 @@ extension EnvironmentAssessor {
         }
 
         return assessment(for: release, from: observation)
+    }
+
+    private func cachedAssessment(
+        selecting toolchain: ToolchainSelection,
+        from observation: Observation
+    ) async throws -> EnvironmentAssessment {
+
+        guard let releases = await loadCachedReleases() else { throw Self.catalogUnavailable }
+
+        let installedReleases = releases.filter { release in
+            guard observation.inventory.contains(
+                toolchain: release.version,
+                sdk: release.staticLinuxSDK.identifier
+            ) else { return false }
+
+            return locateSDK(release.staticLinuxSDK.identifier) != nil
+        }
+
+        let cachedAssessment: EnvironmentAssessment
+        do {
+            cachedAssessment = try assessment(
+                selecting: toolchain,
+                releases: installedReleases,
+                from: observation
+            )
+        } catch {
+            throw Self.catalogUnavailable
+        }
+
+        guard cachedAssessment.requiredComponents.isEmpty else { throw Self.catalogUnavailable }
+
+        return cachedAssessment
     }
 
     private func assessment(for release: OfficialStableRelease, from observation: Observation) -> EnvironmentAssessment {
@@ -135,7 +184,7 @@ extension EnvironmentAssessor {
         } catch SwiftOrgReleaseCatalog.CatalogError.invalidPayload {
             throw SwiftlyKitError.integrityCheckFailed("Swift.org returned unsupported release metadata.")
         } catch {
-            throw SwiftlyKitError.networkFailure("The Swift.org release catalog is unavailable.")
+            throw Self.catalogUnavailable
         }
     }
 
@@ -152,13 +201,16 @@ extension EnvironmentAssessor {
 
 extension EnvironmentAssessor {
 
-    /// Package, catalog, and installed state captured by one read-only observation.
+    /// Package and installed state captured by one read-only observation.
     private struct Observation {
         let packageInputs: PackageInputSnapshot
-        let releases: [OfficialStableRelease]
         let inventory: InstalledEnvironmentInventory
         let isSwiftlyAvailable: Bool
         let target: BuildTarget
     }
+
+    private static let catalogUnavailable = SwiftlyKitError.networkFailure(
+        "The Swift.org release catalog is unavailable."
+    )
 
 }
