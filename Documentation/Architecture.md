@@ -269,7 +269,9 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - Internal SwiftPM failures are classified structurally before becoming public
   `SwiftlyKitError` values. Collected subprocess output and surfaced diagnostics
   are bounded.
-- A build result must be an executable, static, little-endian ELF64 file for the
+- A public `BuildResult` identifies the final executable, its exact verified
+  runtime resource bundles in stable name order, and their computed common
+  directory. The executable must be a static, little-endian ELF64 file for the
   requested architecture. Stripped results are verified again.
 - Runtime resource ownership comes only from the selected product's final link
   file and the linked modules' generated resource accessors. Unrelated stale
@@ -288,9 +290,10 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   result.
 - Stripping operates only on a SwiftlyKit-owned executable and never changes
   SwiftPM's produced executable or runtime resources in build storage.
-- Build-storage output returns a runnable launch URL with required resource
-  bundles as siblings. It does not promise that the executable is portable by
-  itself.
+- Build-storage output returns a `BuildResult` with required resource bundles as
+  siblings. Its directory can contain unrelated SwiftPM output. The executable
+  is not portable by itself, and callers use the result's exact resource list
+  rather than enumerating the directory.
 - Requested output publication stages beside the destination and publishes one
   complete directory with one executable and only its exact linked bundles. An
   exclusive rename provides create-only publication. A rename swap provides

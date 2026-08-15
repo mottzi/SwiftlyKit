@@ -155,7 +155,7 @@ struct SwiftlyKitWorkflowTests {
             try await resolution.value
             let built = try await build.value
 
-            #expect(built == executable)
+            #expect(built.executable == executable)
             #expect(await runner.maximumConcurrentCommands == 1)
         }
     }
@@ -193,7 +193,7 @@ struct SwiftlyKitWorkflowTests {
             #expect(!overlapped)
 
             await runner.releaseCommands()
-            #expect(try await fastTrack.value == executable)
+            #expect(try await fastTrack.value.executable == executable)
             try await resolution.value
             #expect(await runner.maximumConcurrentCommands == 1)
         }

@@ -7,14 +7,14 @@ struct PublicInterfaceTests {
 
     @Test("The documented workflow compiles without testable access")
     func documentedWorkflowCompiles() {
-        let workflow: @Sendable (URL) async throws -> URL = documentedWorkflow
+        let workflow: @Sendable (URL) async throws -> BuildResult = documentedWorkflow
         _ = workflow
     }
 
     @Test("The fast-track workflow compiles with every default")
     func fastTrackWorkflowCompiles() {
 
-        let workflow: @Sendable (URL) async throws -> URL = { packageRoot in
+        let workflow: @Sendable (URL) async throws -> BuildResult = { packageRoot in
             try await SwiftlyKit.build(packageRoot)
         }
         _ = workflow
@@ -41,7 +41,7 @@ struct PublicInterfaceTests {
     @Test("The fast-track SwiftPM environment workflow compiles without testable access")
     func fastTrackSwiftPMEnvironmentCompiles() {
 
-        let workflow: @Sendable (URL, String) async throws -> URL = { packageRoot, token in
+        let workflow: @Sendable (URL, String) async throws -> BuildResult = { packageRoot, token in
             try await SwiftlyKit.build(
                 packageRoot,
                 swiftPMEnvironment: try SwiftPMEnvironment([
@@ -63,7 +63,7 @@ struct PublicInterfaceTests {
             let traits = try SwiftPMTraits(["Production"], includingDefaults: true)
             return try await SwiftlyKit().prepare(assessment, swiftPMTraits: traits)
         }
-        let fastTrack: @Sendable (URL) async throws -> URL = { packageRoot in
+        let fastTrack: @Sendable (URL) async throws -> BuildResult = { packageRoot in
             try await SwiftlyKit.build(
                 packageRoot,
                 swiftPMTraits: try SwiftPMTraits(["Production"], includingDefaults: false)
@@ -81,7 +81,7 @@ struct PublicInterfaceTests {
     @Test("The fast track exposes exact toolchain selection and stripping")
     func fastTrackToolchainAndStrippingCompile() {
 
-        let workflow: @Sendable (URL, URL) async throws -> URL = { packageRoot, destination in
+        let workflow: @Sendable (URL, URL) async throws -> BuildResult = { packageRoot, destination in
             try await SwiftlyKit.build(
                 packageRoot,
                 toolchain: .exact(SwiftVersion(major: 6, minor: 2, patch: 1)),
@@ -98,7 +98,7 @@ struct PublicInterfaceTests {
         let staged: @Sendable (ExecutableProduct) -> BuildRequest = { product in
             BuildRequest(product, jobs: 2)
         }
-        let fastTrack: @Sendable (URL) async throws -> URL = { packageRoot in
+        let fastTrack: @Sendable (URL) async throws -> BuildResult = { packageRoot in
             try await SwiftlyKit.build(packageRoot, jobs: 2)
         }
 
@@ -150,7 +150,7 @@ struct PublicInterfaceTests {
     @Test("Build output publication and cleanup compile without testable access")
     func buildStorageLifecycleCompiles() {
 
-        let workflow: @Sendable (URL, LocalBuildEnvironment, ExecutableProduct, URL) async throws -> URL = {
+        let workflow: @Sendable (URL, LocalBuildEnvironment, ExecutableProduct, URL) async throws -> BuildResult = {
             packageRoot, environment, product, destination in
             let kit = SwiftlyKit()
             let storage = BuildStorage.directory(packageRoot.appending(path: "scratch"))
@@ -159,10 +159,13 @@ struct PublicInterfaceTests {
                 storage: storage,
                 output: .publish(to: destination, cleanup: .reset)
             )
-            let executable = try await kit.build(request, using: environment)
+            let result = try await kit.build(request, using: environment)
+            _ = result.executable
+            _ = result.resourceBundles
+            _ = result.directory
             try await kit.cleanBuildArtifacts(in: storage, using: environment)
             try await kit.resetBuildStorage(in: storage, using: environment)
-            return executable
+            return result
         }
         _ = workflow
     }
@@ -178,7 +181,7 @@ struct PublicInterfaceTests {
 
 }
 
-private func documentedWorkflow(_ packageRoot: URL) async throws -> URL {
+private func documentedWorkflow(_ packageRoot: URL) async throws -> BuildResult {
 
     let kit = SwiftlyKit()
     let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))

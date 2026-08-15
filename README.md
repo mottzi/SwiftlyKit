@@ -75,9 +75,9 @@ import Foundation
 import SwiftlyKit
 
 let packageRoot = URL(filePath: "/path/to/package")
-let executable = try await SwiftlyKit.build(packageRoot)
+let result = try await SwiftlyKit.build(packageRoot)
 
-print(executable.path)
+print(result.executable.path)
 ```
 
 This fast track uses these defaults:
@@ -94,7 +94,7 @@ Specify a product, target, toolchain, or configuration when you need a different
 result:
 
 ```swift
-let executable = try await SwiftlyKit.build(
+let result = try await SwiftlyKit.build(
     packageRoot,
     product: "MyTool",
     for: .linux(.arm64),
@@ -109,7 +109,7 @@ storage. This example resets scratch storage after publication succeeds:
 
 ```swift
 let publicationDirectory = URL(filePath: "/path/to/output/MyTool")
-let executable = try await SwiftlyKit.build(
+let result = try await SwiftlyKit.build(
     packageRoot,
     product: "MyTool",
     storage: .directory(URL(filePath: "/path/to/scratch")),
@@ -118,21 +118,22 @@ let executable = try await SwiftlyKit.build(
 )
 ```
 
-This call returns `/path/to/output/MyTool/MyTool` as the launch URL.
+`result.executable` is `/path/to/output/MyTool/MyTool`.
+`result.resourceBundles` contains any resource bundles the tool needs.
 
 By default, SwiftlyKit does not replace the destination. Set `replacingExisting`
 to atomically replace an earlier complete output directory at a stable URL:
 
 ```swift
-let executable = try await SwiftlyKit.build(
+let result = try await SwiftlyKit.build(
     packageRoot,
     output: .publish(to: publicationDirectory, replacingExisting: true)
 )
 ```
 
-The returned URL always points to the executable to launch. Keep the published
-directory together when you move, upload, or deploy it. Do not move only the
-executable out of that directory.
+`BuildResult` contains the executable, its required resource bundles, and their
+directory. Keep the whole published directory together when you move, upload,
+or deploy it.
 
 > [!IMPORTANT]
 > The fast track authorizes SwiftlyKit to install Swiftly, the selected
@@ -266,13 +267,13 @@ let request = BuildRequest(
     strip: true
 )
 
-let executable: URL
+let result: BuildResult
 
 do {
-    executable = try await kit.build(request, using: environment)
+    result = try await kit.build(request, using: environment)
 } catch SwiftlyKitError.dependencyResolutionRequired {
     try await kit.resolveDependencies(using: environment)
-    executable = try await kit.build(request, using: environment)
+    result = try await kit.build(request, using: environment)
 }
 ```
 
@@ -292,7 +293,7 @@ result and throws `SwiftlyKitError.packageChangedDuringBuild`. See
 | `configuration` | `.debug` | Selects the SwiftPM debug or release configuration. |
 | `jobs` | `nil` | Limits concurrent SwiftPM build jobs. `nil` uses the SwiftPM default. |
 | `storage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
-| `output` | `.buildStorage` | Returns a launch URL in managed build storage. `.publish(to:replacingExisting:cleanup:)` publishes a complete caller-owned runnable directory, then performs the requested cleanup. |
+| `output` | `.buildStorage` | Returns a `BuildResult` in SwiftPM build storage. `.publish(to:replacingExisting:cleanup:)` copies the runnable files to your directory, runs the requested cleanup, and returns the result. |
 | `strip` | `false` | Strips a SwiftlyKit-owned executable with the selected toolchain, then verifies it again. |
 
 An explicit `jobs` value must be positive. SwiftlyKit rejects zero and negative
@@ -360,7 +361,7 @@ Use `.exact` when your app must select one official stable release. The fast
 track accepts the selection directly:
 
 ```swift
-let executable = try await SwiftlyKit.build(
+let result = try await SwiftlyKit.build(
     packageRoot,
     toolchain: .exact(
         SwiftVersion(major: 6, minor: 2, patch: 1)
@@ -474,7 +475,7 @@ SwiftlyKit builds one executable product for one of these targets:
 - ARM64 Linux Musl: `.linux(.arm64)`
 - x86-64 Linux Musl: `.linux(.x86_64)`
 
-Before SwiftlyKit returns a launch URL, it verifies that the executable:
+Before returning a `BuildResult`, SwiftlyKit checks that the executable:
 
 - is a regular file with executable permissions;
 - is a little-endian ELF64 executable for the requested architecture;
@@ -489,11 +490,12 @@ and unsafe resource trees with `runtimeResourceVerificationFailed`. Resource
 trees can contain regular files and directories. SwiftlyKit rejects symbolic
 links, hard links, sockets, devices, FIFOs, and other special entries.
 
-`.buildStorage` returns a launch URL in SwiftPM's managed layout. Keep the
-executable with its sibling resource bundles. `.publish` creates a durable,
-caller-owned directory with the executable at its root and any required resource
-bundles beside it. Resource-free products use the same directory shape. Move or
-deploy the directory as one unit.
+`.buildStorage` returns the executable and the resource bundles it needs in
+SwiftPM's build directory. That directory may contain files from other builds.
+Use `result.resourceBundles` instead of looking for bundles in the directory.
+
+`.publish` copies the executable and its resource bundles to your directory.
+Keep that directory together when you move or deploy it.
 
 SwiftPM does not provide a stable interface for listing a product's runtime
 resources. When the binary directory contains a `.resources` candidate,
@@ -650,8 +652,8 @@ Handle cancellation separately when your app must show different status:
 
 ```swift
 do {
-    let executable = try await SwiftlyKit.build(packageRoot)
-    print(executable.path)
+    let result = try await SwiftlyKit.build(packageRoot)
+    print(result.executable.path)
 } catch is CancellationError {
     print("Build cancelled.")
 } catch let error as SwiftlyKitError {
@@ -672,6 +674,7 @@ do {
 | `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, SDK, and SwiftPM configuration. |
 | `ExecutableProducts` | Lists discovered products and selects a named or sole executable. |
 | `BuildRequest` | Selects one product and its build options. |
+| `BuildResult` | Contains the executable, its required resource bundles, and their directory. |
 | `BuildStorage` | Selects package-default or explicit SwiftPM scratch storage. |
 | `BuildOutput`, `BuildCleanup` | Control output publication and later cleanup of build storage. |
 | `BuildTarget`, `LinuxArchitecture` | Select the Linux architecture. |

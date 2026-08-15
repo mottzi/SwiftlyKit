@@ -94,7 +94,10 @@ struct SwiftPMTests {
                 validateEnvironment: { _ in }
             )
 
-            #expect(try await swiftPM.build(request, using: environment) == executable)
+            let result = try await swiftPM.build(request, using: environment)
+            #expect(result.executable == executable)
+            #expect(result.resourceBundles.isEmpty)
+            #expect(result.directory.pathComponents == directory.pathComponents)
             let commands = await runner.commands
             #expect(commands.count == 3)
             #expect(commands.allSatisfy { $0.workingDirectory == directory })
@@ -391,6 +394,7 @@ struct SwiftPMTests {
             let resources = directory.appending(path: "Dependency_Assets.resources")
             try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
             try Data("asset".utf8).write(to: resources.appending(path: "asset.txt"))
+            _ = try createBundleForSwiftPMTest(named: "Unrelated_Stale.resources", in: directory)
             let executable = directory.appending(path: "Tool")
             try writeELF(to: executable, architecture: .arm64)
             try createSwiftPMResourceMetadata(
@@ -411,7 +415,10 @@ struct SwiftPMTests {
                 validateEnvironment: { _ in }
             )
 
-            #expect(try await swiftPM.build(request, using: environment) == executable)
+            let result = try await swiftPM.build(request, using: environment)
+            #expect(result.executable == executable)
+            #expect(result.resourceBundles.map(\.pathComponents) == [resources.pathComponents])
+            #expect(result.directory.pathComponents == directory.pathComponents)
             #expect(try Data(contentsOf: resources.appending(path: "asset.txt")) == Data("asset".utf8))
         }
     }
@@ -441,16 +448,16 @@ struct SwiftPMTests {
                 validateEnvironment: { _ in }
             )
 
-            #expect(
-                try await swiftPM.build(
-                    BuildRequest(ExecutableProduct(name: "Tool")),
-                    using: buildEnvironment(in: directory)
-                ) == executable
+            let result = try await swiftPM.build(
+                BuildRequest(ExecutableProduct(name: "Tool")),
+                using: buildEnvironment(in: directory)
             )
+            #expect(result.executable == executable)
+            #expect(result.resourceBundles.map(\.pathComponents) == [resources.pathComponents])
         }
     }
 
-    @Test("Publication returns the launch URL in the complete exact resource directory")
+    @Test("Publication returns the complete exact build result")
     func publishesResources() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
@@ -474,7 +481,7 @@ struct SwiftPMTests {
             ])
             let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
 
-            let launchURL = try await swiftPM.build(
+            let result = try await swiftPM.build(
                 BuildRequest(
                     ExecutableProduct(name: "Tool"),
                     output: .publish(to: publication)
@@ -482,7 +489,11 @@ struct SwiftPMTests {
                 using: buildEnvironment(in: directory)
             )
 
-            #expect(launchURL == publication.appending(path: "Tool"))
+            #expect(result.executable == publication.appending(path: "Tool"))
+            #expect(result.resourceBundles == [
+                publication.appending(path: "Dependency_Assets.resources", directoryHint: .isDirectory)
+            ])
+            #expect(result.directory == publication)
             #expect(Set(try FileManager.default.contentsOfDirectory(atPath: publication.path())) == [
                 "Tool",
                 "Dependency_Assets.resources"
@@ -592,7 +603,8 @@ struct SwiftPMTests {
             )
 
             let publishedExecutable = output.appending(path: "Tool")
-            #expect(result == publishedExecutable)
+            #expect(result.executable == publishedExecutable)
+            #expect(result.resourceBundles.isEmpty)
             #expect(try Data(contentsOf: publishedExecutable) == Data(contentsOf: executable))
             let commands = await runner.commands
             #expect(commands.count == 4)
@@ -658,6 +670,14 @@ struct SwiftPMTests {
             let executable = directory.appending(path: "Tool")
             let strippedExecutable = directory.appending(path: ".Tool.swiftlykit-stripped")
             try writeELF(to: executable, architecture: .arm64)
+            let resources = directory.appending(path: "Dependency_Assets.resources")
+            try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
+            try createSwiftPMResourceMetadata(
+                product: "Tool",
+                module: "Dependency",
+                bundle: resources.lastPathComponent,
+                in: directory
+            )
             let originalBytes = try Data(contentsOf: executable)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
@@ -675,7 +695,8 @@ struct SwiftPMTests {
                 onEvent: { await events.record($0) }
             )
 
-            #expect(result == strippedExecutable)
+            #expect(result.executable == strippedExecutable)
+            #expect(result.resourceBundles.map(\.pathComponents) == [resources.pathComponents])
             #expect(try Data(contentsOf: executable) == originalBytes)
             #expect(try Data(contentsOf: strippedExecutable) == originalBytes)
             let commands = await runner.commands

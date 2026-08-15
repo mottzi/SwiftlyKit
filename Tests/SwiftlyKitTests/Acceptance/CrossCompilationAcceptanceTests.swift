@@ -43,7 +43,7 @@ struct CrossCompilationAcceptanceTests {
                     path: "Published-\(String(describing: architecture))",
                     directoryHint: .isDirectory
                 )
-                let executable = try await kit.build(
+                let result = try await kit.build(
                     BuildRequest(
                         product,
                         configuration: .release,
@@ -53,8 +53,15 @@ struct CrossCompilationAcceptanceTests {
                     using: environment
                 )
 
-                #expect(FileManager.default.isExecutableFile(atPath: executable.path(percentEncoded: false)))
-                #expect(executable == publication.appending(path: "CrossCompilationFixture"))
+                #expect(FileManager.default.isExecutableFile(atPath: result.executable.path(percentEncoded: false)))
+                #expect(result.executable == publication.appending(path: "CrossCompilationFixture"))
+                #expect(result.resourceBundles == [
+                    publication.appending(
+                        path: "ResourceDependency_ResourceDependency.resources",
+                        directoryHint: .isDirectory
+                    )
+                ])
+                #expect(result.directory == publication)
                 #expect(Set(try FileManager.default.contentsOfDirectory(atPath: publication.path())) == [
                     "CrossCompilationFixture",
                     "ResourceDependency_ResourceDependency.resources"
@@ -98,28 +105,29 @@ struct CrossCompilationAcceptanceTests {
                 storage: .directory(scratchDirectory)
             )
             let firstOutput = AcceptanceOutputRecorder()
-            let firstExecutable = try await kit.build(
+            let firstResult = try await kit.build(
                 request,
                 using: environment,
                 onEvent: { await firstOutput.record($0) }
             )
             let firstText = await firstOutput.text
-            let firstIdentity = try executableIdentity(at: firstExecutable)
+            let firstIdentity = try executableIdentity(at: firstResult.executable)
 
             let secondOutput = AcceptanceOutputRecorder()
-            let secondExecutable = try await kit.build(
+            let secondResult = try await kit.build(
                 request,
                 using: environment,
                 onEvent: { await secondOutput.record($0) }
             )
             let secondText = await secondOutput.text
-            let secondIdentity = try executableIdentity(at: secondExecutable)
+            let secondIdentity = try executableIdentity(at: secondResult.executable)
 
             #expect(firstText.contains("Compiling CrossCompilationFixture"))
             #expect(firstText.contains("Linking CrossCompilationFixture"))
             #expect(!secondText.contains("Compiling CrossCompilationFixture"))
             #expect(!secondText.contains("Linking CrossCompilationFixture"))
-            #expect(secondExecutable == firstExecutable)
+            #expect(secondResult.executable == firstResult.executable)
+            #expect(secondResult.resourceBundles == firstResult.resourceBundles)
             #expect(secondIdentity == firstIdentity)
         }
     }

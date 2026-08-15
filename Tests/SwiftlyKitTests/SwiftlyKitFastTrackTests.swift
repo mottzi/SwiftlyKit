@@ -29,7 +29,8 @@ struct SwiftlyKitFastTrackTests {
                 onEvent: nil
             )
 
-            #expect(result == executable)
+            #expect(result.executable == executable)
+            #expect(result.resourceBundles.isEmpty)
             let commands = await runner.commands
             #expect(commands[2].arguments.contains("x86_64-swift-linux-musl"))
             #expect(commands[2].arguments.contains("Tool"))
@@ -145,7 +146,8 @@ struct SwiftlyKitFastTrackTests {
                 onEvent: nil
             )
 
-            #expect(result == executable)
+            #expect(result.executable == executable)
+            #expect(result.resourceBundles.isEmpty)
             #expect(await runner.commands[2].arguments.contains("Second"))
         }
     }
@@ -178,7 +180,8 @@ struct SwiftlyKitFastTrackTests {
                 onEvent: nil
             )
 
-            #expect(result == executable)
+            #expect(result.executable == executable)
+            #expect(result.resourceBundles.isEmpty)
             let commands = await runner.commands
             #expect(commands[3].arguments.contains("resolve"))
             #expect(commands.count == 7)
@@ -218,7 +221,8 @@ struct SwiftlyKitFastTrackTests {
                 onEvent: nil
             )
 
-            #expect(result == output.appending(path: "Tool"))
+            #expect(result.executable == output.appending(path: "Tool"))
+            #expect(result.resourceBundles.isEmpty)
             let commands = await runner.commands
             #expect(commands.count == 5)
             let buildScratchOption = try #require(commands[2].arguments.firstIndex(of: "--scratch-path"))
@@ -297,7 +301,8 @@ struct SwiftlyKitFastTrackTests {
                 onEvent: nil
             )
 
-            #expect(result == output.appending(path: "Tool"))
+            #expect(result.executable == output.appending(path: "Tool"))
+            #expect(result.resourceBundles.isEmpty)
             #expect(try Data(contentsOf: executable) == originalBytes)
             let commands = await runner.commands
             #expect(commands.count == 5)

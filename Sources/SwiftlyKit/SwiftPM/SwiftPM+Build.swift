@@ -6,7 +6,7 @@ extension SwiftPM {
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler? = nil
-    ) async throws -> URL {
+    ) async throws -> BuildResult {
         
         try request.validate()
         try validateEnvironment(environment)
@@ -106,10 +106,15 @@ extension SwiftPM {
 
         switch request.output {
             case .buildStorage:
-                guard request.strip else { return executable }
+                guard request.strip else {
+                    return BuildResult(
+                        executable: executable,
+                        resourceBundles: output.resourceBundles
+                    )
+                }
 
                 await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
-                return try await AtomicOutputPublisher.replaceBuildStorageExecutable(
+                let strippedExecutable = try await AtomicOutputPublisher.replaceBuildStorageExecutable(
                     executable,
                     at: Self.strippedBuildStorageExecutable(for: executable),
                     prepare: { stagedExecutable in
@@ -121,6 +126,10 @@ extension SwiftPM {
                         )
                     }
                 )
+                return BuildResult(
+                    executable: strippedExecutable,
+                    resourceBundles: output.resourceBundles
+                )
 
             case .publish(let destination, let replacingExisting, let cleanup):
                 if request.strip {
@@ -130,7 +139,7 @@ extension SwiftPM {
                 if !request.strip {
                     await report(.publishing, detail: "Publishing \(request.product.name).", to: onEvent)
                 }
-                let launchURL = try await AtomicOutputPublisher.publish(
+                let result = try await AtomicOutputPublisher.publish(
                     output,
                     to: destination,
                     replacingExisting: replacingExisting,
@@ -169,7 +178,7 @@ extension SwiftPM {
                     )
                 }
 
-                return launchURL
+                return result
         }
     }
 

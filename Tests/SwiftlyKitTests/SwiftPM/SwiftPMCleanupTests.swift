@@ -127,8 +127,9 @@ struct SwiftPMCleanupTests {
                 onEvent: { await events.record($0) }
             )
 
-            #expect(result == output.appending(path: "Tool"))
-            #expect(try Data(contentsOf: result) == Data(contentsOf: executable))
+            #expect(result.executable == output.appending(path: "Tool"))
+            #expect(result.resourceBundles.isEmpty)
+            #expect(try Data(contentsOf: result.executable) == Data(contentsOf: executable))
             let commands = await runner.commands
             #expect(commands.count == 4)
             #expect(commands[3].arguments.contains("reset"))

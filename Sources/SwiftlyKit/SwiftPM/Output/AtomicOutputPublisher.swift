@@ -10,7 +10,7 @@ enum AtomicOutputPublisher {
         to destination: URL,
         replacingExisting: Bool = false,
         prepareExecutable: (URL) async throws -> Void = { _ in }
-    ) async throws -> URL {
+    ) async throws -> BuildResult {
 
         guard destination.isFileURL,
               output.executable.isFileURL
@@ -64,7 +64,12 @@ enum AtomicOutputPublisher {
             throw SwiftPMError.outputPublicationFailed(destination)
         }
 
-        return destination.appending(path: output.executable.lastPathComponent)
+        return BuildResult(
+            executable: destination.appending(path: output.executable.lastPathComponent),
+            resourceBundles: output.resourceBundles.map { bundle in
+                destination.appending(path: bundle.lastPathComponent, directoryHint: .isDirectory)
+            }
+        )
     }
 
     /// Replaces a SwiftlyKit-owned executable in build storage after staged preparation.

@@ -6,7 +6,7 @@ import Testing
 @Suite("Atomic runnable output publication")
 struct AtomicOutputPublisherTests {
 
-    @Test("Publishes one executable-only directory and returns its launch URL")
+    @Test("Publishes one executable-only directory and returns its build result")
     func executableOnly() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-Publisher") { directory in
@@ -19,8 +19,10 @@ struct AtomicOutputPublisherTests {
                 to: destination
             )
 
-            #expect(result == destination.appending(path: "Tool"))
-            #expect(try Data(contentsOf: result) == Data("executable".utf8))
+            #expect(result.executable == destination.appending(path: "Tool"))
+            #expect(result.resourceBundles.isEmpty)
+            #expect(result.directory == destination)
+            #expect(try Data(contentsOf: result.executable) == Data("executable".utf8))
             #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path()) == ["Tool"])
         }
     }
@@ -45,12 +47,16 @@ struct AtomicOutputPublisherTests {
                 }
             )
 
-            #expect(result == destination.appending(path: "Tool"))
+            #expect(result.executable == destination.appending(path: "Tool"))
+            #expect(result.resourceBundles == [
+                destination.appending(path: "Package_Assets.resources", directoryHint: .isDirectory)
+            ])
+            #expect(result.directory == destination)
             #expect(Set(try FileManager.default.contentsOfDirectory(atPath: destination.path())) == [
                 "Tool",
                 "Package_Assets.resources"
             ])
-            #expect(try Data(contentsOf: result) == Data("prepared executable".utf8))
+            #expect(try Data(contentsOf: result.executable) == Data("prepared executable".utf8))
             let publishedAsset = destination.appending(path: "Package_Assets.resources/asset.txt")
             #expect(try Data(contentsOf: publishedAsset) == Data("asset".utf8))
             #expect(try Data(contentsOf: bundle.appending(path: "asset.txt")) == Data("asset".utf8))

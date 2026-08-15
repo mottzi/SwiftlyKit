@@ -112,14 +112,14 @@ extension SwiftlyKit {
         try await mutationGate.withAccess { try await resolveDependenciesUnderLease(using: environment, onEvent: onEvent) }
     }
     
-    /// Builds and verifies one executable with the prepared toolchain and SDK, and returns its launch URL.
+    /// Builds and verifies one executable with the prepared toolchain and SDK, and returns its runnable result.
     /// Disables automatic resolution and throws `dependencyResolutionRequired` if resolution is necessary.
     /// Rejects source or resolved-dependency changes, then applies requested stripping, publication, and cleanup.
     public func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler? = nil
-    ) async throws -> URL {
+    ) async throws -> BuildResult {
 
         try request.validate()
         return try await mutationGate.withAccess {
@@ -199,7 +199,7 @@ extension SwiftlyKit {
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler?
-    ) async throws -> URL {
+    ) async throws -> BuildResult {
 
         do { return try await swiftPM.build(request, using: environment, onEvent: onEvent) }
         catch is CancellationError { throw CancellationError() }
@@ -236,7 +236,7 @@ extension SwiftlyKit {
 
 extension SwiftlyKit {
     
-    /// Runs the complete fast track for one verified build and returns the executable launch URL.
+    /// Runs the complete fast track for one verified build and returns its runnable result.
     /// Uses one SwiftPM environment snapshot, trait configuration, and mutation lease for the complete workflow.
     /// Applies toolchain, runtime-resource, and output choices and rejects package source changes during compilation.
     public static func build(
@@ -252,7 +252,7 @@ extension SwiftlyKit {
         swiftPMEnvironment: SwiftPMEnvironment = .inherited,
         swiftPMTraits: SwiftPMTraits = .packageDefaults,
         onEvent: SwiftlyKitEvent.Handler? = nil
-    ) async throws -> URL {
+    ) async throws -> BuildResult {
 
         try await SwiftlyKit().build(
             packageRoot,
@@ -284,7 +284,7 @@ extension SwiftlyKit {
         swiftPMEnvironment: SwiftPMEnvironment = .inherited,
         swiftPMTraits: SwiftPMTraits = .packageDefaults,
         onEvent: SwiftlyKitEvent.Handler?
-    ) async throws -> URL {
+    ) async throws -> BuildResult {
 
         try BuildRequest.validate(jobs: jobs)
         let snapshot = swiftPMEnvironment.snapshot()
@@ -319,7 +319,7 @@ extension SwiftlyKit {
         swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
         swiftPMTraits: SwiftPMTraits,
         onEvent: SwiftlyKitEvent.Handler?
-    ) async throws -> URL {
+    ) async throws -> BuildResult {
 
         let assessment = try await assess(packageRoot, for: target, toolchain: toolchain)
         let environment = try await prepareUnderLease(
