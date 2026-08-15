@@ -93,12 +93,6 @@ extension SDKSelectionDirectory {
             try fileManager.createSymbolicLink(at: linkURL, withDestinationURL: canonicalBundleURL)
         } catch let error as CocoaError where error.code == .fileWriteFileExists {
             // A separate SwiftlyKit instance or process won the creation race.
-            return try requireReadySelection(
-                in: searchDirectory,
-                linkURL: linkURL,
-                canonicalBundleURL: canonicalBundleURL,
-                fileManager: fileManager
-            )
         } catch {
             throw Error.couldNotCreateSelection(linkURL.path(percentEncoded: false))
         }
