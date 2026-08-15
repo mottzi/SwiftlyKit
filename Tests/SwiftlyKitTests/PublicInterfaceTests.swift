@@ -85,7 +85,7 @@ struct PublicInterfaceTests {
             try await SwiftlyKit.build(
                 packageRoot,
                 toolchain: .exact(SwiftVersion(major: 6, minor: 2, patch: 1)),
-                output: .copy(to: destination),
+                output: .publish(to: destination),
                 strip: true
             )
         }
@@ -147,7 +147,7 @@ struct PublicInterfaceTests {
         _ = recovery
     }
 
-    @Test("Build storage copying and cleanup compile without testable access")
+    @Test("Build output publication and cleanup compile without testable access")
     func buildStorageLifecycleCompiles() {
 
         let workflow: @Sendable (URL, LocalBuildEnvironment, ExecutableProduct, URL) async throws -> URL = {
@@ -157,7 +157,7 @@ struct PublicInterfaceTests {
             let request = BuildRequest(
                 product,
                 storage: storage,
-                output: .copy(to: destination, cleanup: .reset)
+                output: .publish(to: destination, cleanup: .reset)
             )
             let executable = try await kit.build(request, using: environment)
             try await kit.cleanBuildArtifacts(in: storage, using: environment)
@@ -171,7 +171,7 @@ struct PublicInterfaceTests {
     func outputReplacementCompiles() {
 
         let output: @Sendable (URL) -> BuildOutput = { destination in
-            .copy(to: destination, replacingExisting: true, cleanup: .reset)
+            .publish(to: destination, replacingExisting: true, cleanup: .reset)
         }
         _ = output
     }

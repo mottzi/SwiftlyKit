@@ -19,12 +19,12 @@ struct SwiftPMTests {
                 .packageSourceStabilityUnavailable("unavailable")
             ),
             (.executableNotFound("Tool"), .executableProductNotFound("Tool")),
-            (.unsupportedProductResources("Tool"), .unsupportedProductResources("Tool")),
+            (.runtimeResourceVerificationFailed, .runtimeResourceVerificationFailed),
             (.invalidExecutable("invalid"), .executableVerificationFailed("invalid")),
             (.unsafeBuildStorage(output), .unsafeBuildStorage(output)),
             (.outputInsideBuildStorage(output), .outputInsideBuildStorage(output)),
             (.outputAlreadyExists(output), .outputAlreadyExists(output)),
-            (.outputCopyFailed(output), .outputCopyFailed(output)),
+            (.outputPublicationFailed(output), .outputPublicationFailed(output)),
             (
                 .postBuildCleanupFailed(output: output, diagnostic: "cleanup failed"),
                 .postBuildCleanupFailed(output: output, detail: "cleanup failed")
@@ -270,7 +270,7 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("A source mutation withholds copied output and reports a typed failure")
+    @Test("A source mutation withholds published output and reports a typed failure")
     func sourceMutationWithholdsOutput() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
@@ -302,7 +302,7 @@ struct SwiftPMTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        output: .copy(to: output)
+                        output: .publish(to: output)
                     ),
                     using: buildEnvironment(in: directory)
                 )
@@ -383,7 +383,7 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Build rejects runtime resource bundles emitted by dependency products")
+    @Test("Build storage returns the executable beside linked dependency resources")
     func transitiveResources() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
@@ -391,12 +391,19 @@ struct SwiftPMTests {
             let resources = directory.appending(path: "Dependency_Assets.resources")
             try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
             try Data("asset".utf8).write(to: resources.appending(path: "asset.txt"))
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            try createSwiftPMResourceMetadata(
+                product: "Tool",
+                module: "Dependency",
+                bundle: resources.lastPathComponent,
+                in: directory
+            )
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
                 .success(output: "built"),
                 .success(output: directory.path(percentEncoded: false) + "\n")
             ])
-            let events = SwiftPMEventRecorder()
             let environment = buildEnvironment(in: directory)
             let request = BuildRequest(ExecutableProduct(name: "Tool"))
             let swiftPM = SwiftPM(
@@ -404,18 +411,12 @@ struct SwiftPMTests {
                 validateEnvironment: { _ in }
             )
 
-            await #expect(throws: SwiftPMError.unsupportedProductResources("Tool")) {
-                try await swiftPM.build(
-                    request,
-                    using: environment,
-                    onEvent: { await events.record($0) }
-                )
-            }
-            #expect(await events.details.last == "Build produced unsupported runtime resource bundles: Dependency_Assets.resources.")
+            #expect(try await swiftPM.build(request, using: environment) == executable)
+            #expect(try Data(contentsOf: resources.appending(path: "asset.txt")) == Data("asset".utf8))
         }
     }
 
-    @Test("Build ignores privacy-only resource bundles emitted by dependency products")
+    @Test("Build storage retains linked privacy-only resource bundles")
     func privacyMetadataResources() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
@@ -424,6 +425,12 @@ struct SwiftPMTests {
             let resources = directory.appending(path: "Dependency_Metadata.resources")
             try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
             try Data("privacy metadata".utf8).write(to: resources.appending(path: "PrivacyInfo.xcprivacy"))
+            try createSwiftPMResourceMetadata(
+                product: "Tool",
+                module: "Dependency",
+                bundle: resources.lastPathComponent,
+                in: directory
+            )
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
                 .success(output: "built"),
@@ -440,6 +447,46 @@ struct SwiftPMTests {
                     using: buildEnvironment(in: directory)
                 ) == executable
             )
+        }
+    }
+
+    @Test("Publication returns the launch URL in the complete exact resource directory")
+    func publishesResources() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let resources = directory.appending(path: "Dependency_Assets.resources", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
+            try Data("asset".utf8).write(to: resources.appending(path: "asset.txt"))
+            _ = try createBundleForSwiftPMTest(named: "Unrelated_Stale.resources", in: directory)
+            try createSwiftPMResourceMetadata(
+                product: "Tool",
+                module: "Dependency",
+                bundle: resources.lastPathComponent,
+                in: directory
+            )
+            let publication = directory.appending(path: "Published", directoryHint: .isDirectory)
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
+                .success(output: "built"),
+                .success(output: directory.path(percentEncoded: false) + "\n")
+            ])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+
+            let launchURL = try await swiftPM.build(
+                BuildRequest(
+                    ExecutableProduct(name: "Tool"),
+                    output: .publish(to: publication)
+                ),
+                using: buildEnvironment(in: directory)
+            )
+
+            #expect(launchURL == publication.appending(path: "Tool"))
+            #expect(Set(try FileManager.default.contentsOfDirectory(atPath: publication.path())) == [
+                "Tool",
+                "Dependency_Assets.resources"
+            ])
         }
     }
 
@@ -503,8 +550,8 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Explicit stripping prepares an atomic copy and preserves build storage")
-    func stripAndCopy() async throws {
+    @Test("Explicit stripping prepares staged publication and preserves build storage")
+    func stripAndPublish() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
@@ -522,7 +569,7 @@ struct SwiftPMTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: .release,
-                output: .copy(to: output, replacingExisting: true),
+                output: .publish(to: output, replacingExisting: true),
                 strip: true
             )
             let values = try SwiftPMEnvironment([
@@ -544,15 +591,16 @@ struct SwiftPMTests {
                 onEvent: { await events.record($0) }
             )
 
-            #expect(result == output)
-            #expect(try Data(contentsOf: output) == Data(contentsOf: executable))
+            let publishedExecutable = output.appending(path: "Tool")
+            #expect(result == publishedExecutable)
+            #expect(try Data(contentsOf: publishedExecutable) == Data(contentsOf: executable))
             let commands = await runner.commands
             #expect(commands.count == 4)
             let strippedExecutable = commands[3].arguments[3]
             #expect(commands[3].arguments.prefix(3) == ["run", "llvm-objcopy", "--strip-all"])
             #expect(commands[3].arguments.suffix(1) == ["+6.2.1"])
             #expect(strippedExecutable != executable.path(percentEncoded: false))
-            #expect(strippedExecutable != output.path(percentEncoded: false))
+            #expect(strippedExecutable != publishedExecutable.path(percentEncoded: false))
             #expect(strippedExecutable.hasPrefix(directory.path(percentEncoded: false) + "/.PublishedTool.swiftlykit-"))
             #expect(!FileManager.default.fileExists(atPath: strippedExecutable))
             #expect(commands[0...2].allSatisfy { $0.environment?["BUILD_SECRET"] == "private" })
@@ -562,7 +610,7 @@ struct SwiftPMTests {
             #expect(commands[3].sensitiveEnvironmentKeys.isEmpty)
             #expect(!commands[3].arguments.contains("--traits"))
             #expect(!commands[3].arguments.contains("StripFeature"))
-            #expect(await events.operations == [.building, .stripping, .copying])
+            #expect(await events.operations == [.building, .stripping, .publishing])
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "built"),
                 EventOutput(stream: .standardOutput, text: "stripped")
@@ -570,8 +618,8 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Copied output refuses replacement by default")
-    func copyRefusesReplacementByDefault() async throws {
+    @Test("Published output refuses replacement by default")
+    func publicationRefusesReplacementByDefault() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
@@ -590,7 +638,7 @@ struct SwiftPMTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        output: .copy(to: output)
+                        output: .publish(to: output)
                     ),
                     using: buildEnvironment(in: directory)
                 )
@@ -663,7 +711,7 @@ struct SwiftPMTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        output: .copy(to: output, replacingExisting: true),
+                        output: .publish(to: output, replacingExisting: true),
                         strip: true
                     ),
                     using: buildEnvironment(in: directory)
@@ -678,6 +726,36 @@ struct SwiftPMTests {
         }
     }
 
+}
+
+private func createBundleForSwiftPMTest(named name: String, in directory: URL) throws -> URL {
+
+    let bundle = directory.appending(path: name, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
+    return bundle
+}
+
+private func createSwiftPMResourceMetadata(product: String, module: String, bundle: String, in directory: URL) throws {
+
+    let productDirectory = directory.appending(path: "\(product).product", directoryHint: .isDirectory)
+    let buildDirectory = directory.appending(path: "\(module).build", directoryHint: .isDirectory)
+    let derivedSources = buildDirectory.appending(path: "DerivedSources", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: productDirectory, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: derivedSources, withIntermediateDirectories: true)
+
+    let object = buildDirectory.appending(path: "resource_bundle_accessor.swift.o")
+    try Data().write(to: object)
+    try Data(object.path(percentEncoded: false).utf8).write(
+        to: productDirectory.appending(path: "Objects.LinkFileList")
+    )
+
+    let source = """
+    let mainPath = Bundle.main.bundleURL.appendingPathComponent("\(bundle)").path
+    let buildPath = "\(directory.appending(path: bundle).path(percentEncoded: false))"
+    """
+    try Data(source.utf8).write(
+        to: derivedSources.appending(path: "resource_bundle_accessor.swift")
+    )
 }
 
 private func buildEnvironment(

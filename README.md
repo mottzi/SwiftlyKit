@@ -1,15 +1,15 @@
 # SwiftlyKit
 
-Cross-compile a local Swift package into a self-contained Linux executable—right
-from your Apple silicon Mac.
+Cross-compile a local Swift package into a verified Linux executable and its
+runtime resources—right from your Apple silicon Mac.
 
 SwiftlyKit handles cross-compilation with SwiftPM and Swiftly. It pairs an
 official Swift toolchain with its matching Static Linux SDK. It then builds the
-executable you choose and verifies that the result is a statically linked ELF64
-file.
-One `async` call takes you from package to binary. A staged API lets apps inspect
-and authorize changes, select a product, and control build, output, and storage
-settings.
+executable you choose and verifies that it is a statically linked ELF64 file.
+SwiftlyKit also keeps the runtime resource bundles that the selected product
+needs. One `async` call takes you from package to runnable output. A staged API
+lets apps inspect and authorize changes, select a product, and control build,
+output, and storage settings.
 
 ## Requirements
 
@@ -87,7 +87,7 @@ This fast track uses these defaults:
 - The build configuration is release.
 - SwiftlyKit selects the toolchain automatically.
 - The executable is not stripped.
-- The executable stays in SwiftPM scratch storage.
+- The executable and any runtime resources stay in SwiftPM scratch storage.
 - The package's default traits remain enabled.
 
 Specify a product, target, toolchain, or configuration when you need a different
@@ -104,29 +104,35 @@ let executable = try await SwiftlyKit.build(
 )
 ```
 
-For a disposable one-shot build, copy the executable out of scratch storage and
-reset that storage after the copy succeeds:
+To keep the output, publish the complete runnable directory outside scratch
+storage. This example resets scratch storage after publication succeeds:
 
 ```swift
-let destination = URL(filePath: "/path/to/output/MyTool")
+let publicationDirectory = URL(filePath: "/path/to/output/MyTool")
 let executable = try await SwiftlyKit.build(
     packageRoot,
     product: "MyTool",
     storage: .directory(URL(filePath: "/path/to/scratch")),
-    output: .copy(to: destination, cleanup: .reset),
+    output: .publish(to: publicationDirectory, cleanup: .reset),
     strip: true
 )
 ```
 
+This call returns `/path/to/output/MyTool/MyTool` as the launch URL.
+
 By default, SwiftlyKit does not replace the destination. Set `replacingExisting`
-to atomically replace an earlier executable at a stable output URL:
+to atomically replace an earlier complete output directory at a stable URL:
 
 ```swift
 let executable = try await SwiftlyKit.build(
     packageRoot,
-    output: .copy(to: destination, replacingExisting: true)
+    output: .publish(to: publicationDirectory, replacingExisting: true)
 )
 ```
+
+The returned URL always points to the executable to launch. Keep the published
+directory together when you move, upload, or deploy it. Do not move only the
+executable out of that directory.
 
 > [!IMPORTANT]
 > The fast track authorizes SwiftlyKit to install Swiftly, the selected
@@ -250,13 +256,13 @@ without a name, the package must contain exactly one executable product.
 Create a `BuildRequest` and use the prepared environment:
 
 ```swift
-let output = URL(filePath: "/path/to/output/MyTool")
+let publicationDirectory = URL(filePath: "/path/to/output/MyTool")
 let request = BuildRequest(
     product,
     configuration: .release,
     jobs: 4,
     storage: .directory(URL(filePath: "/path/to/scratch")),
-    output: .copy(to: output, cleanup: .reset),
+    output: .publish(to: publicationDirectory, cleanup: .reset),
     strip: true
 )
 
@@ -286,23 +292,23 @@ result and throws `SwiftlyKitError.packageChangedDuringBuild`. See
 | `configuration` | `.debug` | Selects the SwiftPM debug or release configuration. |
 | `jobs` | `nil` | Limits concurrent SwiftPM build jobs. `nil` uses the SwiftPM default. |
 | `storage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
-| `output` | `.buildStorage` | Returns the executable in scratch storage. `.copy(to:replacingExisting:cleanup:)` atomically publishes it and then performs the requested cleanup. |
-| `strip` | `false` | Uses the selected toolchain to strip an output copy, and then verifies it again. |
+| `output` | `.buildStorage` | Returns a launch URL in managed build storage. `.publish(to:replacingExisting:cleanup:)` publishes a complete caller-owned runnable directory, then performs the requested cleanup. |
+| `strip` | `false` | Strips a SwiftlyKit-owned executable with the selected toolchain, then verifies it again. |
 
 An explicit `jobs` value must be positive. SwiftlyKit rejects zero and negative
 values with `SwiftlyKitError.invalidBuildJobCount` before it runs a subprocess.
 
-Stripping never changes the executable that SwiftPM produces. With
-`.buildStorage`, SwiftlyKit returns a deterministic stripped copy inside build
-storage. With `.copy`, SwiftlyKit strips and verifies a temporary file next to
-the destination. It then publishes that file atomically. A strip failure
-publishes nothing.
+Stripping never changes the executable that SwiftPM produces or any resource
+bundle. With `.buildStorage`, SwiftlyKit returns a deterministic stripped
+executable beside the required resources in the binary directory. With
+`.publish`, SwiftlyKit strips and verifies only the staged executable. It then
+publishes the complete directory atomically. A strip failure publishes nothing.
 
-The parent directory of a copied output must exist. By default, SwiftlyKit
+The parent of a publication directory must exist. By default, SwiftlyKit
 throws `SwiftlyKitError.outputAlreadyExists` if the destination exists. Set
-`replacingExisting` to replace the existing destination atomically. SwiftlyKit
-publishes only after stripping and verification succeed. It starts cleanup only
-after publication succeeds.
+`replacingExisting` to replace the complete existing directory atomically.
+SwiftlyKit publishes only after stripping and verification succeed. It starts
+cleanup only after publication succeeds.
 
 `BuildCleanup.retain` keeps all scratch storage and is the default.
 `BuildCleanup.clean` delegates to `swift package clean`. It removes compiled
@@ -312,11 +318,11 @@ checkouts, downloaded artifacts, and workspace state.
 effective scratch directory, including those retained dependencies. Both modes
 work with `.packageDefault` and `.directory(URL)` storage.
 
-Automatic `.clean` or `.reset` requires copied output outside the effective
-scratch directory. SwiftlyKit completes the atomic copy before cleanup. If the
-copy succeeds but cleanup fails, it throws
+Automatic `.clean` or `.reset` requires the publication directory outside the
+effective scratch directory. SwiftlyKit completes atomic publication before
+cleanup. If publication succeeds but cleanup fails, it throws
 `SwiftlyKitError.postBuildCleanupFailed`. The error's output URL identifies the
-copied executable, which remains available.
+published directory, which remains available.
 
 To clean or reset storage separately from a build, use the staged cleanup
 operations:
@@ -416,8 +422,8 @@ and SDK overrides.
 
 The captured environment and traits apply to package inspection, dependency
 resolution, builds, and cleanup. They do not apply to Swiftly preparation,
-downloads, stripping, copying, or executable verification. Changes to the host
-environment or input values after preparation do not alter the captured
+downloads, stripping, publication, or executable verification. Changes to the
+host environment or input values after preparation do not alter the captured
 configuration.
 
 > [!WARNING]
@@ -454,7 +460,7 @@ let environment = try await kit.prepare(
 The handler can receive:
 
 - `SwiftlyKitEvent.progress` for preparation, dependency resolution, build,
-  strip, copy, and cleanup activities.
+  strip, publication, and cleanup activities.
 - `SwiftlyKitEvent.output` for standard output and standard error chunks from
   delegated commands.
 
@@ -468,7 +474,7 @@ SwiftlyKit builds one executable product for one of these targets:
 - ARM64 Linux Musl: `.linux(.arm64)`
 - x86-64 Linux Musl: `.linux(.x86_64)`
 
-Before SwiftlyKit returns a URL, it verifies that the result:
+Before SwiftlyKit returns a launch URL, it verifies that the executable:
 
 - is a regular file with executable permissions;
 - is a little-endian ELF64 executable for the requested architecture;
@@ -476,10 +482,29 @@ Before SwiftlyKit returns a URL, it verifies that the result:
 - has no dynamic interpreter; and
 - declares no required dynamic libraries.
 
-SwiftlyKit rejects an executable product that needs a SwiftPM runtime resource
-bundle. SwiftlyKit supports resources embedded in code and Apple privacy
-metadata because they do not require a runtime bundle. The package and all its
-dependencies must support the selected Linux Musl target.
+SwiftlyKit keeps only the SwiftPM `.resources` directories linked to the selected
+product. It identifies these directories from the final link output and the
+generated resource accessors. SwiftlyKit rejects missing or ambiguous metadata
+and unsafe resource trees with `runtimeResourceVerificationFailed`. Resource
+trees can contain regular files and directories. SwiftlyKit rejects symbolic
+links, hard links, sockets, devices, FIFOs, and other special entries.
+
+`.buildStorage` returns a launch URL in SwiftPM's managed layout. Keep the
+executable with its sibling resource bundles. `.publish` creates a durable,
+caller-owned directory with the executable at its root and any required resource
+bundles beside it. Resource-free products use the same directory shape. Move or
+deploy the directory as one unit.
+
+SwiftPM does not provide a stable interface for listing a product's runtime
+resources. When the binary directory contains a `.resources` candidate,
+SwiftlyKit checks SwiftPM's current link and accessor files. It fails closed if
+it cannot verify which resources belong to the selected product. If the binary
+directory has no `.resources` directories, SwiftlyKit treats the product as
+resource-free and does not inspect those private files. See
+[Architecture](Documentation/Architecture.md) for the implementation details.
+
+The package and all its dependencies must support the selected Linux Musl
+target.
 
 ## Operational behavior
 
@@ -541,8 +566,9 @@ contents. If SwiftlyKit cannot establish or repeat the observation, it throws
 `packageSourceStabilityUnavailable` before it returns an executable.
 
 This check detects changes during compilation. It does not build from an
-immutable source copy or create durable build provenance. Source observation
-ends before stripping, copying, and cleanup start.
+immutable source copy or create durable build provenance. SwiftlyKit stops
+observing sources after it discovers and verifies the executable and runtime
+resources. Stripping, publication, and cleanup start later.
 
 ### Environment boundaries
 
@@ -591,7 +617,7 @@ If a process ends abruptly, a tool it launched may survive. Stop that process or
 wait for it to finish before retrying.
 
 Cancel the calling task to cancel the complete subprocess group. SwiftlyKit
-removes transient atomic-copy files and throws Swift's standard
+removes transient publication staging directories and throws Swift's standard
 `CancellationError`. It does not start unrequested cleanup.
 
 SwiftlyKit reports operational failures as `SwiftlyKitError`. This type conforms
@@ -611,7 +637,9 @@ errors include:
 - `staleAssessment`
 - `packageChangedDuringBuild`
 - `packageSourceStabilityUnavailable`
+- `runtimeResourceVerificationFailed`
 - `outputAlreadyExists`
+- `outputPublicationFailed`
 - `unsafeBuildStorage`
 - `outputInsideBuildStorage`
 - `postBuildCleanupFailed`
@@ -645,7 +673,7 @@ do {
 | `ExecutableProducts` | Lists discovered products and selects a named or sole executable. |
 | `BuildRequest` | Selects one product and its build options. |
 | `BuildStorage` | Selects package-default or explicit SwiftPM scratch storage. |
-| `BuildOutput`, `BuildCleanup` | Control executable copying and build-storage cleanup. |
+| `BuildOutput`, `BuildCleanup` | Control output publication and later cleanup of build storage. |
 | `BuildTarget`, `LinuxArchitecture` | Select the Linux architecture. |
 | `BuildConfiguration` | Selects a debug or release build. |
 | `ToolchainSelection`, `SwiftVersion` | Select a release and convert exact versions to or from text. |
@@ -667,11 +695,13 @@ To run the real-system cross-compilation acceptance test on a prepared host, use
 SWIFTLYKIT_RUN_ACCEPTANCE=1 swift test --filter CrossCompilationAcceptanceTests
 ```
 
-The test uses SwiftlyKit's dependency-free fixture package and never authorizes
-installation. It requires compatible Swiftly, Swift 6.3.3, and its matching
-Static Linux SDK. These components must already be installed. The test builds
-and verifies both supported architectures in temporary scratch storage. It also
-verifies that a second identical build performs no compilation or linking.
+The test uses a fixture with resources in a local dependency. It never authorizes
+installation. The test requires compatible Swiftly, Swift 6.3.3, and its
+matching Static Linux SDK. These components must already be installed. The test
+builds and verifies both supported architectures. It also verifies the published
+runnable directory for each architecture in temporary storage. The test confirms
+that a second identical build in managed build storage performs no compilation
+or linking.
 
 For the internal design, see [Architecture](Documentation/Architecture.md).
 

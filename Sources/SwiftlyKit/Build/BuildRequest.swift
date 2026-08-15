@@ -15,16 +15,16 @@ public struct BuildRequest: Sendable {
     /// The SwiftPM scratch storage used by the build.
     public let storage: BuildStorage
     
-    /// The location and post-copy lifecycle of the executable.
+    /// The location and post-publication lifecycle of the runnable output.
     public let output: BuildOutput
     
-    /// A Boolean value that removes all symbols from a copy of the verified executable if `true`.
+    /// A Boolean value that removes all symbols from a SwiftlyKit-owned executable if `true`.
     /// SwiftlyKit preserves the SwiftPM-produced executable and verifies the stripped result again.
     public let strip: Bool
     
     /// Creates a request for one discovered executable product.
     /// Defaults to a debug build in package `.build` with SwiftPM's concurrent-job default.
-    /// The default does not strip, copy, or clean the output.
+    /// The default does not strip, publish, or clean the output.
     public init(
         _ product: ExecutableProduct,
         configuration: BuildConfiguration = .debug,

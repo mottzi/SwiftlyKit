@@ -3,30 +3,22 @@ import Foundation
 struct PackageDescription {
 
     let products: [ExecutableProduct]
-    private let resourceProducts: Set<String>
 
     init(data: Data) throws {
 
         do {
             let description = try JSONDecoder().decode(Description.self, from: data)
-            let package = try Self.package(from: description)
-
-            products = package.products
-            resourceProducts = package.resourceProducts
+            products = try Self.products(from: description)
         } catch {
             throw SwiftPMError.malformedPackageDescription
         }
-    }
-
-    func requiresRuntimeResources(_ productName: String) -> Bool {
-        resourceProducts.contains(productName)
     }
 
 }
 
 extension PackageDescription {
 
-    private static func package(from description: Description) throws -> Package {
+    private static func products(from description: Description) throws -> [ExecutableProduct] {
 
         var targetNames: Set<String> = []
         for target in description.targets {
@@ -34,21 +26,7 @@ extension PackageDescription {
             guard targetNames.insert(target.name).inserted else { throw DescriptionError.duplicateIdentifier }
         }
 
-        var targets: [String: Target] = [:]
-        for target in description.targets {
-            targets[target.name] = Target(
-                kind: target.kind,
-                dependencies: target.dependencies,
-                resourceRequirement: resourceRequirement(for: target.resources)
-            )
-        }
-
-        for target in targets.values {
-            for dependency in target.dependencies {
-                guard case .target(let name) = dependency else { continue }
-                guard targets[name] != nil else { throw DescriptionError.missingTarget }
-            }
-        }
+        let targets = Dictionary(uniqueKeysWithValues: description.targets.map { ($0.name, $0.kind) })
 
         var productNames: Set<String> = []
         var explicitProducts: [(name: String, targets: [String])] = []
@@ -70,8 +48,8 @@ extension PackageDescription {
         }
 
         let coveredTargets = Set(explicitProducts.flatMap(\.targets))
-        let implicitProducts = targets.compactMap { name, target -> (name: String, targets: [String])? in
-            guard target.kind == .executable else { return nil }
+        let implicitProducts = targets.compactMap { name, kind -> (name: String, targets: [String])? in
+            guard kind == .executable else { return nil }
             guard !coveredTargets.contains(name) else { return nil }
             guard !productNames.contains(name) else { return nil }
 
@@ -79,104 +57,16 @@ extension PackageDescription {
         }
 
         let allProducts = explicitProducts + implicitProducts
-        let products = allProducts.map { ExecutableProduct(name: $0.name) }.sorted { $0.name < $1.name }
-        let resourceProducts = Set(allProducts.compactMap { product -> String? in
-            switch resourceRequirement(for: product.targets, targets: targets) {
-                case .none: nil
-                case .required, .unknown: product.name
-            }
-        })
-
-        return Package(products: products, resourceProducts: resourceProducts)
+        return allProducts.map { ExecutableProduct(name: $0.name) }.sorted { $0.name < $1.name }
     }
 
     private static func validate(identifier: String) throws {
         guard !identifier.isEmpty else { throw DescriptionError.emptyIdentifier }
     }
 
-    private static func resourceRequirement(
-        for roots: [String],
-        targets: [String: Target]
-    ) -> ResourceRequirement {
-
-        var pending = roots
-        var visited: Set<String> = []
-        var result = ResourceRequirement.none
-
-        while let name = pending.popLast() {
-            guard visited.insert(name).inserted else { continue }
-            guard let target = targets[name] else {
-                result = .unknown
-                continue
-            }
-
-            switch target.resourceRequirement {
-                case .none: break
-                case .required: return .required
-                case .unknown: result = .unknown
-            }
-
-            for dependency in target.dependencies {
-                switch dependency {
-                    case .target(let name):
-                        pending.append(name)
-
-                    case .byName(let name):
-                        if targets[name] != nil { pending.append(name) }
-
-                    case .product:
-                        break
-
-                    case .unknown:
-                        result = .unknown
-                }
-            }
-        }
-
-        return result
-    }
-
-    private static func resourceRequirement(for resources: [Description.Resource]) -> ResourceRequirement {
-
-        var result = ResourceRequirement.none
-
-        for resource in resources {
-            switch resource.rule {
-                case .embedInCode: break
-                case .copy, .process: return .required
-                case .unknown: result = .unknown
-            }
-        }
-
-        return result
-    }
-
 }
 
 extension PackageDescription {
-
-    private struct Package {
-
-        let products: [ExecutableProduct]
-        let resourceProducts: Set<String>
-
-    }
-
-    private struct Target {
-
-        let kind: Description.Target.Kind
-        let dependencies: [Description.Dependency]
-        let resourceRequirement: ResourceRequirement
-
-    }
-
-    private enum ResourceRequirement {
-
-        case none
-        case required
-        case unknown
-
-    }
 
     private enum DescriptionError: Error {
 

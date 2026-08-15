@@ -6,14 +6,10 @@ extension PackageDescription.Description {
 
         let name: String
         let kind: Kind
-        let dependencies: [Dependency]
-        let resources: [Resource]
 
         private enum CodingKeys: String, CodingKey {
             case name
             case kind = "type"
-            case dependencies
-            case resources
         }
 
     }

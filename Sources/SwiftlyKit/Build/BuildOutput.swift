@@ -1,14 +1,14 @@
 import Foundation
 
-/// The location and lifecycle of a successfully built executable.
+/// The location and lifecycle of a successfully built runnable output.
 public enum BuildOutput: Sendable, Equatable {
 
-    /// Returns an executable from build storage.
-    /// A stripped build returns a SwiftlyKit-owned copy and preserves the SwiftPM-produced executable.
+    /// Returns the launch executable in managed SwiftPM build storage.
+    /// Required runtime resource bundles remain beside the executable.
     case buildStorage
 
-    /// Atomically copies the executable to a destination, then performs the requested cleanup.
-    /// Replacement is opt-in. The parent must exist. Non-retaining cleanup requires output outside build storage.
-    case copy(to: URL, replacingExisting: Bool = false, cleanup: BuildCleanup = .retain)
+    /// Atomically publishes the complete runnable directory, then performs the requested cleanup.
+    /// Replacement is opt-in. The parent must exist. Non-retaining cleanup requires publication outside build storage.
+    case publish(to: URL, replacingExisting: Bool = false, cleanup: BuildCleanup = .retain)
 
 }

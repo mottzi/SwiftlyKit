@@ -30,22 +30,31 @@ struct BuildRequestTests {
         #expect(request.jobs == 4)
     }
 
-    @Test("Copied output retains build storage by default")
-    func copiedOutputDefault() {
+    @Test("Published output retains build storage by default")
+    func publishedOutputDefault() {
 
         let destination = URL(filePath: "/tmp/Server")
-        let output = BuildOutput.copy(to: destination)
+        let output = BuildOutput.publish(to: destination)
 
-        #expect(output == .copy(to: destination, replacingExisting: false, cleanup: .retain))
+        #expect(output == .publish(to: destination, replacingExisting: false, cleanup: .retain))
     }
 
-    @Test("Copied output retains an explicit replacement choice")
-    func copiedOutputReplacement() {
+    @Test("Published output retains an explicit replacement choice")
+    func publishedOutputReplacement() {
 
         let destination = URL(filePath: "/tmp/Server")
-        let output = BuildOutput.copy(to: destination, replacingExisting: true)
+        let output = BuildOutput.publish(to: destination, replacingExisting: true)
 
-        #expect(output == .copy(to: destination, replacingExisting: true, cleanup: .retain))
+        #expect(output == .publish(to: destination, replacingExisting: true, cleanup: .retain))
+    }
+
+    @Test("Published output retains an explicit cleanup choice")
+    func publishedOutputCleanup() {
+
+        let destination = URL(filePath: "/tmp/PublishedServer")
+        let output = BuildOutput.publish(to: destination, cleanup: .reset)
+
+        #expect(output == .publish(to: destination, replacingExisting: false, cleanup: .reset))
     }
 
 }

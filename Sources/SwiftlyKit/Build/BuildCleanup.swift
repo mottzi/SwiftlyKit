@@ -1,4 +1,4 @@
-/// Cleanup performed after an executable is copied out of build storage.
+/// Cleanup performed after a runnable directory is published outside build storage.
 public enum BuildCleanup: Sendable, Equatable {
 
     /// Retains all SwiftPM scratch storage for incremental builds.

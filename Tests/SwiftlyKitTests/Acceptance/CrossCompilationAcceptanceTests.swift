@@ -39,17 +39,30 @@ struct CrossCompilationAcceptanceTests {
                     path: String(describing: architecture),
                     directoryHint: .isDirectory
                 )
+                let publication = scratchRoot.appending(
+                    path: "Published-\(String(describing: architecture))",
+                    directoryHint: .isDirectory
+                )
                 let executable = try await kit.build(
                     BuildRequest(
                         product,
                         configuration: .release,
-                        storage: .directory(scratchDirectory)
+                        storage: .directory(scratchDirectory),
+                        output: .publish(to: publication)
                     ),
                     using: environment
                 )
 
                 #expect(FileManager.default.isExecutableFile(atPath: executable.path(percentEncoded: false)))
-                #expect(executable.pathComponents.starts(with: scratchDirectory.pathComponents))
+                #expect(executable == publication.appending(path: "CrossCompilationFixture"))
+                #expect(Set(try FileManager.default.contentsOfDirectory(atPath: publication.path())) == [
+                    "CrossCompilationFixture",
+                    "ResourceDependency_ResourceDependency.resources"
+                ])
+                let message = publication.appending(
+                    path: "ResourceDependency_ResourceDependency.resources/message.txt"
+                )
+                #expect(try String(contentsOf: message, encoding: .utf8).contains("SwiftlyKit cross-compilation fixture"))
             }
         }
     }

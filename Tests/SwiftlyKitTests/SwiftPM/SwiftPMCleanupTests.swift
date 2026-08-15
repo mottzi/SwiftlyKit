@@ -95,7 +95,7 @@ struct SwiftPMCleanupTests {
         }
     }
 
-    @Test("Build atomically copies before resetting explicit storage")
+    @Test("Build atomically publishes before resetting explicit storage")
     func automaticReset() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-Cleanup") { directory in
@@ -118,7 +118,7 @@ struct SwiftPMCleanupTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 storage: .directory(scratch),
-                output: .copy(to: output, replacingExisting: true, cleanup: .reset)
+                output: .publish(to: output, replacingExisting: true, cleanup: .reset)
             )
 
             let result = try await swiftPM.build(
@@ -127,7 +127,7 @@ struct SwiftPMCleanupTests {
                 onEvent: { await events.record($0) }
             )
 
-            #expect(result == output)
+            #expect(result == output.appending(path: "Tool"))
             #expect(try Data(contentsOf: result) == Data(contentsOf: executable))
             let commands = await runner.commands
             #expect(commands.count == 4)
@@ -135,11 +135,11 @@ struct SwiftPMCleanupTests {
             let scratchOption = try #require(commands[3].arguments.firstIndex(of: "--scratch-path"))
             let scratchArgument = try #require(commands[3].arguments.dropFirst(scratchOption + 1).first)
             #expect(URL(filePath: scratchArgument).pathComponents == scratch.pathComponents)
-            #expect(await events.operations == [.building, .copying, .resettingBuildStorage])
+            #expect(await events.operations == [.building, .publishing, .resettingBuildStorage])
         }
     }
 
-    @Test("A copied executable remains available when automatic cleanup fails")
+    @Test("A published directory remains available when automatic cleanup fails")
     func automaticCleanupFailure() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-Cleanup") { directory in
@@ -166,7 +166,7 @@ struct SwiftPMCleanupTests {
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
                         storage: .directory(scratch),
-                        output: .copy(to: output, cleanup: .reset)
+                        output: .publish(to: output, cleanup: .reset)
                     ),
                     using: cleanupEnvironment(in: directory)
                 )
@@ -190,7 +190,7 @@ struct SwiftPMCleanupTests {
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
                         storage: .directory(scratch),
-                        output: .copy(to: output, cleanup: .clean)
+                        output: .publish(to: output, cleanup: .clean)
                     ),
                     using: cleanupEnvironment(in: directory)
                 )

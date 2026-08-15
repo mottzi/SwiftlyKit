@@ -187,7 +187,7 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
-    @Test("The fast track forwards custom storage, copied output, and cleanup")
+    @Test("The fast track forwards custom storage, published output, and cleanup")
     func outputAndCleanup() async throws {
 
         try await withFastTrackTemporaryDirectory { packageRoot in
@@ -213,12 +213,12 @@ struct SwiftlyKitFastTrackTests {
                 configuration: .release,
                 jobs: 2,
                 storage: .directory(scratch),
-                output: .copy(to: output, replacingExisting: true, cleanup: .reset),
+                output: .publish(to: output, replacingExisting: true, cleanup: .reset),
                 swiftPMTraits: try SwiftPMTraits(["PublishFeature"], includingDefaults: false),
                 onEvent: nil
             )
 
-            #expect(result == output)
+            #expect(result == output.appending(path: "Tool"))
             let commands = await runner.commands
             #expect(commands.count == 5)
             let buildScratchOption = try #require(commands[2].arguments.firstIndex(of: "--scratch-path"))
@@ -292,12 +292,12 @@ struct SwiftlyKitFastTrackTests {
                 product: nil,
                 for: .linux(.x86_64),
                 configuration: .release,
-                output: .copy(to: output),
+                output: .publish(to: output),
                 strip: true,
                 onEvent: nil
             )
 
-            #expect(result == output)
+            #expect(result == output.appending(path: "Tool"))
             #expect(try Data(contentsOf: executable) == originalBytes)
             let commands = await runner.commands
             #expect(commands.count == 5)

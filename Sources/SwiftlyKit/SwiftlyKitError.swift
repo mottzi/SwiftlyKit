@@ -69,8 +69,8 @@ public enum SwiftlyKitError: Equatable {
     /// SwiftPM metadata or build output does not contain the requested executable product.
     case executableProductNotFound(String)
 
-    /// The selected executable product or one of its dependencies requires a runtime resource bundle.
-    case unsupportedProductResources(String)
+    /// SwiftlyKit could not prove or verify the selected product's runtime resource output.
+    case runtimeResourceVerificationFailed
 
     /// The explicit maximum SwiftPM build job count is not positive.
     case invalidBuildJobCount(Int)
@@ -96,13 +96,13 @@ public enum SwiftlyKitError: Equatable {
     /// Automatic cleanup cannot preserve an output located inside build storage.
     case outputInsideBuildStorage(URL)
 
-    /// The copy destination already exists and was not replaced.
+    /// The publication destination already exists and was not replaced.
     case outputAlreadyExists(URL)
 
-    /// SwiftlyKit could not atomically copy the executable to the destination.
-    case outputCopyFailed(URL)
+    /// SwiftlyKit could not atomically publish the runnable directory to the destination.
+    case outputPublicationFailed(URL)
 
-    /// The executable remains at the associated output URL, but the requested post-build cleanup failed.
+    /// The published directory remains at the associated output URL, but the requested post-build cleanup failed.
     case postBuildCleanupFailed(output: URL, detail: String)
 
     /// SwiftPM could not remove compiled products and intermediate build artifacts.
@@ -184,8 +184,8 @@ extension SwiftlyKitError: LocalizedError {
             case .executableProductNotFound(let product):
                 "SwiftPM did not produce the executable product “\(product)”."
 
-            case .unsupportedProductResources(let product):
-                "The executable product “\(product)” requires runtime resources."
+            case .runtimeResourceVerificationFailed:
+                "The selected product's runtime resource output could not be verified."
 
             case .invalidBuildJobCount(let count):
                 "The maximum SwiftPM build job count must be positive; received \(count)."
@@ -214,12 +214,12 @@ extension SwiftlyKitError: LocalizedError {
             case .outputAlreadyExists(let url):
                 "The output already exists at \(url.path(percentEncoded: false))."
 
-            case .outputCopyFailed(let url):
-                "The executable could not be copied to \(url.path(percentEncoded: false))."
+            case .outputPublicationFailed(let url):
+                "The runnable output could not be published to \(url.path(percentEncoded: false))."
 
             case .postBuildCleanupFailed(let output, let detail):
                 """
-                The executable was copied to \(output.path(percentEncoded: false)), \
+                The runnable directory was published to \(output.path(percentEncoded: false)), \
                 but build storage cleanup failed: \(detail)
                 """
 

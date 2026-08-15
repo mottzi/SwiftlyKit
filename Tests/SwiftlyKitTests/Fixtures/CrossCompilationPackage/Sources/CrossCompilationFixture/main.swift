@@ -1,1 +1,3 @@
-print("SwiftlyKit cross-compilation fixture")
+import ResourceDependency
+
+print(resourceMessage())

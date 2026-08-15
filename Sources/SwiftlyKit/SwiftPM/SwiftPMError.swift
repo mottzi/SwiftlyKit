@@ -8,12 +8,12 @@ enum SwiftPMError: Error, Equatable {
     case packageChangedDuringBuild
     case packageSourceStabilityUnavailable(String)
     case executableNotFound(String)
-    case unsupportedProductResources(String)
+    case runtimeResourceVerificationFailed
     case invalidExecutable(String)
     case unsafeBuildStorage(URL)
     case outputInsideBuildStorage(URL)
     case outputAlreadyExists(URL)
-    case outputCopyFailed(URL)
+    case outputPublicationFailed(URL)
     case postBuildCleanupFailed(output: URL, diagnostic: String)
 }
 
@@ -39,8 +39,8 @@ extension SwiftPMError {
             case .executableNotFound(let product):
                 .executableProductNotFound(product)
 
-            case .unsupportedProductResources(let product):
-                .unsupportedProductResources(product)
+            case .runtimeResourceVerificationFailed:
+                .runtimeResourceVerificationFailed
 
             case .invalidExecutable(let detail):
                 .executableVerificationFailed(detail)
@@ -54,8 +54,8 @@ extension SwiftPMError {
             case .outputAlreadyExists(let url):
                 .outputAlreadyExists(url)
 
-            case .outputCopyFailed(let url):
-                .outputCopyFailed(url)
+            case .outputPublicationFailed(let url):
+                .outputPublicationFailed(url)
 
             case .postBuildCleanupFailed(let output, let diagnostic):
                 .postBuildCleanupFailed(output: output, detail: diagnostic)

@@ -111,12 +111,16 @@ extension PackageSourceMonitor {
                 return
             }
 
+            if Self.isCloneOnlyEvent(flags) { return }
+
             let directoryStructuralFlags = FSEventStreamEventFlags(
                 kFSEventStreamEventFlagItemCreated
                     | kFSEventStreamEventFlagItemRemoved
                     | kFSEventStreamEventFlagItemRenamed
             )
-            if flags & FSEventStreamEventFlags(kFSEventStreamEventFlagItemIsDir) != 0,
+            let cloned = FSEventStreamEventFlags(kFSEventStreamEventFlagItemCloned)
+            if flags & cloned == 0,
+               flags & FSEventStreamEventFlags(kFSEventStreamEventFlagItemIsDir) != 0,
                flags & directoryStructuralFlags == 0 {
                 return
             }
@@ -195,9 +199,25 @@ extension PackageSourceMonitor.Storage {
         }
     }
 
+}
+
+extension PackageSourceMonitor.Storage {
+
     private static func canonicalURLs(_ urls: [URL]) throws -> [URL] {
         Array(Set(try urls.map(CanonicalFileURL.resolve)))
             .sorted { $0.path(percentEncoded: false) < $1.path(percentEncoded: false) }
+    }
+
+    private static func isCloneOnlyEvent(_ flags: FSEventStreamEventFlags) -> Bool {
+
+        let cloned = FSEventStreamEventFlags(kFSEventStreamEventFlagItemCloned)
+        let typeFlags = FSEventStreamEventFlags(
+            kFSEventStreamEventFlagItemIsDir
+                | kFSEventStreamEventFlagItemIsFile
+                | kFSEventStreamEventFlagItemIsSymlink
+        )
+
+        return flags & cloned != 0 && flags & ~(cloned | typeFlags) == 0
     }
 
     private static func deepestContainingRoot(_ url: URL, in roots: [URL]) -> Int {

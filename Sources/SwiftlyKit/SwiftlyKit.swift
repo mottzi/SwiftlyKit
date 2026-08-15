@@ -112,9 +112,9 @@ extension SwiftlyKit {
         try await mutationGate.withAccess { try await resolveDependenciesUnderLease(using: environment, onEvent: onEvent) }
     }
     
-    /// Builds and verifies one executable with the prepared toolchain and SDK.
+    /// Builds and verifies one executable with the prepared toolchain and SDK, and returns its launch URL.
     /// Disables automatic resolution and throws `dependencyResolutionRequired` if resolution is necessary.
-    /// Rejects source or resolved-dependency changes, then applies requested stripping, atomic copying, and cleanup.
+    /// Rejects source or resolved-dependency changes, then applies requested stripping, publication, and cleanup.
     public func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
@@ -236,9 +236,9 @@ extension SwiftlyKit {
 
 extension SwiftlyKit {
     
-    /// Runs assessment, authorized preparation, product selection, required dependency resolution, and one verified build.
+    /// Runs the complete fast track for one verified build and returns the executable launch URL.
     /// Uses one SwiftPM environment snapshot, trait configuration, and mutation lease for the complete workflow.
-    /// Applies toolchain, build resource, and output choices and rejects package source changes during compilation.
+    /// Applies toolchain, runtime-resource, and output choices and rejects package source changes during compilation.
     public static func build(
         _ packageRoot: URL,
         product: String? = nil,

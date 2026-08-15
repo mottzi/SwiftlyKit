@@ -7,7 +7,15 @@ let package = Package(
     products: [
         .executable(name: "CrossCompilationFixture", targets: ["CrossCompilationFixture"])
     ],
+    dependencies: [
+        .package(path: "Dependencies/ResourceDependency")
+    ],
     targets: [
-        .executableTarget(name: "CrossCompilationFixture")
+        .executableTarget(
+            name: "CrossCompilationFixture",
+            dependencies: [
+                .product(name: "ResourceDependency", package: "ResourceDependency")
+            ]
+        )
     ]
 )

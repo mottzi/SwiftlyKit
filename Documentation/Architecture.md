@@ -132,19 +132,24 @@ state disjoint.
 The lease does not freeze package sources. `PackageSourceStability` provides a
 separate build-scoped guarantee. SwiftPM first returns the complete resolved
 package graph without automatic resolution. SwiftlyKit starts recursive FSEvents
-observation, captures deterministic source evidence, compiles and verifies the
-executable, captures the evidence again, and drains the event stream. A lasting
+observation, captures deterministic source evidence, compiles, discovers and
+verifies the selected executable and its exact linked runtime resources,
+captures the evidence again, and drains the event stream. A lasting
 change, a reverted change, an unreliable event stream, or a failed capture
 withholds the result. The selected scratch directory and each source root's
 top-level `.build`, `.git`, and `.swiftpm` entries are excluded, but resolved
-dependency roots nested inside scratch override that exclusion.
+dependency roots nested inside scratch override that exclusion. Observation
+finishes before executable stripping, output publication, or cleanup. Those
+steps read build output, not package source.
 
 Source evidence covers paths, bytes, executable permissions, and safe symbolic-
 link destinations across the root package and resolved local or checkout
-dependencies. This includes `Package.swift` and `Package.resolved`. Observation
-ends after compilation and executable verification because stripping, output
-publication, and cleanup do not read source. The module does not build from an
-immutable copy, retain fingerprints, or create durable artifact provenance.
+dependencies. This includes `Package.swift` and `Package.resolved`. The module
+ignores clone-only APFS source notifications that SwiftPM resource copying
+emits. A clone notification with any mutation flag still records a change. The
+final deterministic snapshot also verifies the source bytes and metadata.
+The module does not build from an immutable copy, retain fingerprints, or create
+durable artifact provenance.
 
 Abrupt owner termination can also leave an already launched tool process alive.
 `O_CLOEXEC` ensures that child does not retain SwiftlyKit's lease, which provides
@@ -194,11 +199,12 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   explicit dependency resolution, build execution, optional stripping, and
   build-storage cleanup.
 - `SwiftPM/PackageDescription` decodes SwiftPM package metadata into executable
-  products and their transitive runtime-resource requirements. The facade wraps
+  products. The facade wraps
   the name-ordered products in `ExecutableProducts`, which owns named and sole
   selection policy.
-- `SwiftPM/Output` owns runtime-resource inspection, ELF verification, and
-  staged output transformation and atomic publication.
+- `SwiftPM/Output` owns ELF verification, exact linked runtime-resource
+  discovery, trusted-local resource-tree validation, staged executable
+  transformation, and atomic complete-directory publication.
 - `SwiftPM/SourceStability` owns resolved-graph source discovery, canonical path
   identity, deterministic snapshots, recursive event observation, and the
   build-scoped accept-or-withhold decision.
@@ -265,11 +271,34 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   are bounded.
 - A build result must be an executable, static, little-endian ELF64 file for the
   requested architecture. Stripped results are verified again.
+- Runtime resource ownership comes only from the selected product's final link
+  file and the linked modules' generated resource accessors. Unrelated stale
+  sibling bundles are ignored. Missing, escaping, symbolic-link, malformed, or
+  ambiguous metadata fails closed.
+- Private link and accessor inspection starts only when the binary directory
+  contains a `.resources` candidate. With no candidates, the output is treated
+  as resource-free. Detecting removal of every linked bundle would require
+  private-layout inspection for every resource-free build.
+- A selected runtime bundle is an immediate, uniquely named `.resources`
+  directory beside the executable. Its trusted-local tree contains only regular
+  files and directories, with no symbolic links, hard links, or special files.
 - A successful build has unchanged source evidence across the complete resolved
-  package graph from its initial snapshot through compilation and executable
-  verification. A reverted mutation also rejects the result.
-- Stripping operates on a SwiftlyKit-owned copy and never changes SwiftPM's
-  produced executable in build storage.
-- Requested output publication occurs only after optional stripping and
-  verification, uses an exclusive atomic rename, and never replaces an existing
-  destination.
+  package graph from its initial snapshot through compilation and complete
+  build-output discovery and verification. A reverted mutation also rejects the
+  result.
+- Stripping operates only on a SwiftlyKit-owned executable and never changes
+  SwiftPM's produced executable or runtime resources in build storage.
+- Build-storage output returns a runnable launch URL with required resource
+  bundles as siblings. It does not promise that the executable is portable by
+  itself.
+- Requested output publication stages beside the destination and publishes one
+  complete directory with one executable and only its exact linked bundles. An
+  exclusive rename provides create-only publication. A rename swap provides
+  atomic replacement of an existing nonempty destination before the prior tree
+  is removed. A caller moves or deploys this directory as one unit.
+- Cleanup starts only after successful publication. If cleanup fails, the
+  published directory remains and the error identifies that directory.
+- SwiftPM provides no stable runtime-resource enumeration interface. The output
+  module deliberately couples to the observed link-file and generated-accessor
+  layout in one place and fails closed if that private layout changes while
+  resource candidates exist.

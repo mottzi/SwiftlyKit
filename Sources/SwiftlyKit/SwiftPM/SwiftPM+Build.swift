@@ -25,9 +25,6 @@ extension SwiftPM {
         guard description.products.contains(request.product)
         else { throw SwiftPMError.executableNotFound(request.product.name) }
         
-        guard !description.requiresRuntimeResources(request.product.name)
-        else { throw SwiftPMError.unsupportedProductResources(request.product.name) }
-
         let roots = try await sourceRoots(environment, scratchDirectory, runner)
         let stability = try await Self.startSourceStability(
             roots: roots,
@@ -87,20 +84,19 @@ extension SwiftPM {
 
         let binaryDirectoryURL = URL(filePath: binaryDirectory)
         
-        let runtimeResourceBundles: [String]
+        let output: SwiftPMBuildOutput
         do {
-            runtimeResourceBundles = try BuildOutputInspector.runtimeResourceBundles(in: binaryDirectoryURL)
+            output = try SwiftPMBuildOutput.inspect(
+                product: request.product.name,
+                in: binaryDirectoryURL
+            )
+        } catch let error as SwiftPMError {
+            throw error
         } catch {
-            throw SwiftPMError.invalidExecutable("The build output could not be inspected for runtime resources.")
+            throw SwiftPMError.runtimeResourceVerificationFailed
         }
 
-        guard runtimeResourceBundles.isEmpty else {
-            let names = runtimeResourceBundles.joined(separator: ", ")
-            await report(.building, detail: "Build produced unsupported runtime resource bundles: \(names).", to: onEvent)
-            throw SwiftPMError.unsupportedProductResources(request.product.name)
-        }
-
-        let executable = binaryDirectoryURL.appending(path: request.product.name)
+        let executable = output.executable
         guard FileManager.default.fileExists(atPath: executable.path(percentEncoded: false))
         else { throw SwiftPMError.executableNotFound(request.product.name) }
 
@@ -113,10 +109,9 @@ extension SwiftPM {
                 guard request.strip else { return executable }
 
                 await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
-                return try await AtomicOutputCopier.copy(
+                return try await AtomicOutputPublisher.replaceBuildStorageExecutable(
                     executable,
-                    to: Self.strippedBuildStorageExecutable(for: executable),
-                    replacingExisting: true,
+                    at: Self.strippedBuildStorageExecutable(for: executable),
                     prepare: { stagedExecutable in
                         try await strip(
                             stagedExecutable,
@@ -127,33 +122,36 @@ extension SwiftPM {
                     }
                 )
 
-            case .copy(let destination, let replacingExisting, let cleanup):
-                let output: URL
-
+            case .publish(let destination, let replacingExisting, let cleanup):
                 if request.strip {
                     await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
-                    output = try await AtomicOutputCopier.copy(
-                        executable,
-                        to: destination,
-                        replacingExisting: replacingExisting,
-                        prepare: { stagedExecutable in
+                }
+
+                if !request.strip {
+                    await report(.publishing, detail: "Publishing \(request.product.name).", to: onEvent)
+                }
+                let launchURL = try await AtomicOutputPublisher.publish(
+                    output,
+                    to: destination,
+                    replacingExisting: replacingExisting,
+                    prepareExecutable: { stagedExecutable in
+                        if request.strip {
                             try await strip(
                                 stagedExecutable,
                                 for: request,
                                 using: environment,
                                 onOutput: CommandOutputChunk.handler(for: onEvent)
                             )
-                            await report(.copying, detail: "Copying \(request.product.name).", to: onEvent)
                         }
-                    )
-                } else {
-                    await report(.copying, detail: "Copying \(request.product.name).", to: onEvent)
-                    output = try await AtomicOutputCopier.copy(
-                        executable,
-                        to: destination,
-                        replacingExisting: replacingExisting
-                    )
-                }
+                        try ELFExecutableVerifier.verify(
+                            stagedExecutable,
+                            architecture: environment.target.architecture
+                        )
+                        if request.strip {
+                            await report(.publishing, detail: "Publishing \(request.product.name).", to: onEvent)
+                        }
+                    }
+                )
 
                 do {
                     try await perform(cleanup, in: request.storage, using: environment, onEvent: onEvent)
@@ -161,17 +159,17 @@ extension SwiftPM {
                     throw CancellationError()
                 } catch let error as SwiftPMError {
                     throw SwiftPMError.postBuildCleanupFailed(
-                        output: output,
+                        output: destination,
                         diagnostic: error.cleanupDiagnostic
                     )
                 } catch {
                     throw SwiftPMError.postBuildCleanupFailed(
-                        output: output,
+                        output: destination,
                         diagnostic: "An unexpected cleanup error occurred."
                     )
                 }
 
-                return output
+                return launchURL
         }
     }
 
@@ -206,7 +204,7 @@ extension SwiftPM {
 
     private static func validate(_ output: BuildOutput, outside scratchDirectory: URL) throws {
 
-        guard case .copy(let destination, _, let cleanup) = output,
+        guard case .publish(let destination, _, let cleanup) = output,
               cleanup != .retain
         else { return }
 
