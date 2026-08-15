@@ -25,6 +25,7 @@ struct SwiftlyKitFastTrackTests {
                 product: nil,
                 for: .linux(.x86_64),
                 configuration: .release,
+                jobs: 2,
                 onEvent: nil
             )
 
@@ -33,6 +34,33 @@ struct SwiftlyKitFastTrackTests {
             #expect(commands[2].arguments.contains("x86_64-swift-linux-musl"))
             #expect(commands[2].arguments.contains("Tool"))
             #expect(commands[2].arguments.contains("release"))
+            #expect(try argument(after: "--jobs", in: commands[2].arguments) == "2")
+            #expect(try argument(after: "--jobs", in: commands[3].arguments) == "2")
+        }
+    }
+
+    @Test(
+        "A nonpositive build job count fails before the fast track runs commands",
+        arguments: [0, -1]
+    )
+    func invalidBuildJobs(jobs: Int) async throws {
+
+        try await withFastTrackTemporaryDirectory { packageRoot in
+            let runner = RecordingSubprocessRunner(results: [])
+            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+
+            await #expect(throws: SwiftlyKitError.invalidBuildJobCount(jobs)) {
+                try await kit.build(
+                    packageRoot,
+                    product: nil,
+                    for: .linux(.x86_64),
+                    configuration: .release,
+                    jobs: jobs,
+                    onEvent: nil
+                )
+            }
+
+            #expect(await runner.commands.isEmpty)
         }
     }
 
@@ -179,6 +207,7 @@ struct SwiftlyKitFastTrackTests {
                 product: nil,
                 for: .linux(.x86_64),
                 configuration: .release,
+                jobs: 2,
                 storage: .directory(scratch),
                 output: .copy(to: output, replacingExisting: true, cleanup: .reset),
                 onEvent: nil
@@ -324,6 +353,11 @@ private func fastTrackKit(
 
 private func sdkIdentifier(for version: SwiftVersion) -> String {
     "swift-\(version)-RELEASE_static-linux-1.0.0"
+}
+
+private func argument(after option: String, in arguments: [String]) throws -> String {
+    let optionIndex = try #require(arguments.firstIndex(of: option))
+    return try #require(arguments.dropFirst(optionIndex + 1).first)
 }
 
 private func withFastTrackTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {

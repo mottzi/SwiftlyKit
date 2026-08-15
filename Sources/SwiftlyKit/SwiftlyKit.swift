@@ -110,16 +110,18 @@ extension SwiftlyKit {
     }
     
     /// Builds and verifies one executable with the prepared toolchain and SDK.
-    /// Disables automatic dependency resolution and throws `dependencyResolutionRequired` if resolution is necessary.
-    /// Rejects the result if package sources or resolved dependency state change during compilation.
-    /// Strips the executable if requested, copies it atomically if requested, and then performs requested cleanup.
+    /// Disables automatic resolution and throws `dependencyResolutionRequired` if resolution is necessary.
+    /// Rejects source or resolved-dependency changes, then applies requested stripping, atomic copying, and cleanup.
     public func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> URL {
 
-        try await mutationGate.withAccess { try await buildUnderLease(request, using: environment, onEvent: onEvent) }
+        try request.validate()
+        return try await mutationGate.withAccess {
+            try await buildUnderLease(request, using: environment, onEvent: onEvent)
+        }
     }
 
     /// Removes compiled products and intermediates from the selected SwiftPM scratch storage.
@@ -238,6 +240,7 @@ extension SwiftlyKit {
         for target: BuildTarget = .linux(.x86_64),
         toolchain: ToolchainSelection = .automatic,
         configuration: BuildConfiguration = .release,
+        jobs: Int? = nil,
         storage: BuildStorage = .packageDefault,
         output: BuildOutput = .buildStorage,
         strip: Bool = false,
@@ -251,6 +254,7 @@ extension SwiftlyKit {
             for: target,
             toolchain: toolchain,
             configuration: configuration,
+            jobs: jobs,
             storage: storage,
             output: output,
             strip: strip,
@@ -266,6 +270,7 @@ extension SwiftlyKit {
         for target: BuildTarget,
         toolchain: ToolchainSelection = .automatic,
         configuration: BuildConfiguration,
+        jobs: Int? = nil,
         storage: BuildStorage = .packageDefault,
         output: BuildOutput = .buildStorage,
         strip: Bool = false,
@@ -273,6 +278,7 @@ extension SwiftlyKit {
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> URL {
 
+        try BuildRequest.validate(jobs: jobs)
         let snapshot = swiftPMEnvironment.snapshot()
         return try await mutationGate.withAccess {
             try await buildUnderLease(
@@ -281,6 +287,7 @@ extension SwiftlyKit {
                 for: target,
                 toolchain: toolchain,
                 configuration: configuration,
+                jobs: jobs,
                 storage: storage,
                 output: output,
                 strip: strip,
@@ -296,6 +303,7 @@ extension SwiftlyKit {
         for target: BuildTarget,
         toolchain: ToolchainSelection,
         configuration: BuildConfiguration,
+        jobs: Int?,
         storage: BuildStorage,
         output: BuildOutput,
         strip: Bool,
@@ -314,6 +322,7 @@ extension SwiftlyKit {
         let request = BuildRequest(
             product,
             configuration: configuration,
+            jobs: jobs,
             storage: storage,
             output: output,
             strip: strip

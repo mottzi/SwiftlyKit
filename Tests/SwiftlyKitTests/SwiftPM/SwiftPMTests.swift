@@ -84,6 +84,7 @@ struct SwiftPMTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: mapping.configuration,
+                jobs: 3,
                 storage: .directory(scratch)
             )
 
@@ -106,6 +107,7 @@ struct SwiftPMTests {
             let configurationIndex = try #require(build.arguments.firstIndex(of: "--configuration"))
             #expect(build.arguments.dropFirst(configurationIndex + 1).first == mapping.argument)
             #expect(build.arguments.contains(scratch.path(percentEncoded: false)))
+            #expect(try argument(after: "--jobs", in: build.arguments) == "3")
             #expect(build.environment?["CUSTOM"] == "value")
             #expect(build.environment?["HOME"] == "/trusted/home")
             #expect(build.environment?["SWIFTLY_HOME_DIR"] == "/trusted/swiftly-home")
@@ -114,6 +116,52 @@ struct SwiftPMTests {
             #expect(commands[0].environment?["CUSTOM"] == "value")
             #expect(commands[2].environment?["CUSTOM"] == "value")
             #expect(commands[2].arguments.contains("--show-bin-path"))
+            #expect(try argument(after: "--jobs", in: commands[2].arguments) == "3")
+        }
+    }
+
+    @Test("A default build leaves concurrent job selection to SwiftPM")
+    func defaultBuildJobs() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
+                .success(output: "built"),
+                .success(output: directory.path(percentEncoded: false) + "\n")
+            ])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+
+            _ = try await swiftPM.build(
+                BuildRequest(ExecutableProduct(name: "Tool")),
+                using: buildEnvironment(in: directory)
+            )
+
+            let commands = await runner.commands
+            #expect(!commands[1].arguments.contains("--jobs"))
+            #expect(!commands[2].arguments.contains("--jobs"))
+        }
+    }
+
+    @Test(
+        "A nonpositive build job count fails before running commands",
+        arguments: [0, -1]
+    )
+    func invalidBuildJobs(jobs: Int) async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let runner = RecordingSubprocessRunner(results: [])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+
+            await #expect(throws: SwiftlyKitError.invalidBuildJobCount(jobs)) {
+                try await swiftPM.build(
+                    BuildRequest(ExecutableProduct(name: "Tool"), jobs: jobs),
+                    using: buildEnvironment(in: directory)
+                )
+            }
+
+            #expect(await runner.commands.isEmpty)
         }
     }
 

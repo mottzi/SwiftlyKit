@@ -130,7 +130,8 @@ let executable = try await SwiftlyKit.build(
     product: "MyTool",
     for: .linux(.arm64),
     toolchain: .exact(SwiftVersion(major: 6, minor: 2, patch: 1)),
-    configuration: .debug
+    configuration: .debug,
+    jobs: 4
 )
 ```
 
@@ -297,6 +298,7 @@ let output = URL(filePath: "/path/to/output/MyTool")
 let request = BuildRequest(
     product,
     configuration: .release,
+    jobs: 4,
     storage: .directory(URL(filePath: "/path/to/scratch")),
     output: .copy(to: output, cleanup: .reset),
     strip: true
@@ -344,9 +346,13 @@ for the returned executable.
 | Option | Default | Behavior |
 | --- | --- | --- |
 | `configuration` | `.debug` | Selects the SwiftPM debug or release configuration. |
+| `jobs` | `nil` | Limits concurrent SwiftPM build jobs. `nil` uses the SwiftPM default. |
 | `storage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
 | `output` | `.buildStorage` | Returns the executable in scratch storage. `.copy(to:replacingExisting:cleanup:)` atomically publishes it and then performs the requested cleanup. |
 | `strip` | `false` | Uses the selected toolchain to strip an output copy, and then verifies it again. |
+
+An explicit `jobs` value must be positive. SwiftlyKit rejects zero and negative
+values with `SwiftlyKitError.invalidBuildJobCount` before it runs a subprocess.
 
 Stripping never changes SwiftPM's produced executable. With `.buildStorage`,
 SwiftlyKit returns a deterministic stripped copy inside build storage. With

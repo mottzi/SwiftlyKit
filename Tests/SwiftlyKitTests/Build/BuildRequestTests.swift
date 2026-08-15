@@ -13,9 +13,21 @@ struct BuildRequestTests {
         )
 
         #expect(request.configuration == .debug)
+        #expect(request.jobs == nil)
         #expect(request.storage == .packageDefault)
         #expect(request.output == .buildStorage)
         #expect(request.strip == false)
+    }
+
+    @Test("Requests retain an explicit concurrent build job limit")
+    func jobs() {
+
+        let request = BuildRequest(
+            ExecutableProduct(name: "Server"),
+            jobs: 4
+        )
+
+        #expect(request.jobs == 4)
     }
 
     @Test("Copied output retains build storage by default")

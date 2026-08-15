@@ -67,6 +67,20 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("Concurrent build job limits compile in staged and fast-track workflows")
+    func buildJobsCompile() {
+
+        let staged: @Sendable (ExecutableProduct) -> BuildRequest = { product in
+            BuildRequest(product, jobs: 2)
+        }
+        let fastTrack: @Sendable (URL) async throws -> URL = { packageRoot in
+            try await SwiftlyKit.build(packageRoot, jobs: 2)
+        }
+
+        _ = staged
+        _ = fastTrack
+    }
+
     @Test("Compatible environment discovery compiles without testable access")
     func compatibleEnvironmentDiscoveryCompiles() {
 

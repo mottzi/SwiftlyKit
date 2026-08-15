@@ -69,6 +69,9 @@ public enum SwiftlyKitError: Equatable {
     /// The selected executable product or one of its dependencies requires a runtime resource bundle.
     case unsupportedProductResources(String)
 
+    /// The explicit maximum SwiftPM build job count is not positive.
+    case invalidBuildJobCount(Int)
+
     /// SwiftPM could not prepare the exact SDK search path or build the executable.
     case buildFailed(String)
 
@@ -177,6 +180,9 @@ extension SwiftlyKitError: LocalizedError {
 
             case .unsupportedProductResources(let product):
                 "The executable product “\(product)” requires runtime resources."
+
+            case .invalidBuildJobCount(let count):
+                "The maximum SwiftPM build job count must be positive; received \(count)."
 
             case .buildFailed(let detail):
                 "SwiftPM could not build the executable: \(detail)"

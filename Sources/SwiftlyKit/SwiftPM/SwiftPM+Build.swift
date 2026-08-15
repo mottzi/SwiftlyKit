@@ -8,6 +8,7 @@ extension SwiftPM {
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> URL {
         
+        try request.validate()
         try validateEnvironment(environment)
 
         let scratchDirectory = try SwiftPMScratchDirectory(
@@ -244,6 +245,10 @@ extension SwiftPM {
 
         if scratchDirectory.isExplicit {
             arguments += ["--scratch-path", scratchDirectory.url.path(percentEncoded: false)]
+        }
+
+        if let jobs = request.jobs {
+            arguments += ["--jobs", String(jobs)]
         }
 
         return arguments
