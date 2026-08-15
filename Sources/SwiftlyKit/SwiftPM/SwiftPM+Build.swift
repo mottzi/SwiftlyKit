@@ -126,7 +126,7 @@ extension SwiftPM {
                     }
                 )
 
-            case .copy(let destination, let cleanup):
+            case .copy(let destination, let replacingExisting, let cleanup):
                 let output: URL
 
                 if request.strip {
@@ -134,6 +134,7 @@ extension SwiftPM {
                     output = try await AtomicOutputCopier.copy(
                         executable,
                         to: destination,
+                        replacingExisting: replacingExisting,
                         prepare: { stagedExecutable in
                             try await strip(
                                 stagedExecutable,
@@ -146,7 +147,11 @@ extension SwiftPM {
                     )
                 } else {
                     await report(.copying, detail: "Copying \(request.product.name).", to: onEvent)
-                    output = try await AtomicOutputCopier.copy(executable, to: destination)
+                    output = try await AtomicOutputCopier.copy(
+                        executable,
+                        to: destination,
+                        replacingExisting: replacingExisting
+                    )
                 }
 
                 do {
@@ -200,7 +205,7 @@ extension SwiftPM {
 
     private static func validate(_ output: BuildOutput, outside scratchDirectory: URL) throws {
 
-        guard case .copy(let destination, let cleanup) = output,
+        guard case .copy(let destination, _, let cleanup) = output,
               cleanup != .retain
         else { return }
 

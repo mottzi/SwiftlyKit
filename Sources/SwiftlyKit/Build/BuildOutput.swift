@@ -7,8 +7,8 @@ public enum BuildOutput: Sendable, Equatable {
     /// A stripped build returns a SwiftlyKit-owned copy and preserves the SwiftPM-produced executable.
     case buildStorage
 
-    /// Atomically copies the executable to a new destination, then performs the requested cleanup.
-    /// The destination's parent must exist. Cleanup requires the destination to be outside build storage.
-    case copy(to: URL, cleanup: BuildCleanup = .retain)
+    /// Atomically copies the executable to a destination, then performs the requested cleanup.
+    /// Replacement is opt-in. The parent must exist. Non-retaining cleanup requires output outside build storage.
+    case copy(to: URL, replacingExisting: Bool = false, cleanup: BuildCleanup = .retain)
 
 }

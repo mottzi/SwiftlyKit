@@ -103,6 +103,7 @@ struct SwiftPMCleanupTests {
             let executable = binaryDirectory.appending(path: "Tool")
             let output = directory.appending(path: "OutputTool")
             try writeELF(to: executable, architecture: .arm64)
+            try Data("previous output".utf8).write(to: output)
 
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
@@ -115,7 +116,7 @@ struct SwiftPMCleanupTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 storage: .directory(scratch),
-                output: .copy(to: output, cleanup: .reset)
+                output: .copy(to: output, replacingExisting: true, cleanup: .reset)
             )
 
             let result = try await swiftPM.build(

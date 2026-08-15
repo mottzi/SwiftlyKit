@@ -163,6 +163,7 @@ struct SwiftlyKitFastTrackTests {
             let scratch = packageRoot.appending(path: "scratch")
             let output = packageRoot.appending(path: "OutputTool")
             try writeELF(to: executable, architecture: .x86_64)
+            try Data("previous output".utf8).write(to: output)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
@@ -179,7 +180,7 @@ struct SwiftlyKitFastTrackTests {
                 for: .linux(.x86_64),
                 configuration: .release,
                 storage: .directory(scratch),
-                output: .copy(to: output, cleanup: .reset),
+                output: .copy(to: output, replacingExisting: true, cleanup: .reset),
                 onEvent: nil
             )
 

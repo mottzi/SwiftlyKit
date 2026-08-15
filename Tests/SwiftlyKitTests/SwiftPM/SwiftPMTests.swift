@@ -454,6 +454,7 @@ struct SwiftPMTests {
             let executable = directory.appending(path: "Tool")
             let output = directory.appending(path: "PublishedTool")
             try writeELF(to: executable, architecture: .arm64)
+            try Data("previous output".utf8).write(to: output)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
@@ -465,7 +466,7 @@ struct SwiftPMTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: .release,
-                output: .copy(to: output),
+                output: .copy(to: output, replacingExisting: true),
                 strip: true
             )
             let values = try SwiftPMEnvironment([
@@ -507,6 +508,39 @@ struct SwiftPMTests {
                 EventOutput(stream: .standardOutput, text: "built"),
                 EventOutput(stream: .standardOutput, text: "stripped")
             ])
+        }
+    }
+
+    @Test("Copied output refuses replacement by default")
+    func copyRefusesReplacementByDefault() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let executable = directory.appending(path: "Tool")
+            let output = directory.appending(path: "PublishedTool")
+            try writeELF(to: executable, architecture: .arm64)
+            let publishedBytes = Data("previous output".utf8)
+            try publishedBytes.write(to: output)
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
+                .success(output: "built"),
+                .success(output: directory.path(percentEncoded: false) + "\n")
+            ])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+
+            await #expect(throws: SwiftPMError.outputAlreadyExists(output)) {
+                try await swiftPM.build(
+                    BuildRequest(
+                        ExecutableProduct(name: "Tool"),
+                        output: .copy(to: output)
+                    ),
+                    using: buildEnvironment(in: directory)
+                )
+            }
+
+            #expect(try Data(contentsOf: output) == publishedBytes)
+            #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false)).allSatisfy {
+                !$0.hasPrefix(".PublishedTool.swiftlykit-")
+            })
         }
     }
 
@@ -553,6 +587,8 @@ struct SwiftPMTests {
             let output = directory.appending(path: "PublishedTool")
             try writeELF(to: executable, architecture: .arm64)
             let originalBytes = try Data(contentsOf: executable)
+            let publishedBytes = Data("previous output".utf8)
+            try publishedBytes.write(to: output)
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
                 .success(output: "built"),
@@ -568,7 +604,7 @@ struct SwiftPMTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        output: .copy(to: output),
+                        output: .copy(to: output, replacingExisting: true),
                         strip: true
                     ),
                     using: buildEnvironment(in: directory)
@@ -576,7 +612,7 @@ struct SwiftPMTests {
             }
 
             #expect(try Data(contentsOf: executable) == originalBytes)
-            #expect(!FileManager.default.fileExists(atPath: output.path(percentEncoded: false)))
+            #expect(try Data(contentsOf: output) == publishedBytes)
             #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false)).allSatisfy {
                 !$0.hasPrefix(".PublishedTool.swiftlykit-")
             })

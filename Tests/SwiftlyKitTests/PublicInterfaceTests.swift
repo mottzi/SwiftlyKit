@@ -128,6 +128,15 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("Atomic output replacement compiles without testable access")
+    func outputReplacementCompiles() {
+
+        let output: @Sendable (URL) -> BuildOutput = { destination in
+            .copy(to: destination, replacingExisting: true, cleanup: .reset)
+        }
+        _ = output
+    }
+
 }
 
 private func documentedWorkflow(_ packageRoot: URL) async throws -> URL {

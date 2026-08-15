@@ -148,6 +148,16 @@ let executable = try await SwiftlyKit.build(
 )
 ```
 
+Set `replacingExisting` only if the build must atomically publish to a stable
+output URL that can already contain an earlier executable:
+
+```swift
+let executable = try await SwiftlyKit.build(
+    packageRoot,
+    output: .copy(to: destination, replacingExisting: true)
+)
+```
+
 > [!IMPORTANT]
 > The fast track authorizes SwiftlyKit to install required environment
 > components. It also authorizes dependency resolution when SwiftPM requires it.
@@ -335,7 +345,7 @@ for the returned executable.
 | --- | --- | --- |
 | `configuration` | `.debug` | Selects the SwiftPM debug or release configuration. |
 | `storage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
-| `output` | `.buildStorage` | Returns the executable in scratch storage. `.copy(to:cleanup:)` atomically copies it and then performs the requested cleanup. |
+| `output` | `.buildStorage` | Returns the executable in scratch storage. `.copy(to:replacingExisting:cleanup:)` atomically publishes it and then performs the requested cleanup. |
 | `strip` | `false` | Uses the selected toolchain to strip an output copy, and then verifies it again. |
 
 Stripping never changes SwiftPM's produced executable. With `.buildStorage`,
@@ -343,9 +353,11 @@ SwiftlyKit returns a deterministic stripped copy inside build storage. With
 `.copy`, SwiftlyKit strips and verifies a temporary sibling before it atomically
 publishes the requested output. A strip failure publishes nothing.
 
-The parent directory of a copied output must exist. SwiftlyKit never replaces
-an existing item at the output URL. It throws
-`SwiftlyKitError.outputAlreadyExists` if the destination exists.
+The parent directory of a copied output must exist. By default, SwiftlyKit
+throws `SwiftlyKitError.outputAlreadyExists` if the destination exists. Set
+`replacingExisting` to replace that exact item atomically. SwiftlyKit publishes
+only after stripping and verification succeed, and performs cleanup only after
+publication succeeds.
 
 `BuildCleanup.retain` keeps all scratch storage and is the default.
 `BuildCleanup.clean` delegates to `swift package clean`: it removes compiled
