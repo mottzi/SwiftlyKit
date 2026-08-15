@@ -687,8 +687,7 @@ Static Linux SDK to already be installed. They build and verify both supported
 architectures in temporary scratch storage and prove that a second identical
 build performs no compilation or linking.
 
-For the internal design, see [Architecture](Documentation/Architecture.md). For
-the complete 0.1.0 release boundary, see [MVP 0.1.0](Documentation/MVP-0.1.0.md).
+For the internal design, see [Architecture](Documentation/Architecture.md).
 
 ## License
 
