@@ -33,7 +33,8 @@ let package = Package(
                 "SwiftlyKitCoordinationFixture"
             ],
             resources: [
-                .copy("Fixtures/CrossCompilationPackage")
+                .copy("Fixtures/CrossCompilationPackage"),
+                .copy("Fixtures/EnvironmentConditionalPackage")
             ]
         ),
         .executableTarget(

@@ -68,19 +68,23 @@ struct SwiftPMTests {
                 .success(output: "built"),
                 .success(output: directory.path(percentEncoded: false) + "\n")
             ])
-            let environment = buildEnvironment(in: directory)
+            let values = try SwiftPMEnvironment([
+                "CUSTOM": .plain("value")
+            ])
+            let snapshot = values.snapshot(inheriting: [
+                "HOME": "/trusted/home",
+                "SWIFTLY_HOME_DIR": "/trusted/swiftly-home",
+                "SWIFTLY_TOOLCHAINS_DIR": "/trusted/toolchains"
+            ])
+            let environment = buildEnvironment(
+                in: directory,
+                swiftPMEnvironment: snapshot
+            )
             let scratch = directory.appending(path: "scratch")
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: mapping.configuration,
-                storage: .directory(scratch),
-                environment: [
-                    "CUSTOM": "value",
-                    "HOME": "/untrusted/home",
-                    "SWIFTLY_BIN_DIR": "/untrusted/bin",
-                    "SWIFTLY_HOME_DIR": "/untrusted/swiftly-home",
-                    "SWIFTLY_TOOLCHAINS_DIR": "/untrusted/toolchains"
-                ]
+                storage: .directory(scratch)
             )
 
             let swiftPM = SwiftPM(
@@ -103,10 +107,12 @@ struct SwiftPMTests {
             #expect(build.arguments.dropFirst(configurationIndex + 1).first == mapping.argument)
             #expect(build.arguments.contains(scratch.path(percentEncoded: false)))
             #expect(build.environment?["CUSTOM"] == "value")
-            #expect(build.environment?["HOME"] == ProcessInfo.processInfo.environment["HOME"])
-            #expect(build.environment?["SWIFTLY_HOME_DIR"] == ProcessInfo.processInfo.environment["SWIFTLY_HOME_DIR"])
-            #expect(build.environment?["SWIFTLY_TOOLCHAINS_DIR"] == ProcessInfo.processInfo.environment["SWIFTLY_TOOLCHAINS_DIR"])
+            #expect(build.environment?["HOME"] == "/trusted/home")
+            #expect(build.environment?["SWIFTLY_HOME_DIR"] == "/trusted/swiftly-home")
+            #expect(build.environment?["SWIFTLY_TOOLCHAINS_DIR"] == "/trusted/toolchains")
             #expect(build.environment?["SWIFTLY_BIN_DIR"] == "/")
+            #expect(commands[0].environment?["CUSTOM"] == "value")
+            #expect(commands[2].environment?["CUSTOM"] == "value")
             #expect(commands[2].arguments.contains("--show-bin-path"))
         }
     }
@@ -390,7 +396,11 @@ struct SwiftPMTests {
                 .success(output: "resolved", standardError: "warning")
             ])
             let events = SwiftPMEventRecorder()
-            let environment = buildEnvironment(in: directory)
+            let values = try SwiftPMEnvironment(["RESOLUTION_VALUE": .plain("enabled")])
+            let environment = buildEnvironment(
+                in: directory,
+                swiftPMEnvironment: values.snapshot(inheriting: [:])
+            )
             let swiftPM = SwiftPM(
                 runner: runner,
                 validateEnvironment: { _ in }
@@ -407,6 +417,7 @@ struct SwiftPMTests {
                 "run", "swift", "package", "resolve", "+6.2.1"
             ])
             #expect(commands[0].workingDirectory == directory)
+            #expect(commands[0].environment?["RESOLUTION_VALUE"] == "enabled")
             #expect(await events.operations == [.resolvingDependencies])
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "resolved"),
@@ -457,6 +468,13 @@ struct SwiftPMTests {
                 output: .copy(to: output),
                 strip: true
             )
+            let values = try SwiftPMEnvironment([
+                "BUILD_SECRET": .sensitive("private")
+            ])
+            let environment = buildEnvironment(
+                in: directory,
+                swiftPMEnvironment: values.snapshot(inheriting: ["BASE": "value"])
+            )
             let swiftPM = SwiftPM(
                 runner: runner,
                 validateEnvironment: { _ in }
@@ -464,7 +482,7 @@ struct SwiftPMTests {
 
             let result = try await swiftPM.build(
                 request,
-                using: buildEnvironment(in: directory),
+                using: environment,
                 onEvent: { await events.record($0) }
             )
 
@@ -479,6 +497,11 @@ struct SwiftPMTests {
             #expect(strippedExecutable != output.path(percentEncoded: false))
             #expect(strippedExecutable.hasPrefix(directory.path(percentEncoded: false) + "/.PublishedTool.swiftlykit-"))
             #expect(!FileManager.default.fileExists(atPath: strippedExecutable))
+            #expect(commands[0...2].allSatisfy { $0.environment?["BUILD_SECRET"] == "private" })
+            #expect(commands[0...2].allSatisfy { $0.sensitiveEnvironmentKeys == ["BUILD_SECRET"] })
+            #expect(commands[3].environment?["BUILD_SECRET"] == nil)
+            #expect(commands[3].environment?["BASE"] == "value")
+            #expect(commands[3].sensitiveEnvironmentKeys.isEmpty)
             #expect(await events.operations == [.building, .stripping, .copying])
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "built"),
@@ -562,7 +585,10 @@ struct SwiftPMTests {
 
 }
 
-private func buildEnvironment(in directory: URL) -> LocalBuildEnvironment {
+private func buildEnvironment(
+    in directory: URL,
+    swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot()
+) -> LocalBuildEnvironment {
 
     LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
@@ -570,7 +596,8 @@ private func buildEnvironment(in directory: URL) -> LocalBuildEnvironment {
         packageRoot: directory,
         swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
-        target: .linux(.arm64)
+        target: .linux(.arm64),
+        swiftPMEnvironment: swiftPMEnvironment
     )
 }
 

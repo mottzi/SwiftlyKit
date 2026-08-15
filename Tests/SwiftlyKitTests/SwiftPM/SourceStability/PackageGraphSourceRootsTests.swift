@@ -27,7 +27,11 @@ struct PackageGraphSourceRootsTests {
             }
             """
             let runner = RecordingSubprocessRunner(results: [.success(output: graph)])
-            let environment = packageGraphEnvironment(in: directory)
+            let values = try SwiftPMEnvironment(["GRAPH_VALUE": .plain("enabled")])
+            let environment = packageGraphEnvironment(
+                in: directory,
+                swiftPMEnvironment: values.snapshot(inheriting: [:])
+            )
             let scratch = try SwiftPMScratchDirectory(
                 storage: .directory(directory.appending(path: "scratch")),
                 packageRoot: directory
@@ -48,18 +52,23 @@ struct PackageGraphSourceRootsTests {
             #expect(command.arguments.contains("--format"))
             #expect(command.arguments.contains("json"))
             #expect(command.arguments.contains(scratch.url.path(percentEncoded: false)))
+            #expect(command.environment?["GRAPH_VALUE"] == "enabled")
         }
     }
 
 }
 
-private func packageGraphEnvironment(in directory: URL) -> LocalBuildEnvironment {
+private func packageGraphEnvironment(
+    in directory: URL,
+    swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot()
+) -> LocalBuildEnvironment {
     LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
         staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
         packageRoot: directory,
         swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
-        target: .linux(.arm64)
+        target: .linux(.arm64),
+        swiftPMEnvironment: swiftPMEnvironment
     )
 }

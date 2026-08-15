@@ -16,7 +16,6 @@ struct BuildRequestTests {
         #expect(request.storage == .packageDefault)
         #expect(request.output == .buildStorage)
         #expect(request.strip == false)
-        #expect(request.environment.isEmpty)
     }
 
     @Test("Copied output retains build storage by default")

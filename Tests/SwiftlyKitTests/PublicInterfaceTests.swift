@@ -20,6 +20,39 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("The staged SwiftPM environment workflow compiles without testable access")
+    func stagedSwiftPMEnvironmentCompiles() {
+
+        let workflow: @Sendable (EnvironmentAssessment, String) async throws -> LocalBuildEnvironment = {
+            assessment, token in
+            let values = try SwiftPMEnvironment([
+                "PACKAGE_FLAVOR": .plain("production"),
+                "SWIFTPM_REGISTRY_TOKEN": .sensitive(token),
+                "UNWANTED_PARENT_VALUE": .unset
+            ])
+            return try await SwiftlyKit().prepare(
+                assessment,
+                swiftPMEnvironment: values
+            )
+        }
+        _ = workflow
+    }
+
+    @Test("The fast-track SwiftPM environment workflow compiles without testable access")
+    func fastTrackSwiftPMEnvironmentCompiles() {
+
+        let workflow: @Sendable (URL, String) async throws -> URL = { packageRoot, token in
+            try await SwiftlyKit.build(
+                packageRoot,
+                swiftPMEnvironment: try SwiftPMEnvironment([
+                    "PKG_CONFIG_PATH": .plain("/opt/linux/lib/pkgconfig"),
+                    "SWIFTPM_REGISTRY_TOKEN": .sensitive(token)
+                ])
+            )
+        }
+        _ = workflow
+    }
+
     @Test("The fast track exposes exact toolchain selection and stripping")
     func fastTrackToolchainAndStrippingCompile() {
 

@@ -36,6 +36,42 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
+    @Test("The fast track binds one SwiftPM environment snapshot to every phase")
+    func swiftPMEnvironmentSnapshot() async throws {
+
+        try await withFastTrackTemporaryDirectory { packageRoot in
+            let executable = packageRoot.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .x86_64)
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: packageJSON),
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: packageRoot.path(percentEncoded: false) + "\n")
+            ])
+            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let values = try SwiftPMEnvironment([
+                "BUILD_MODE": .plain("production"),
+                "BUILD_TOKEN": .sensitive("private")
+            ])
+
+            _ = try await kit.build(
+                packageRoot,
+                product: nil,
+                for: .linux(.x86_64),
+                configuration: .release,
+                swiftPMEnvironment: values,
+                onEvent: nil
+            )
+
+            let commands = await runner.commands
+            #expect(commands.count == 4)
+            #expect(commands.allSatisfy { $0.environment?["BUILD_MODE"] == "production" })
+            #expect(commands.allSatisfy { $0.environment?["BUILD_TOKEN"] == "private" })
+            #expect(commands.allSatisfy { $0.sensitiveEnvironmentKeys == ["BUILD_TOKEN"] })
+        }
+    }
+
     @Test("An unspecified product rejects an ambiguous package")
     func ambiguousProduct() async throws {
 

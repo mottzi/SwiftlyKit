@@ -158,6 +158,7 @@ public struct SwiftlyKit: Sendable {
 
     public func prepare(
         _ assessment: EnvironmentAssessment,
+        swiftPMEnvironment: SwiftPMEnvironment = .inherited,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> LocalBuildEnvironment
 
@@ -184,7 +185,8 @@ extension SwiftlyKitEvent {
 
 `SwiftlyKit()` is the only public initializer. Production paths and internal
 implementations are not configurable through a global public configuration
-object. Request-specific choices belong to `BuildRequest`.
+object. Workflow-scoped SwiftPM values bind during preparation. Output-specific
+choices belong to `BuildRequest`.
 
 ## Core values
 
@@ -226,8 +228,9 @@ speculative download-size estimate.
 `LocalBuildEnvironment` is an immutable, `Sendable` capability value returned by
 `prepare(_:)`. It binds later operations to the canonical package root, build
 target, exact Swiftly executable, stable Swift release, and matching Static
-Linux SDK. Callers establish those invariants once during assessment instead of
-repeating them in every later operation.
+Linux SDK. It also stores one private, resolved SwiftPM process environment
+snapshot. Callers establish those invariants once instead of repeating them in
+every later operation.
 
 It exposes displayable version and SDK identity information. Internal paths and
 provider objects do not become public API.
@@ -247,10 +250,9 @@ public struct BuildRequest: Sendable {
     public init(
         _ product: ExecutableProduct,
         configuration: BuildConfiguration = .debug,
-        scratchDirectory: URL? = nil,
-        output: URL? = nil,
-        strip: Bool = false,
-        environment: [String: String] = [:]
+        storage: BuildStorage = .packageDefault,
+        output: BuildOutput = .buildStorage,
+        strip: Bool = false
     )
 }
 
@@ -481,14 +483,32 @@ executable. A consumer that needs a durable output supplies `output`.
 
 ### Environment variables
 
-Build subprocesses inherit the consumer process environment. `BuildRequest`
-environment entries add or replace values for the build invocation.
+`SwiftPMEnvironment` describes workflow-scoped changes to the inherited process
+environment. `.plain` adds or replaces a nonsecret value, `.sensitive` adds or
+replaces a value that SwiftlyKit must redact, and `.unset` removes an inherited
+value. `prepare(_:swiftPMEnvironment:onEvent:)` captures and resolves the host
+environment once. The returned `LocalBuildEnvironment` privately stores that
+immutable snapshot.
 
-SwiftlyKit may apply required overrides that preserve the assessed exact
-toolchain and SDK. Required correctness overrides take precedence over request
-additions.
+SwiftlyKit passes the identical snapshot to package inspection, dependency graph
+inspection, dependency resolution, build, bin-path lookup, clean, and reset.
+Caller changes do not reach Swiftly preparation, downloads, `llvm-objcopy`, file
+copying, or executable verification.
 
-Environment values are never included in events or error descriptions.
+Names must use the portable environment-variable form. Values must not contain
+NUL. SwiftlyKit rejects changes to protected host, Swiftly storage, compiler,
+toolchain, and SDK values. It removes inherited compiler, toolchain, and SDK
+overrides that can defeat the prepared Local build environment.
+
+SwiftlyKit automatically marks supported SwiftPM registry, source-control,
+password, and netrc credential variables as sensitive. It replaces exact
+sensitive values with `<redacted>` in retained output, diagnostics, errors, and
+streamed events, including values split across output chunks.
+
+Redaction protects SwiftlyKit output only. A trusted manifest, plugin, SwiftPM
+cache, or external tool can consume or persist supplied values. SwiftlyKit keeps
+values only in memory. It does not provide Keychain storage, credential brokers,
+persistent profiles, typed `pkg-config` settings, or arbitrary SwiftPM arguments.
 
 ### Output publication
 
@@ -638,8 +658,8 @@ It covers at least:
 - output publication failure.
 
 Errors may contain the executed program, redacted arguments, exit status, and a
-bounded excerpt of process output. They must not contain environment values,
-credentials, complete unbounded output, or a retained log path.
+bounded excerpt of process output. They must not contain sensitive environment
+values, credentials, complete unbounded output, or a retained log path.
 
 Underlying implementation errors remain available for debugging where Swift's
 error conventions permit, but internal provider and process types are not public
@@ -729,7 +749,12 @@ acceptance fixtures prove all of the following:
     SwiftlyKit processes for one user; the fast track holds one lease throughout.
 22. Events stream without persisted logs, and errors contain only bounded,
     redacted process context.
-23. SwiftlyKit creates no database, ownership journal, retained Build record, or
+23. One captured SwiftPM environment reaches inspection, graph discovery,
+    resolution, build, bin-path lookup, clean, and reset, but not preparation,
+    downloads, stripping, copying, or verification.
+24. Sensitive values remain redacted across result, diagnostic, event, chunk,
+    overlap, and UTF-8 boundaries.
+25. SwiftlyKit creates no database, ownership journal, retained Build record, or
     Artifact bundle.
 
 ## Upstream references

@@ -132,7 +132,8 @@ struct SwiftlyKitWorkflowTests {
                 packageRoot: packageRoot,
                 swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
                 sdkBundleURL: packageRoot.appending(path: "sdk.artifactbundle"),
-                target: .linux(.arm64)
+                target: .linux(.arm64),
+                swiftPMEnvironment: SwiftPMEnvironment.inherited.snapshot()
             )
 
             let resolution = Task {
@@ -323,7 +324,8 @@ private func workflowEnvironment(packageRoot: URL) -> LocalBuildEnvironment {
         packageRoot: packageRoot,
         swiftly: SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly")),
         sdkBundleURL: packageRoot.appending(path: "sdk.artifactbundle"),
-        target: .linux(.arm64)
+        target: .linux(.arm64),
+        swiftPMEnvironment: SwiftPMEnvironment.inherited.snapshot()
     )
 }
 

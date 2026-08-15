@@ -158,7 +158,8 @@ let executable = try await SwiftlyKit.build(
 
 The staged API separates read-only assessment from operations that can change
 the environment or package. One `LocalBuildEnvironment` binds all later
-operations to the assessed package, target, toolchain, and SDK.
+operations to the assessed package, target, toolchain, SDK, and SwiftPM process
+environment snapshot.
 
 ### 1. Assess the environment
 
@@ -213,14 +214,52 @@ official stable release is compatible.
 ### 2. Prepare the environment
 
 Pass the accepted assessment to `prepare(_:)`. This call authorizes only the
-components in `requiredComponents`.
+components in `requiredComponents`. You can also bind values that every later
+SwiftPM operation must observe:
 
 ```swift
-let environment = try await kit.prepare(assessment)
+let values = try SwiftPMEnvironment([
+    "PACKAGE_FLAVOR": .plain("production"),
+    "PKG_CONFIG_PATH": .plain("/opt/linux/lib/pkgconfig"),
+    "SWIFTPM_REGISTRY_TOKEN": .sensitive(token),
+    "UNWANTED_PARENT_VALUE": .unset
+])
+
+let environment = try await kit.prepare(
+    assessment,
+    swiftPMEnvironment: values
+)
 ```
 
 You must call `prepare(_:)` even when `requiresInstallation` is `false`. The
 returned environment is the capability that the other staged operations need.
+SwiftlyKit captures the host environment during this call. Later changes to the
+host environment or the input dictionary do not change the prepared snapshot.
+
+`.plain` adds or replaces a nonsecret value, `.sensitive` adds or replaces a
+value that SwiftlyKit redacts from its output, and `.unset` removes an inherited
+value. SwiftlyKit automatically treats its supported SwiftPM credential
+variables as sensitive. It rejects invalid names, NUL values, and values that
+can replace the selected toolchain, SDK, Swiftly storage, or protected host
+state. Inherited compiler and SDK overrides are removed.
+
+The automatically sensitive names are `SWIFTPM_REGISTRY_TOKEN`,
+`SWIFTPM_REGISTRY_LOGIN`, `SWIFTPM_REGISTRY_PASSWORD`,
+`SWIFTPM_SOURCE_CONTROL_TOKEN`, and `SWIFTPM_NETRC_DATA`. Protected names are
+`CFFIXED_USER_HOME`, `HOME`, `PATH`, `DEVELOPER_DIR`, Swiftly home, bin, and
+toolchain-directory names, compiler and linker selectors such as `SWIFT_EXEC`,
+`CC`, `AR`, and `LIBTOOL`, SDK and toolchain selectors, and SwiftPM custom tool
+directories.
+
+The snapshot applies to package inspection, graph discovery, dependency
+resolution, build, bin-path lookup, clean, and reset. Caller changes do not
+reach Swiftly preparation, downloads, stripping, copying, or verification.
+
+> [!WARNING]
+> Redaction protects output returned or streamed by SwiftlyKit. A trusted
+> manifest, plugin, SwiftPM cache, or external tool can still consume or persist
+> supplied values. SwiftlyKit keeps no credential profile and does not replace a
+> credential store.
 
 If `Package.swift` or the applicable `.swift-version` file changes after
 assessment, preparation throws `SwiftlyKitError.staleAssessment`. Run assessment
@@ -298,7 +337,6 @@ for the returned executable.
 | `storage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
 | `output` | `.buildStorage` | Returns the executable in scratch storage. `.copy(to:cleanup:)` atomically copies it and then performs the requested cleanup. |
 | `strip` | `false` | Uses the selected toolchain to strip an output copy, and then verifies it again. |
-| `environment` | `[:]` | Adds or replaces values for build, bin-path, and strip subprocesses. SwiftlyKit keeps values that protect the prepared toolchain and SDK. |
 
 Stripping never changes SwiftPM's produced executable. With `.buildStorage`,
 SwiftlyKit returns a deterministic stripped copy inside build storage. With
@@ -548,6 +586,7 @@ provides a user-facing description. Common control-flow errors include:
 - `dependencyResolutionRequired`
 - `developerToolsUnavailable`
 - `commandLineToolsInstallationRequestFailed`
+- `invalidSwiftPMEnvironmentVariable`
 - `executableProductSelectionRequired`
 - `staleAssessment`
 - `packageChangedDuringBuild`
@@ -580,7 +619,8 @@ do {
 | `HostReadiness` | Reports host support and active developer tools readiness without a package. |
 | `EnvironmentChoices` | Lists exact compatible assessments and applies automatic or exact selection without more I/O. |
 | `EnvironmentAssessment` | Describes the selected environment and required installations. |
-| `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, and SDK. |
+| `SwiftPMEnvironment` | Adds, redacts, or removes values for one complete SwiftPM workflow. |
+| `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, SDK, and process snapshot. |
 | `ExecutableProducts` | Lists discovered products and selects a named or sole executable. |
 | `BuildRequest` | Selects one product and its build options. |
 | `BuildStorage` | Selects package-default or explicit SwiftPM scratch storage. |

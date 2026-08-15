@@ -12,45 +12,50 @@ extension SwiftPM {
 
 extension SwiftPM {
 
-    /// Creates a Swift command for the prepared toolchain and protected environment.
+    /// Creates a SwiftPM command with the snapshot bound to the prepared environment.
     static func command(
         _ environment: LocalBuildEnvironment,
-        swiftArguments: [String],
-        additions: [String: String] = [:]
+        swiftArguments: [String]
     ) -> SubprocessCommand {
 
         Self.command(
             environment,
             tool: "swift",
             toolArguments: swiftArguments,
-            additions: additions
+            processEnvironment: environment.swiftPMEnvironment.values,
+            sensitiveEnvironmentKeys: environment.swiftPMEnvironment.sensitiveNames
         )
     }
 
-    /// Creates a selected-tool command for the prepared toolchain and protected environment.
-    static func command(
+    /// Creates a selected non-SwiftPM tool command without caller environment values.
+    static func toolCommand(
+        _ environment: LocalBuildEnvironment,
+        tool: String,
+        toolArguments: [String]
+    ) -> SubprocessCommand {
+
+        Self.command(
+            environment,
+            tool: tool,
+            toolArguments: toolArguments,
+            processEnvironment: environment.swiftPMEnvironment.toolValues,
+            sensitiveEnvironmentKeys: []
+        )
+    }
+
+}
+
+extension SwiftPM {
+
+    private static func command(
         _ environment: LocalBuildEnvironment,
         tool: String,
         toolArguments: [String],
-        additions: [String: String]
+        processEnvironment: [String: String],
+        sensitiveEnvironmentKeys: Set<String>
     ) -> SubprocessCommand {
 
-        let inheritedEnvironment = ProcessInfo.processInfo.environment
-        var processEnvironment = inheritedEnvironment
-        processEnvironment.merge(additions) { _, requested in requested }
-
-        let protectedKeys = [
-            "HOME",
-            "CFFIXED_USER_HOME",
-            "SWIFTLY_HOME",
-            "SWIFTLY_HOME_DIR",
-            "SWIFTLY_TOOLCHAINS_DIR"
-        ]
-        
-        for protectedKey in protectedKeys {
-            processEnvironment[protectedKey] = inheritedEnvironment[protectedKey]
-        }
-
+        var processEnvironment = processEnvironment
         processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftly.executableURL
             .deletingLastPathComponent()
             .path(percentEncoded: false)
@@ -60,7 +65,8 @@ extension SwiftPM {
             toolchain: environment.swiftVersion,
             arguments: toolArguments,
             workingDirectory: environment.packageRoot,
-            environment: processEnvironment
+            environment: processEnvironment,
+            sensitiveEnvironmentKeys: sensitiveEnvironmentKeys
         )
     }
 

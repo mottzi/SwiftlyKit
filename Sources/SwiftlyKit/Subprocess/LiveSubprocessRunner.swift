@@ -5,9 +5,13 @@ import System
 /// The sole adapter between SwiftlyKit operations and swift-subprocess.
 struct LiveSubprocessRunner: SubprocessRunning {
 
+    /// Runs one command and redacts its marked environment values from all returned output.
     func run(_ command: SubprocessCommand, onOutput: SubprocessOutputHandler?) async throws -> SubprocessResult {
 
         try Task.checkCancellation()
+        let sensitiveValues = command.sensitiveEnvironmentKeys.compactMap { name in
+            command.environment?[name]
+        }
 
         do {
             let result = try await Subprocess.run(
@@ -20,8 +24,18 @@ struct LiveSubprocessRunner: SubprocessRunning {
                 output: .sequence,
                 error: .sequence
             ) { execution in
-                async let standardOutput = collect(execution.standardOutput, stream: .standardOutput, handler: onOutput)
-                async let standardError = collect(execution.standardError, stream: .standardError, handler: onOutput)
+                async let standardOutput = collect(
+                    execution.standardOutput,
+                    stream: .standardOutput,
+                    sensitiveValues: sensitiveValues,
+                    handler: onOutput
+                )
+                async let standardError = collect(
+                    execution.standardError,
+                    stream: .standardError,
+                    sensitiveValues: sensitiveValues,
+                    handler: onOutput
+                )
                 return try await (standardOutput, standardError)
             }
 
@@ -60,34 +74,42 @@ extension LiveSubprocessRunner {
     private func collect(
         _ sequence: SubprocessOutputSequence,
         stream: CommandOutputChunk.Stream,
+        sensitiveValues: [String],
         handler: SubprocessOutputHandler?
     ) async throws -> String {
 
         var collected = ""
         var decoder = UTF8StreamDecoder()
+        var redactor = SensitiveValueRedactor(sensitiveValues)
 
         for try await buffer in sequence {
             try Task.checkCancellation()
 
-            let chunk = decoder.decode(buffer)
+            let decoded = decoder.decode(buffer)
+            guard !decoded.isEmpty else { continue }
+
+            let chunk = redactor.redact(decoded)
             guard !chunk.isEmpty else { continue }
-
-            collected.append(chunk)
-
-            if collected.utf8.count > Self.outputLimit {
-                collected = String(collected.suffix(Self.outputLimit / 2))
-            }
+            Self.appendRetained(chunk, to: &collected)
 
             await handler?(stream, chunk)
         }
 
-        let finalChunk = decoder.finish()
+        let finalChunk = redactor.redact(decoder.finish()) + redactor.finish()
         if !finalChunk.isEmpty {
-            collected.append(finalChunk)
+            Self.appendRetained(finalChunk, to: &collected)
             await handler?(stream, finalChunk)
         }
 
         return collected
+    }
+
+    private static func appendRetained(_ text: String, to collected: inout String) {
+
+        collected.append(text)
+        if collected.utf8.count > outputLimit {
+            collected = String(collected.suffix(outputLimit / 2))
+        }
     }
 
 }

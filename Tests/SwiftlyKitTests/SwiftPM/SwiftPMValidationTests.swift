@@ -76,6 +76,7 @@ private func validationEnvironment(in directory: URL, toolsVersion: String) thro
         packageRoot: directory,
         swiftly: SwiftlyInstallation(executableURL: swiftly),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
-        target: .linux(.arm64)
+        target: .linux(.arm64),
+        swiftPMEnvironment: SwiftPMEnvironment.inherited.snapshot()
     )
 }

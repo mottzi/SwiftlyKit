@@ -38,19 +38,22 @@ struct SwiftlyInstallation: Equatable {
 
 extension SwiftlyInstallation {
 
+    /// Creates one selected-tool command with the supplied process environment and sensitive keys.
     func command(
         tool: String,
         toolchain: SwiftVersion,
         arguments: [String],
         workingDirectory: URL? = nil,
-        environment: [String: String]? = nil
+        environment: [String: String]? = nil,
+        sensitiveEnvironmentKeys: Set<String> = []
     ) -> SubprocessCommand {
 
         SubprocessCommand(
             executableURL: executableURL,
             arguments: ["run", tool] + arguments + ["+\(toolchain)"],
             workingDirectory: workingDirectory,
-            environment: environment
+            environment: environment,
+            sensitiveEnvironmentKeys: sensitiveEnvironmentKeys
         )
     }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Build options for one discovered executable product.
+/// Output-specific build options for one discovered executable product.
 public struct BuildRequest: Sendable {
 
     /// The executable product to build.
@@ -19,26 +19,20 @@ public struct BuildRequest: Sendable {
     /// SwiftlyKit preserves the SwiftPM-produced executable and verifies the stripped result again.
     public let strip: Bool
     
-    /// Additional environment values for build, bin-path, and strip commands.
-    /// SwiftlyKit preserves protected home and Swiftly values.
-    public let environment: [String: String]
-
     /// Creates a request for one discovered executable product.
-    /// Defaults to a debug build in package `.build` without stripping, copying, cleanup, or environment additions.
+    /// Defaults to a debug build in package `.build` without stripping, copying, or cleanup.
     public init(
         _ product: ExecutableProduct,
         configuration: BuildConfiguration = .debug,
         storage: BuildStorage = .packageDefault,
         output: BuildOutput = .buildStorage,
-        strip: Bool = false,
-        environment: [String: String] = [:]
+        strip: Bool = false
     ) {
         self.product = product
         self.configuration = configuration
         self.storage = storage
         self.output = output
         self.strip = strip
-        self.environment = environment
     }
 
 }

@@ -47,6 +47,9 @@ public enum SwiftlyKitError: Equatable {
     /// The accepted assessment no longer matches the current package or installed state.
     case staleAssessment
 
+    /// A SwiftPM process value has an invalid name, value, or protected purpose.
+    case invalidSwiftPMEnvironmentVariable(String)
+
     /// SwiftPM could not return usable package metadata.
     case packageInspectionFailed(String)
 
@@ -150,6 +153,9 @@ extension SwiftlyKitError: LocalizedError {
 
             case .staleAssessment:
                 "Package.swift or .swift-version changed after the environment was assessed."
+
+            case .invalidSwiftPMEnvironmentVariable(let name):
+                "The SwiftPM environment variable “\(name)” is invalid or protected."
 
             case .packageInspectionFailed(let detail):
                 "SwiftPM could not inspect the package: \(detail)"

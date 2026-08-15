@@ -46,8 +46,8 @@ observes installed environment state, and retains the target and selected
 official release. Passing that assessment to `prepare` authorizes only its
 `requiredComponents`. Preparation returns an immutable `LocalBuildEnvironment`
 capability containing the exact package, target, Swiftly executable, toolchain,
-and SDK context used by later operations. `BuildRequest` then contains only
-choices for one build.
+SDK, and SwiftPM process environment snapshot used by later operations.
+`BuildRequest` then contains only output choices for one build.
 
 Compatible-environment discovery uses the same read-only observation and
 materializes each exact compatible assessment once in newest-first order.
@@ -228,8 +228,8 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   executable, and exact SDK bundle of its `LocalBuildEnvironment`.
 - SwiftPM command construction always selects the prepared toolchain and exposes
   only the prepared SDK through a deterministic, isolated SDK search directory
-  retained inside the effective build scratch directory. Caller build environment
-  additions cannot replace protected home or Swiftly variables.
+  retained inside the effective build scratch directory. The prepared SwiftPM
+  environment cannot replace protected host, Swiftly, compiler, or SDK values.
 - SDK selection resolves only after the retained directory is verified. If
   another process wins atomic link creation, SwiftlyKit verifies and reuses that
   exact selection; conflicting filesystem state is never accepted.

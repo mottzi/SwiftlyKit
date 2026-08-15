@@ -68,14 +68,22 @@ extension SwiftlyKit {
         try await assessor.assess(packageRoot, for: target, toolchain: toolchain)
     }
     
-    /// Revalidates an assessment, installs only its required components, and returns the bound build environment.
-    /// Passing the assessment authorizes every component in its `requiredComponents` property.
+    /// Prepares the accepted components and binds one SwiftPM process environment snapshot to later operations.
+    /// Caller-supplied values do not reach installation or download processes.
     public func prepare(
         _ assessment: EnvironmentAssessment,
+        swiftPMEnvironment: SwiftPMEnvironment = .inherited,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> LocalBuildEnvironment {
 
-        try await mutationGate.withAccess { try await prepareUnderLease(assessment, onEvent: onEvent) }
+        let snapshot = swiftPMEnvironment.snapshot()
+        return try await mutationGate.withAccess {
+            try await prepareUnderLease(
+                assessment,
+                swiftPMEnvironment: snapshot,
+                onEvent: onEvent
+            )
+        }
     }
     
     /// Returns explicit and implicit executable products in name order without resolving package dependencies.
@@ -145,15 +153,27 @@ extension SwiftlyKit {
 
     private func prepareUnderLease(
         _ assessment: EnvironmentAssessment,
+        swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> LocalBuildEnvironment {
 
-        do { return try await preparer.prepare(assessment, onEvent: onEvent) }
-        catch is CancellationError { throw CancellationError() }
-        catch let error as SwiftlyKitError { throw error }
-        catch let error as EnvironmentPreparationError { throw error.swiftlyKitError }
-        catch let error as InstalledEnvironmentError { throw error.swiftlyKitError }
-        catch { throw SwiftlyKitError.swiftlyInstallationFailed("An unexpected environment error occurred.") }
+        do {
+            return try await preparer.prepare(
+                assessment,
+                swiftPMEnvironment: swiftPMEnvironment,
+                onEvent: onEvent
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as SwiftlyKitError {
+            throw error
+        } catch let error as EnvironmentPreparationError {
+            throw error.swiftlyKitError
+        } catch let error as InstalledEnvironmentError {
+            throw error.swiftlyKitError
+        } catch {
+            throw SwiftlyKitError.swiftlyInstallationFailed("An unexpected environment error occurred.")
+        }
     }
 
     private func resolveDependenciesUnderLease(
@@ -209,12 +229,9 @@ extension SwiftlyKit {
 
 extension SwiftlyKit {
     
-    /// Prepares the required environment, resolves dependencies if necessary, and builds one verified executable.
-    /// Authorizes required component installation and resolves dependencies once before a build retry.
-    /// Requires exactly one executable product if `product` is `nil`.
-    /// Selects the requested official toolchain, strips an output copy if requested, and applies `output` storage choices.
-    /// Rejects the result if package sources or resolved dependency state change during compilation.
-    /// Holds one mutation lease for the complete workflow across cooperating SwiftlyKit processes.
+    /// Runs assessment, authorized preparation, product selection, required dependency resolution, and one verified build.
+    /// Uses one SwiftPM environment snapshot and one mutation lease for the complete workflow.
+    /// Applies toolchain and output choices and rejects package source changes during compilation.
     public static func build(
         _ packageRoot: URL,
         product: String? = nil,
@@ -224,6 +241,7 @@ extension SwiftlyKit {
         storage: BuildStorage = .packageDefault,
         output: BuildOutput = .buildStorage,
         strip: Bool = false,
+        swiftPMEnvironment: SwiftPMEnvironment = .inherited,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> URL {
 
@@ -236,6 +254,7 @@ extension SwiftlyKit {
             storage: storage,
             output: output,
             strip: strip,
+            swiftPMEnvironment: swiftPMEnvironment,
             onEvent: onEvent
         )
     }
@@ -250,10 +269,12 @@ extension SwiftlyKit {
         storage: BuildStorage = .packageDefault,
         output: BuildOutput = .buildStorage,
         strip: Bool = false,
+        swiftPMEnvironment: SwiftPMEnvironment = .inherited,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> URL {
 
-        try await mutationGate.withAccess {
+        let snapshot = swiftPMEnvironment.snapshot()
+        return try await mutationGate.withAccess {
             try await buildUnderLease(
                 packageRoot,
                 product: productName,
@@ -263,6 +284,7 @@ extension SwiftlyKit {
                 storage: storage,
                 output: output,
                 strip: strip,
+                swiftPMEnvironment: snapshot,
                 onEvent: onEvent
             )
         }
@@ -277,11 +299,16 @@ extension SwiftlyKit {
         storage: BuildStorage,
         output: BuildOutput,
         strip: Bool,
+        swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> URL {
 
         let assessment = try await assess(packageRoot, for: target, toolchain: toolchain)
-        let environment = try await prepareUnderLease(assessment, onEvent: onEvent)
+        let environment = try await prepareUnderLease(
+            assessment,
+            swiftPMEnvironment: swiftPMEnvironment,
+            onEvent: onEvent
+        )
         let products = try await executableProducts(using: environment)
         let product = try products.select(productName)
         let request = BuildRequest(

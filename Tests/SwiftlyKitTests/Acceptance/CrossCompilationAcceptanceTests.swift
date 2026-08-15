@@ -49,9 +49,7 @@ struct CrossCompilationAcceptanceTests {
                 )
 
                 #expect(FileManager.default.isExecutableFile(atPath: executable.path(percentEncoded: false)))
-                #expect(executable.path(percentEncoded: false).hasPrefix(
-                    scratchDirectory.path(percentEncoded: false) + "/"
-                ))
+                #expect(executable.pathComponents.starts(with: scratchDirectory.pathComponents))
             }
         }
     }

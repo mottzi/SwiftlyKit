@@ -7,17 +7,20 @@ struct SubprocessCommand: Equatable {
     let arguments: [String]
     let workingDirectory: URL?
     let environment: [String: String]?
+    let sensitiveEnvironmentKeys: Set<String>
 
     init(
         executableURL: URL,
         arguments: [String],
         workingDirectory: URL? = nil,
-        environment: [String: String]? = nil
+        environment: [String: String]? = nil,
+        sensitiveEnvironmentKeys: Set<String> = []
     ) {
         self.executableURL = executableURL
         self.arguments = arguments
         self.workingDirectory = workingDirectory
         self.environment = environment
+        self.sensitiveEnvironmentKeys = sensitiveEnvironmentKeys
     }
 
 }

@@ -44,7 +44,7 @@ struct EnvironmentPreparerTests {
         #expect(await commands.commands.isEmpty)
     }
 
-    @Test("Installs exact toolchain without use then checksummed SDK through it")
+    @Test("Installs exact components without exposing bound SwiftPM values to commands")
     func installsMissingComponents() async throws {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
@@ -66,11 +66,24 @@ struct EnvironmentPreparerTests {
             locateSDK: { _ in URL(filePath: "/tmp/sdk.artifactbundle") },
             revalidate: { _ in }
         )
+        var entries: [String: SwiftPMEnvironment.Value] = [
+            "PREPARATION_SECRET": .sensitive("private")
+        ]
+        let values = try SwiftPMEnvironment(entries)
+        let snapshot = values.snapshot(inheriting: ["CAPTURED": "initial"])
 
-        _ = try await preparer.prepare(try assessment(requires: [.toolchain, .staticLinuxSDK]))
+        let environment = try await preparer.prepare(
+            try assessment(requires: [.toolchain, .staticLinuxSDK]),
+            swiftPMEnvironment: snapshot
+        )
+        entries["PREPARATION_SECRET"] = .sensitive("changed")
 
         let recorded = await commands.commands
         #expect(await inspections.callCount == 3)
+        #expect(environment.swiftPMEnvironment.values["CAPTURED"] == "initial")
+        #expect(environment.swiftPMEnvironment.values["PREPARATION_SECRET"] == "private")
+        #expect(recorded.allSatisfy { $0.environment == nil })
+        #expect(recorded.allSatisfy { $0.sensitiveEnvironmentKeys.isEmpty })
         #expect(recorded[0].arguments == ["install", "6.2.1", "--verify", "--assume-yes"])
         #expect(!recorded[0].arguments.contains("--use"))
         #expect(recorded[1].arguments == [

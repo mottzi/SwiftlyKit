@@ -73,6 +73,34 @@ struct LiveSubprocessRunnerTests {
         #expect(await recorder.output[.standardOutput] == expected)
     }
 
+    @Test("Redacts sensitive environment values from captured and streamed output")
+    func sensitiveValuesAreRedacted() async throws {
+
+        let recorder = OutputRecorder()
+        let command = SubprocessCommand(
+            executableURL: URL(filePath: "/bin/sh"),
+            arguments: [
+                "-c",
+                "printf 'out:%s' \"$TOKEN\"; printf 'err:%s' \"$TOKEN\" >&2"
+            ],
+            environment: ["TOKEN": "private-value"],
+            sensitiveEnvironmentKeys: ["TOKEN"]
+        )
+
+        let result = try await LiveSubprocessRunner().run(
+            command,
+            onOutput: { stream, text in
+                await recorder.record(stream, text)
+            }
+        )
+
+        #expect(result.standardOutput == "out:<redacted>")
+        #expect(result.standardError == "err:<redacted>")
+        #expect(await recorder.output[.standardOutput] == "out:<redacted>")
+        #expect(await recorder.output[.standardError] == "err:<redacted>")
+        #expect(!result.combinedOutput.contains("private-value"))
+    }
+
     @Test("Bounds retained output without truncating streamed output")
     func boundedCollection() async throws {
 

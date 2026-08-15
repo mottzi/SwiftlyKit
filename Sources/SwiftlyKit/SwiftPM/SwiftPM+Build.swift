@@ -60,8 +60,7 @@ extension SwiftPM {
 
         let buildCommand = Self.command(
             environment,
-            swiftArguments: ["build"] + commonArguments,
-            additions: request.environment
+            swiftArguments: ["build"] + commonArguments
         )
 
         let buildResult = try await runner.run(buildCommand, onOutput: CommandOutputChunk.handler(for: onEvent))
@@ -74,8 +73,7 @@ extension SwiftPM {
 
         let pathCommand = Self.command(
             environment,
-            swiftArguments: ["build"] + commonArguments + ["--show-bin-path"],
-            additions: request.environment
+            swiftArguments: ["build"] + commonArguments + ["--show-bin-path"]
         )
 
         let pathResult = try await runner.run(pathCommand, onOutput: nil)
@@ -182,11 +180,10 @@ extension SwiftPM {
         onOutput: SubprocessOutputHandler?
     ) async throws {
 
-        let stripCommand = Self.command(
+        let stripCommand = Self.toolCommand(
             environment,
             tool: "llvm-objcopy",
-            toolArguments: ["--strip-all", executable.path(percentEncoded: false)],
-            additions: request.environment
+            toolArguments: ["--strip-all", executable.path(percentEncoded: false)]
         )
 
         let result = try await runner.run(stripCommand, onOutput: onOutput)
