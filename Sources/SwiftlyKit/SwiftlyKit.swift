@@ -55,6 +55,7 @@ extension SwiftlyKit {
         _ packageRoot: URL,
         for target: BuildTarget
     ) async throws -> EnvironmentChoices {
+        
         try await assessor.compatibleEnvironments(packageRoot, for: target)
     }
 
@@ -66,6 +67,7 @@ extension SwiftlyKit {
         for target: BuildTarget,
         toolchain: ToolchainSelection = .automatic
     ) async throws -> EnvironmentAssessment {
+        
         try await assessor.assess(packageRoot, for: target, toolchain: toolchain)
     }
     
@@ -79,6 +81,7 @@ extension SwiftlyKit {
     ) async throws -> LocalBuildEnvironment {
 
         let snapshot = swiftPMEnvironment.snapshot()
+        
         return try await mutationGate.withAccess {
             try await prepareUnderLease(
                 assessment,
@@ -92,10 +95,7 @@ extension SwiftlyKit {
     /// Returns explicit and implicit executable products in name order without resolving package dependencies.
     public func executableProducts(using environment: LocalBuildEnvironment) async throws -> ExecutableProducts {
         
-        do {
-            let products = try await swiftPM.executableProducts(using: environment)
-            return ExecutableProducts(products)
-        }
+        do { return ExecutableProducts(try await swiftPM.executableProducts(using: environment)) }
         catch is CancellationError { throw CancellationError() }
         catch let error as SwiftlyKitError { throw error }
         catch let error as SwiftPMError { throw error.swiftlyKitError }

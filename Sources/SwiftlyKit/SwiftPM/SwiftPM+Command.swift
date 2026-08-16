@@ -8,6 +8,15 @@ extension SwiftPM {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    static func indicatesRequiredResolution(_ diagnostic: String) -> Bool {
+
+        let lowercased = diagnostic.lowercased()
+
+        return lowercased.contains("package.resolved")
+            || lowercased.contains("automatic resolution is disabled")
+            || lowercased.contains("dependencies could not be resolved")
+    }
+
 }
 
 extension SwiftPM {

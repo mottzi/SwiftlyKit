@@ -14,23 +14,21 @@ struct PackageSourceSnapshot: Equatable, Sendable {
     ) throws -> PackageSourceSnapshot {
 
         try Task.checkCancellation()
-        let roots = try canonicalURLs(roots)
-        let excludedRoots = try canonicalURLs(excludedRoots)
+        let scope = try PackageSourceScope(roots: roots, excluding: excludedRoots)
         var hasher = SHA256()
         var fileCount = 0
         var totalByteCount = Int64(0)
 
-        guard !roots.isEmpty else { throw Error.missingRoot }
+        guard !scope.roots.isEmpty else { throw Error.missingRoot }
 
-        for (rootIndex, root) in roots.enumerated() {
+        for (rootIndex, root) in scope.roots.enumerated() {
             guard isDirectory(root) else { throw Error.unreadableEntry(root) }
 
             try hashDirectory(
                 root,
                 relativePath: "",
                 rootIndex: rootIndex,
-                roots: roots,
-                excludedRoots: excludedRoots,
+                scope: scope,
                 hasher: &hasher,
                 fileCount: &fileCount,
                 totalByteCount: &totalByteCount
@@ -51,8 +49,7 @@ extension PackageSourceSnapshot {
         _ directory: URL,
         relativePath: String,
         rootIndex: Int,
-        roots: [URL],
-        excludedRoots: [URL],
+        scope: PackageSourceScope,
         hasher: inout SHA256,
         fileCount: inout Int,
         totalByteCount: inout Int64
@@ -71,12 +68,11 @@ extension PackageSourceSnapshot {
 
         for name in childNames {
             try Task.checkCancellation()
-            if relativePath.isEmpty,
-               ignoredNames.contains(name) {
+            guard scope.includesEntry(named: name, relativePath: relativePath) else {
                 continue
             }
             let child = directory.appending(path: name)
-            guard !isExcluded(child, roots: roots, excludedRoots: excludedRoots) else { continue }
+            guard scope.includes(child) else { continue }
 
             let path = relativePath.isEmpty ? name : "\(relativePath)/\(name)"
             let values = try child.resourceValues(forKeys: keys)
@@ -86,8 +82,7 @@ extension PackageSourceSnapshot {
                     child,
                     relativePath: path,
                     rootIndex: rootIndex,
-                    roots: roots,
-                    excludedRoots: excludedRoots,
+                    scope: scope,
                     hasher: &hasher
                 )
             } else if values.isDirectory == true {
@@ -95,8 +90,7 @@ extension PackageSourceSnapshot {
                     child,
                     relativePath: path,
                     rootIndex: rootIndex,
-                    roots: roots,
-                    excludedRoots: excludedRoots,
+                    scope: scope,
                     hasher: &hasher,
                     fileCount: &fileCount,
                     totalByteCount: &totalByteCount
@@ -161,8 +155,7 @@ extension PackageSourceSnapshot {
         _ link: URL,
         relativePath: String,
         rootIndex: Int,
-        roots: [URL],
-        excludedRoots: [URL],
+        scope: PackageSourceScope,
         hasher: inout SHA256
     ) throws {
 
@@ -180,7 +173,7 @@ extension PackageSourceSnapshot {
         let exists = FileManager.default.fileExists(atPath: resolved.path(percentEncoded: false))
 
         guard exists,
-              isIncluded(resolved, roots: roots, excludedRoots: excludedRoots)
+              scope.includes(resolved)
         else { throw Error.escapingSymbolicLink(link) }
 
         hasher.update(data: Data("l\(rootIndex):\(relativePath)\0".utf8))
@@ -192,11 +185,6 @@ extension PackageSourceSnapshot {
 
 extension PackageSourceSnapshot {
 
-    private static func canonicalURLs(_ urls: [URL]) throws -> [URL] {
-        Array(Set(try urls.map(CanonicalFileURL.resolve)))
-            .sorted { $0.path(percentEncoded: false) < $1.path(percentEncoded: false) }
-    }
-
     private static func isDirectory(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         let exists = FileManager.default.fileExists(
@@ -204,31 +192,6 @@ extension PackageSourceSnapshot {
             isDirectory: &isDirectory
         )
         return exists && isDirectory.boolValue
-    }
-
-    private static func isExcluded(
-        _ url: URL,
-        roots: [URL],
-        excludedRoots: [URL]
-    ) -> Bool {
-        deepestContainingRoot(url, in: excludedRoots) > deepestContainingRoot(url, in: roots)
-    }
-
-    private static func isIncluded(
-        _ url: URL,
-        roots: [URL],
-        excludedRoots: [URL]
-    ) -> Bool {
-        let rootDepth = deepestContainingRoot(url, in: roots)
-        guard rootDepth >= 0 else { return false }
-        return rootDepth >= deepestContainingRoot(url, in: excludedRoots)
-    }
-
-    private static func deepestContainingRoot(_ url: URL, in roots: [URL]) -> Int {
-        roots.reduce(into: -1) { depth, root in
-            guard url.pathComponents.starts(with: root.pathComponents) else { return }
-            depth = max(depth, root.pathComponents.count)
-        }
     }
 
 }
@@ -244,7 +207,6 @@ extension PackageSourceSnapshot {
         case unsupportedEntry(URL)
     }
 
-    private static let ignoredNames: Set<String> = [".build", ".git", ".swiftpm"]
     private static let maximumFileCount = 200_000
     private static let maximumTotalByteCount = Int64(8 * 1_024 * 1_024 * 1_024)
     private static let readChunkByteCount = 1_048_576

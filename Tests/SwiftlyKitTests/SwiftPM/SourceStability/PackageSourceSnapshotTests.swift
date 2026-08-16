@@ -94,4 +94,34 @@ struct PackageSourceSnapshotTests {
         }
     }
 
+    @Test("A nested observed root overrides an enclosing exclusion")
+    func nestedRootOverridesExclusion() throws {
+
+        try withTemporaryDirectory(prefix: "SwiftlyKit-SourceSnapshot") { directory in
+            let scratch = directory.appending(path: "scratch", directoryHint: .isDirectory)
+            let dependency = scratch.appending(path: "Dependency", directoryHint: .isDirectory)
+            let source = dependency.appending(path: "Sources/Tool/main.swift")
+            try FileManager.default.createDirectory(
+                at: source.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("print(1)\n".utf8).write(to: source)
+
+            let roots = [directory, dependency]
+            let initial = try PackageSourceSnapshot.capture(
+                roots: roots,
+                excluding: [scratch]
+            )
+
+            try Data("print(2)\n".utf8).write(to: source)
+
+            #expect(
+                try PackageSourceSnapshot.capture(
+                    roots: roots,
+                    excluding: [scratch]
+                ) != initial
+            )
+        }
+    }
+
 }

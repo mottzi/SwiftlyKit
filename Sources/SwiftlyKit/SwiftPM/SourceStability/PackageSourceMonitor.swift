@@ -49,8 +49,7 @@ extension PackageSourceMonitor {
     /// Locked ownership of one FSEvents stream and its recorded mutation state.
     fileprivate final class Storage: @unchecked Sendable {
 
-        private let roots: [URL]
-        private let excludedRoots: [URL]
+        private let scope: PackageSourceScope
         private let queue = DispatchQueue(label: "codes.mottzi.SwiftlyKit.PackageSourceMonitor")
         private let lock = NSLock()
         private var stream: FSEventStreamRef?
@@ -58,13 +57,12 @@ extension PackageSourceMonitor {
         private var isReliable = true
 
         init(roots: [URL], excludedRoots: [URL]) throws {
-            self.roots = try Self.canonicalURLs(roots)
-            self.excludedRoots = try Self.canonicalURLs(excludedRoots)
+            self.scope = try PackageSourceScope(roots: roots, excluding: excludedRoots)
         }
 
         func start() throws {
 
-            guard !roots.isEmpty else { throw Error.streamCreationFailed }
+            guard !scope.roots.isEmpty else { throw Error.streamCreationFailed }
 
             var context = FSEventStreamContext(
                 version: 0,
@@ -78,7 +76,7 @@ extension PackageSourceMonitor {
                     | kFSEventStreamCreateFlagWatchRoot
                     | kFSEventStreamCreateFlagNoDefer
             )
-            let paths = roots.map { $0.path(percentEncoded: false) }
+            let paths = scope.roots.map { $0.path(percentEncoded: false) }
 
             guard let stream = FSEventStreamCreate(
                 nil,
@@ -131,7 +129,7 @@ extension PackageSourceMonitor {
                 return
             }
             let url = parent.appending(path: eventURL.lastPathComponent).standardized
-            guard isRelevant(url) else { return }
+            guard scope.isRelevantEvent(url) else { return }
             lock.withLock { didChange = true }
         }
 
@@ -184,29 +182,9 @@ extension PackageSourceMonitor.Storage {
         FSEventStreamRelease(stream)
     }
 
-    private func isRelevant(_ url: URL) -> Bool {
-
-        let exclusionDepth = Self.deepestContainingRoot(url, in: excludedRoots)
-        let containingRoots = roots.filter {
-            url.pathComponents.starts(with: $0.pathComponents)
-                && $0.pathComponents.count >= exclusionDepth
-        }
-
-        return containingRoots.contains { root in
-            let relativeComponents = url.pathComponents.dropFirst(root.pathComponents.count)
-            guard let firstComponent = relativeComponents.first else { return true }
-            return !Self.ignoredNames.contains(firstComponent)
-        }
-    }
-
 }
 
 extension PackageSourceMonitor.Storage {
-
-    private static func canonicalURLs(_ urls: [URL]) throws -> [URL] {
-        Array(Set(try urls.map(CanonicalFileURL.resolve)))
-            .sorted { $0.path(percentEncoded: false) < $1.path(percentEncoded: false) }
-    }
 
     private static func isCloneOnlyEvent(_ flags: FSEventStreamEventFlags) -> Bool {
 
@@ -218,13 +196,6 @@ extension PackageSourceMonitor.Storage {
         )
 
         return flags & cloned != 0 && flags & ~(cloned | typeFlags) == 0
-    }
-
-    private static func deepestContainingRoot(_ url: URL, in roots: [URL]) -> Int {
-        roots.reduce(into: -1) { depth, root in
-            guard url.pathComponents.starts(with: root.pathComponents) else { return }
-            depth = max(depth, root.pathComponents.count)
-        }
     }
 
 }
@@ -251,7 +222,6 @@ extension PackageSourceMonitor {
 
 extension PackageSourceMonitor.Storage {
 
-    private static let ignoredNames: Set<String> = [".build", ".git", ".swiftpm"]
     private static let unreliableEventFlags = FSEventStreamEventFlags(
         kFSEventStreamEventFlagEventIdsWrapped
             | kFSEventStreamEventFlagKernelDropped

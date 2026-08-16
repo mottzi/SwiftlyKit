@@ -248,8 +248,12 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - Installed state has one canonical inventory representation. Automatic
   selection considers the inventory without allowing installed state to replace
   the selected official release metadata.
-- Every SwiftPM operation revalidates the package tools version, Swiftly
-  executable, and exact SDK bundle of its `LocalBuildEnvironment`.
+- Public SwiftPM package inspection, dependency resolution, and build operations
+  revalidate the package tools version, Swiftly executable, and exact SDK bundle
+  of their `LocalBuildEnvironment`. Standalone build-storage cleanup deliberately
+  skips package and SDK validation so it remains available as a recovery
+  operation when that state is stale or unavailable. Cleanup after a validated
+  build does not redundantly revalidate the environment.
 - SwiftPM command construction always selects the prepared toolchain and exposes
   only the prepared SDK through a deterministic, isolated SDK search directory
   retained inside the effective build scratch directory. The prepared SwiftPM

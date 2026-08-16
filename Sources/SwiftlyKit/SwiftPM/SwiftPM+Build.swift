@@ -263,15 +263,6 @@ extension SwiftPM {
         return arguments
     }
 
-    static func indicatesRequiredResolution(_ diagnostic: String) -> Bool {
-
-        let lowercased = diagnostic.lowercased()
-        
-        return lowercased.contains("package.resolved")
-            || lowercased.contains("automatic resolution is disabled")
-            || lowercased.contains("dependencies could not be resolved")
-    }
-
     private static func strippedBuildStorageExecutable(for executable: URL) -> URL {
         executable
             .deletingLastPathComponent()

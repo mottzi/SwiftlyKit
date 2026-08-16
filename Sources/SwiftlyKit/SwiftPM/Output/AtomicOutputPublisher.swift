@@ -22,6 +22,7 @@ enum AtomicOutputPublisher {
             directoryHint: .isDirectory
         )
         let stagedExecutable = staging.appending(path: output.executable.lastPathComponent)
+        defer { try? FileManager.default.removeItem(at: staging) }
 
         do {
             for bundle in output.resourceBundles {
@@ -40,27 +41,19 @@ enum AtomicOutputPublisher {
                 )
             }
         } catch let error as SwiftPMError {
-            try? FileManager.default.removeItem(at: staging)
             throw error
         } catch {
-            try? FileManager.default.removeItem(at: staging)
             throw SwiftPMError.outputPublicationFailed(destination)
         }
 
-        do { try await prepareExecutable(stagedExecutable) }
-        catch {
-            try? FileManager.default.removeItem(at: staging)
-            throw error
-        }
+        try await prepareExecutable(stagedExecutable)
 
         do {
             try validatePublication(staging, output: output)
             try publish(staging, to: destination, replacingExisting: replacingExisting)
         } catch let error as SwiftPMError {
-            try? FileManager.default.removeItem(at: staging)
             throw error
         } catch {
-            try? FileManager.default.removeItem(at: staging)
             throw SwiftPMError.outputPublicationFailed(destination)
         }
 
@@ -82,25 +75,19 @@ enum AtomicOutputPublisher {
         let staging = destination
             .deletingLastPathComponent()
             .appending(path: ".\(destination.lastPathComponent).swiftlykit-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: staging) }
 
         do { try FileManager.default.copyItem(at: source, to: staging) }
         catch {
-            try? FileManager.default.removeItem(at: staging)
             throw SwiftPMError.outputPublicationFailed(destination)
         }
 
-        do { try await prepare(staging) }
-        catch {
-            try? FileManager.default.removeItem(at: staging)
-            throw error
-        }
+        try await prepare(staging)
 
         do { try replace(destination, with: staging) }
         catch let error as SwiftPMError {
-            try? FileManager.default.removeItem(at: staging)
             throw error
         } catch {
-            try? FileManager.default.removeItem(at: staging)
             throw SwiftPMError.outputPublicationFailed(destination)
         }
 

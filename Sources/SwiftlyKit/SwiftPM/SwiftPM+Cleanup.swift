@@ -22,6 +22,7 @@ extension SwiftPM {
 
 extension SwiftPM {
 
+    /// Cleanup deliberately skips package and SDK revalidation so stale state cannot block storage recovery.
     func perform(
         _ cleanup: BuildCleanup,
         in storage: BuildStorage,
