@@ -121,6 +121,36 @@ struct SwiftPMCleanupTests {
         }
     }
 
+    @Test("Cleanup commands use the selected custom environment namespace")
+    func cleanupUsesCustomEnvironmentStorage() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Cleanup") { directory in
+            let storageRoot = directory.deletingLastPathComponent().appending(path: "swiftly")
+            let scratch = directory.deletingLastPathComponent().appending(path: "scratch")
+            let runner = RecordingSubprocessRunner(results: [.success(), .success()])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let environment = cleanupEnvironment(
+                in: directory,
+                environmentStorage: .directory(storageRoot)
+            )
+
+            try await swiftPM.cleanBuildArtifacts(in: .directory(scratch), using: environment)
+            try await swiftPM.resetBuildStorage(in: .directory(scratch), using: environment)
+
+            let commands = await runner.commands
+            #expect(commands.count == 2)
+            for command in commands {
+                #expect(normalizedPath(command.environment?["SWIFTLY_HOME_DIR"] ?? "")
+                    == normalizedPath(storageRoot.path(percentEncoded: false)))
+                #expect(normalizedPath(command.environment?["SWIFTLY_BIN_DIR"] ?? "")
+                    == normalizedPath(storageRoot.appending(path: "bin").path(percentEncoded: false)))
+                #expect(normalizedPath(command.environment?["SWIFTLY_TOOLCHAINS_DIR"] ?? "")
+                    == normalizedPath(storageRoot.appending(path: "toolchains").path(percentEncoded: false)))
+            }
+            #expect(FileManager.default.fileExists(atPath: directory.path(percentEncoded: false)))
+        }
+    }
+
     @Test("Cleanup failures retain their operation and bounded diagnostic")
     func cleanupFailure() async throws {
 
@@ -292,22 +322,31 @@ private func cleanupEnvironment(
     in directory: URL,
     swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot(),
     swiftPMTraits: SwiftPMTraits = .packageDefaults,
-    swiftPMSharedStorage: SwiftPMSharedStorage = .standard
+    swiftPMSharedStorage: SwiftPMSharedStorage = .standard,
+    environmentStorage: EnvironmentStorage = .standard
 ) -> LocalBuildEnvironment {
 
-    LocalBuildEnvironment(
+    let swiftlyURL: URL = switch environmentStorage {
+        case .standard:
+            URL(filePath: "/swiftly")
+        case .directory(let root):
+            root.appending(path: "bin/swiftly")
+    }
+
+    return LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
-    staticLinuxSDK: StaticLinuxSDK(
-        identifier: "sdk",
-        version: "1.0.0"
-    ),
+        staticLinuxSDK: StaticLinuxSDK(
+            identifier: "sdk",
+            version: "1.0.0"
+        ),
         packageRoot: directory,
-        swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
+        swiftly: SwiftlyInstallation(executableURL: swiftlyURL),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64),
         swiftPMEnvironment: swiftPMEnvironment,
         swiftPMTraits: swiftPMTraits,
-        swiftPMSharedStorage: swiftPMSharedStorage
+        swiftPMSharedStorage: swiftPMSharedStorage,
+        environmentStorage: environmentStorage
     )
 }
 

@@ -14,10 +14,15 @@ extension SwiftPM {
         let scratchDirectory = try SwiftPMScratchDirectory(
             storage: request.scratchStorage,
             packageRoot: environment.packageRoot,
-            sharedStorage: environment.swiftPMSharedStorage
+            sharedStorage: environment.swiftPMSharedStorage,
+            environmentStorage: environment.environmentStorage
         )
 
-        try Self.validate(request.output, outside: scratchDirectory.url)
+        try Self.validate(
+            request.output,
+            outside: scratchDirectory.url,
+            environmentStorage: environment.environmentStorage
+        )
         
         await report(.building, detail: "Building \(request.product.name).", to: onEvent)
         
@@ -215,11 +220,13 @@ extension SwiftPM {
 
 extension SwiftPM {
 
-    private static func validate(_ output: BuildOutput, outside scratchDirectory: URL) throws {
+    private static func validate(
+        _ output: BuildOutput,
+        outside scratchDirectory: URL,
+        environmentStorage: EnvironmentStorage
+    ) throws {
 
-        guard case .publish(let destination, _, let cleanup) = output,
-              cleanup != .retain
-        else { return }
+        guard case .publish(let destination, _, let cleanup) = output else { return }
 
         let resolvedScratchDirectory = scratchDirectory.resolvingSymlinksInPath().standardizedFileURL
         let resolvedDestination = destination
@@ -228,6 +235,20 @@ extension SwiftPM {
             .appending(path: destination.lastPathComponent)
             .standardizedFileURL
 
+        if case .directory = environmentStorage {
+            let location: EnvironmentStorageLocation
+            do { location = try environmentStorage.resolved() }
+            catch let error {
+                if case .unsafeEnvironmentStorage(let url) = error {
+                    throw SwiftPMError.unsafeEnvironmentStorage(url)
+                }
+                throw SwiftPMError.unsafeEnvironmentStorage(destination)
+            }
+            guard !fileURLsOverlap(location.homeDirectory, resolvedDestination)
+            else { throw SwiftPMError.unsafeEnvironmentStorage(location.homeDirectory) }
+        }
+
+        guard cleanup != .retain else { return }
         guard !resolvedDestination.pathComponents.starts(
             with: resolvedScratchDirectory.pathComponents
         )
@@ -273,10 +294,7 @@ extension SwiftPM {
             .appending(path: ".\(executable.lastPathComponent).swiftlykit-stripped")
     }
 
-    private static func startSourceStability(
-        roots: [URL],
-        scratchDirectory: URL
-    ) async throws -> PackageSourceStability {
+    private static func startSourceStability(roots: [URL], scratchDirectory: URL) async throws -> PackageSourceStability {
 
         do {
             return try await PackageSourceStability.start(

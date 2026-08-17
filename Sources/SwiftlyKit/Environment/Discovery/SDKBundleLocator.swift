@@ -26,4 +26,50 @@ enum SDKBundleLocator {
         return nil
     }
 
+    static func locate(
+        identifier: String,
+        in storage: EnvironmentStorage,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL? {
+
+        switch storage {
+            case .standard:
+                return locate(identifier: identifier, homeDirectory: homeDirectory)
+            case .directory:
+                guard let location = try? storage.resolved(homeDirectory: homeDirectory),
+                      let sdkDirectory = location.swiftPMSDKDirectory
+                else { return nil }
+                return locate(
+                    identifier: identifier,
+                    in: sdkDirectory,
+                    confinedTo: sdkDirectory
+                )
+        }
+    }
+
+    private static func locate(
+        identifier: String,
+        in directory: URL,
+        confinedTo confinementDirectory: URL
+    ) -> URL? {
+
+        let candidate = directory.appending(
+            path: "\(identifier).artifactbundle",
+            directoryHint: .isDirectory
+        )
+        var isDirectory: ObjCBool = false
+
+        guard FileManager.default.fileExists(
+            atPath: candidate.path(percentEncoded: false),
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue else { return nil }
+
+        let resolvedCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL
+        let resolvedDirectory = confinementDirectory.resolvingSymlinksInPath().standardizedFileURL
+        guard resolvedCandidate.pathComponents.starts(with: resolvedDirectory.pathComponents) else {
+            return nil
+        }
+        return resolvedCandidate
+    }
+
 }

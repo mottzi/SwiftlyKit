@@ -1,12 +1,13 @@
 # SwiftlyKit architecture
 
 SwiftlyKit exposes one public facade with a convenience fast track and a staged
-workflow. Both routes use the same internal workflow components:
+workflow. Each facade captures one immutable `EnvironmentStorage` choice. Both
+routes use the same internal workflow components:
 `EnvironmentAssessor`, `EnvironmentPreparer`, `EnvironmentRemover`, and `SwiftPM`.
 
 ```mermaid
 flowchart LR
-    Consumer --> Facade[SwiftlyKit]
+    Consumer --> Facade[SwiftlyKit + EnvironmentStorage]
     Facade -->|inspect host readiness| Preflight[HostPreflight]
     Facade -->|request Command Line Tools installer| Requester[HostCLTRequest]
     Requester --> Preflight
@@ -36,20 +37,21 @@ flowchart LR
 
 ## Public workflows
 
-The static `SwiftlyKit.build` fast track creates a `SwiftlyKit` value and runs the
-staged operations in order: assess, prepare, discover products, select one, and
-build. If the build reports that dependency resolution is required, the fast
-track resolves once and retries the build. It is orchestration over the staged
-interface, not a separate build pipeline. Both paths accept the same optional
-`recordRemovalPlan` callback for toolchain and SDK installation, and retain
-their natural throwing result types.
+The static `SwiftlyKit.build` fast track creates a `SwiftlyKit` value with its
+`environmentStorage` choice and runs the staged operations in order: assess,
+prepare, discover products, select one, and build. If the build reports that
+dependency resolution is required, the fast track resolves once and retries
+the build. It is orchestration over the staged interface, not a separate build
+pipeline. Both paths accept the same optional `recordRemovalPlan` callback for
+toolchain and SDK installation, and retain their natural throwing result types.
 
 The staged API keeps authorization and build choices explicit. Assessment is
 read-only: it captures the canonical package root and package-input bytes,
 observes installed environment state, and retains the target and selected
-official release. Passing that assessment to `prepare` authorizes only its
-`requiredComponents`. Preparation returns the immutable `LocalBuildEnvironment`
-capability on success. If a caller supplies `recordRemovalPlan`, SwiftlyKit
+official release and the facade's `EnvironmentStorage` namespace. Passing that
+assessment to `prepare` authorizes only its `requiredComponents`. Preparation
+returns the immutable `LocalBuildEnvironment` capability, including that
+namespace, on success. If a caller supplies `recordRemovalPlan`, SwiftlyKit
 calls it with a cumulative plan before each authorized toolchain or SDK
 installation command.
 The callback can persist that plan across failure, cancellation, and abrupt
@@ -57,13 +59,15 @@ termination. `BuildRequest` then contains only the choices for one product
 build.
 
 `EnvironmentRemovalPlan` describes an exact toolchain, SDK, or paired
-environment scope. Plans can be persisted and retried, but are not ownership or
-security tokens. `remove(_:)` observes live Swiftly state, refuses active or
-default toolchains and uninspectable shared SDK state, and preflights the
-complete scope before issuing commands. Unrelated SDK registrations do not
-block an exact removal. Full removal removes the SDK before its paired
-toolchain; absent targets are no-ops. SwiftlyKit stays stateless: callers
-decide when to remove a generated or explicitly constructed plan.
+environment scope together with its environment storage namespace. Plans can be
+persisted and retried, but are not ownership or security tokens. `remove(_:)`
+uses that namespace to observe live installed state, refuses active or default
+toolchains and uninspectable SDK registry state, and preflights the complete
+scope before issuing commands. Unrelated SDK registrations do not block an exact
+removal. Full removal removes the SDK before its paired toolchain; absent
+targets are no-ops. SwiftlyKit stays stateless: callers decide when to remove a
+generated or explicitly constructed plan. Manual plan factories default to
+`.standard` and accept a custom namespace through `in:`.
 Manual SDK plans use only the exact registry identifier. Full-environment plans
 carry both the exact toolchain version and SDK identifier; neither requires
 release-catalog metadata.
@@ -116,6 +120,11 @@ Reentrant mutation through the same asynchronous task context also produces
 detached task does not inherit that context. An awaited event handler or removal
 plan recorder must not await another mutating SwiftlyKit operation, directly or
 through detached work.
+
+The lease is deliberately user-wide even when a facade selects a custom
+environment storage root. Standard and custom environment namespaces therefore
+cannot be mutated concurrently by cooperating SwiftlyKit processes for the same
+user.
 
 Preparation, removal, dependency resolution, builds, and explicit cleanup each hold one
 lease for their complete public operation. The static fast track holds one lease
@@ -201,21 +210,31 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   snapshots those inputs byte-for-byte. It coordinates the read-only package,
   host, release, discovery, and selection steps and produces one
   `EnvironmentAssessment` or an `EnvironmentChoices` snapshot.
-- `Environment/Discovery` detects Swiftly, constructs Swiftly-run commands, and
-  owns the filtered `InstalledEnvironmentInventory` used by normal environment
-  selection. Removal also uses a separate raw registered-SDK safety view so
-  unrelated SDK identifiers are never discarded during destructive preflight.
+- `Environment/Discovery` resolves the selected `EnvironmentStorage` namespace,
+  detects Swiftly and the SDK registry there without ambient `SWIFTLY_*`
+  overrides, constructs Swiftly-run commands, and owns the filtered
+  `InstalledEnvironmentInventory` used by normal environment selection. Removal
+  also uses a separate raw registered-SDK safety view so unrelated SDK
+  identifiers are never discarded during destructive preflight.
 - `Environment/Selection` deterministically selects one exact official stable
   release and matching SDK, preferring a compatible installed pair for automatic
   selection. It also coalesces live catalog requests and owns the bounded,
   private, disposable release-catalog snapshot.
 - `Environment/Preparation` revalidates the assessment, performs only authorized
-  installations, refreshes installed inventory after mutations, and returns the
-  prepared local build environment. It can send conservative removal plans to
-  a caller-supplied recorder before toolchain or SDK installation.
-- `Environment/Removal` observes raw registered Swiftly state, performs complete
-  safety preflight, removes exact SDK/toolchain targets, and verifies each
-  postcondition. It never removes Swiftly itself.
+  installations in the captured namespace, refreshes installed inventory after
+  mutations, and returns the prepared local build environment. Standard
+  bootstrap uses the normal current-user installation. Custom bootstrap keeps
+  the verified package extraction and population path inside the selected
+  namespace without replacing the standard installation. Preparation can send
+  conservative, namespace-aware removal plans to a caller-supplied recorder
+  before toolchain or SDK installation.
+- `Environment/Removal` observes raw registered Swiftly state in the plan's
+  namespace, performs complete safety preflight, removes exact SDK/toolchain
+  targets, and verifies each postcondition. It never removes Swiftly itself.
+- `Environment/EnvironmentStorage` validates the standard or dedicated custom
+  root, derives its Swiftly home, binary, toolchain, and SDK registry locations,
+  and carries that namespace through assessment, preparation, selected-tool
+  commands, and removal.
 - `Environment/SwiftPMEnvironment`, `Environment/SwiftPMTraits`, and
   `Environment/SwiftPMSharedStorage` validate and normalize workflow-scoped
   SwiftPM process, package-graph, and shared-storage configuration.
@@ -256,8 +275,21 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   without package work. Operations that cannot continue translate those values
   to `SwiftlyKitError`; the installer requester branches on them directly.
 - Assessment derives its values from one captured `Package.swift` and nearest
-  `.swift-version` state. Preparation compares the same inputs byte-for-byte
-  before any mutation.
+  `.swift-version` state and the facade's immutable `EnvironmentStorage` choice.
+  Preparation compares the same inputs byte-for-byte before any mutation.
+- `.standard` uses the official per-user Swiftly, toolchain, and SwiftPM SDK
+  locations and ignores ambient `SWIFTLY_*` overrides. `.directory(root)`
+  derives `root`, `root/bin`, `root/toolchains`, and `root/swift-sdks` and
+  carries those paths through discovery, preparation, selected-tool command
+  environments, and removal.
+- A custom environment root must be an absolute, dedicated local directory. It
+  is disjoint from package sources, the effective SwiftPM scratch directory,
+  explicit SwiftPM shared storage, and publication destinations. SwiftlyKit may
+  create and populate it, but never deletes it wholesale or removes Swiftly.
+- Standard bootstrap uses the official current-user installation path. Custom
+  bootstrap verifies the official downloaded package's signature and Apple
+  trust, then uses a dedicated extraction path for the selected namespace; it
+  does not overwrite the standard installation.
 - Persistent release metadata is parsed with the live catalog parser and can
   recover assessment only for one exact pair that Swiftly reports as fully
   installed. It cannot authorize a download or installation. Cache failure is
@@ -275,21 +307,26 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   absent immediately before that attempt. The recorder is write-ahead, so a
   caller can recover the plan after ordinary failure, cancellation, or process
   termination; SwiftlyKit never removes resources automatically.
+- Read-only assessment treats a missing custom SDK registry as empty and does
+  not create it. Preparation can create it only after the assessment authorizes
+  SDK installation.
 - Removal-plan recorders and event handlers must not await another mutating
   SwiftlyKit operation, including removal, directly or through detached work.
 - Environment removal uses exact stable versions and SDK identifiers, performs
   one complete preflight before the first destructive command, refuses active or
-  default toolchains and uninspectable shared SDK state, removes only the exact
+  default toolchains and uninspectable SDK registry state, removes only the exact
   requested SDK before its paired toolchain, verifies postconditions, and treats
   absent targets as success. Unrelated SDK registrations never block the exact
-  request.
+  request. Removal plans carry the environment storage namespace; manual
+  factories default to `.standard` and accept a namespace through `in:`.
 - Normal selection uses one filtered canonical inventory. Removal intentionally
   uses a separate exact raw safety view that preserves every SDK identifier and
   selection flag; automatic selection never allows installed state to replace
   the selected official release metadata.
 - `StaticLinuxSDK` carries the catalog identity and release version used for
   preparation. Removal plans use the exact SDK identifier and carry a toolchain
-  version only for full-environment removal because the SDK registry is shared.
+  version only for full-environment removal because one SDK registry is shared
+  by the toolchains in an environment namespace.
 - Public SwiftPM package inspection, dependency resolution, and build operations
   revalidate the package tools version, Swiftly executable, and exact SDK bundle
   of their `LocalBuildEnvironment`. Standalone build-storage cleanup deliberately
@@ -308,6 +345,9 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   SwiftlyKit cleanup removes only selected scratch storage. Standard locations
   remain implicit, and shared-storage arguments never reach Swiftly or selected
   non-SwiftPM tools.
+- `EnvironmentStorage` controls durable Swiftly state, binaries, toolchains,
+  and Static Linux SDKs. SwiftPM scratch and shared storage remain separate
+  choices; the feature does not create a private `HOME` or full process sandbox.
 - SDK selection resolves only after the retained directory is verified. If
   another process wins atomic link creation, SwiftlyKit verifies and reuses that
   exact selection; conflicting filesystem state is never accepted.

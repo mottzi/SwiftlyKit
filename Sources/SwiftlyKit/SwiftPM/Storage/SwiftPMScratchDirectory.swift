@@ -9,7 +9,8 @@ struct SwiftPMScratchDirectory {
     init(
         storage: SwiftPMScratchStorage,
         packageRoot: URL,
-        sharedStorage: SwiftPMSharedStorage = .standard
+        sharedStorage: SwiftPMSharedStorage = .standard,
+        environmentStorage: EnvironmentStorage = .standard
     ) throws(SwiftPMError) {
 
         let configuredURL: URL
@@ -41,6 +42,23 @@ struct SwiftPMScratchDirectory {
 
         if let directory = sharedStorage.overlappingDirectory(with: canonicalURL) {
             throw SwiftPMError.unsafeSwiftPMSharedStorage(directory)
+        }
+
+        if case .directory = environmentStorage {
+            let location: EnvironmentStorageLocation
+            do { location = try environmentStorage.resolved() }
+            catch let error {
+                if case .unsafeEnvironmentStorage(let url) = error {
+                    throw SwiftPMError.unsafeEnvironmentStorage(url)
+                }
+                throw SwiftPMError.unsafeEnvironmentStorage(url)
+            }
+            guard !fileURLsOverlap(location.homeDirectory, packageRoot)
+            else { throw SwiftPMError.unsafeEnvironmentStorage(location.homeDirectory) }
+            guard !fileURLsOverlap(location.homeDirectory, canonicalURL)
+            else { throw SwiftPMError.unsafeEnvironmentStorage(location.homeDirectory) }
+            guard sharedStorage.overlappingDirectory(with: location.homeDirectory) == nil
+            else { throw SwiftPMError.unsafeEnvironmentStorage(location.homeDirectory) }
         }
         self.url = url
     }

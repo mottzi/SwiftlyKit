@@ -4,6 +4,23 @@ import Foundation
 struct SwiftlyInstallation: Equatable {
 
     let executableURL: URL
+    let location: EnvironmentStorageLocation?
+
+    /// Inherited process values bound to the detected Swiftly namespace.
+    var processEnvironment: [String: String]? {
+        guard let location else { return nil }
+        return location.processEnvironment
+    }
+
+    init(executableURL: URL) {
+        self.executableURL = executableURL
+        self.location = nil
+    }
+
+    private init(executableURL: URL, location: EnvironmentStorageLocation) {
+        self.executableURL = executableURL
+        self.location = location
+    }
 
     static func detect(
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -34,9 +51,55 @@ struct SwiftlyInstallation: Equatable {
         return SwiftlyInstallation(executableURL: executableURL)
     }
 
+    /// Detects a compatible Swiftly executable in one deterministic namespace.
+    static func detect(
+        storage: EnvironmentStorage,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        versionProbe: (@Sendable (URL) async throws -> String)? = nil
+    ) async throws -> SwiftlyInstallation? {
+
+        try Task.checkCancellation()
+
+        let location = try storage.resolved(homeDirectory: homeDirectory)
+        let executableURL = location.binDirectory.appending(path: "swiftly")
+        guard isExecutableRegularFile(at: executableURL) else { return nil }
+
+        let probe = versionProbe ?? { url in
+            return try await SwiftlyInstallation.liveVersionProbe(
+                at: url,
+                environment: location.processEnvironment
+            )
+        }
+        let versionOutput: String
+        do {
+            versionOutput = try await probe(executableURL)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw SwiftlyKitError.incompatibleSwiftly
+        }
+
+        try Task.checkCancellation()
+        guard isCompatibleVersion(versionOutput) else { throw SwiftlyKitError.incompatibleSwiftly }
+
+        return SwiftlyInstallation(executableURL: executableURL, location: location)
+    }
+
 }
 
 extension SwiftlyInstallation {
+
+    /// Adds the selected namespace's SDK registry to a Swift SDK command.
+    /// Standard storage leaves SwiftPM's default registry unchanged.
+    func sdkCommandArguments(_ arguments: [String]) -> [String] {
+
+        guard let sdkDirectory = location?.swiftPMSDKDirectory else { return arguments }
+        return arguments + [
+            "--swift-sdks-path",
+            sdkDirectory.path(percentEncoded: false)
+        ]
+    }
 
     /// Creates one selected-tool command with the supplied process environment and sensitive keys.
     func command(
@@ -48,11 +111,23 @@ extension SwiftlyInstallation {
         sensitiveEnvironmentKeys: Set<String> = []
     ) -> SubprocessCommand {
 
-        SubprocessCommand(
+        var processEnvironment = environment
+        if let location {
+            var values = processEnvironment ?? ProcessInfo.processInfo.environment
+            for name in values.keys.filter({ $0.hasPrefix("SWIFTLY_") }) {
+                values[name] = nil
+            }
+            for (name, value) in location.environment {
+                values[name] = value
+            }
+            processEnvironment = values
+        }
+
+        return SubprocessCommand(
             executableURL: executableURL,
             arguments: ["run", tool] + arguments + ["+\(toolchain)"],
             workingDirectory: workingDirectory,
-            environment: environment,
+            environment: processEnvironment,
             sensitiveEnvironmentKeys: sensitiveEnvironmentKeys
         )
     }
@@ -116,11 +191,18 @@ extension SwiftlyInstallation {
 
 extension SwiftlyInstallation {
 
-    private static func liveVersionProbe(at executableURL: URL) async throws -> String {
+    private static func liveVersionProbe(
+        at executableURL: URL,
+        environment: [String: String]? = nil
+    ) async throws -> String {
 
         try Task.checkCancellation()
 
-        let command = SubprocessCommand(executableURL: executableURL, arguments: ["--version"])
+        let command = SubprocessCommand(
+            executableURL: executableURL,
+            arguments: ["--version"],
+            environment: environment
+        )
         let result = try await LiveSubprocessRunner().run(command)
 
         try Task.checkCancellation()

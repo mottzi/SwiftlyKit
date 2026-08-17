@@ -20,6 +20,28 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("Environment storage compiles in staged, fast-track, and removal workflows")
+    func environmentStorageCompiles() {
+
+        let storage = EnvironmentStorage.directory(URL(filePath: "/tmp/swiftlykit-swiftly"))
+        let kit = SwiftlyKit(environmentStorage: storage)
+        let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
+            try await kit.prepare(assessment)
+        }
+        let fastTrack: @Sendable (URL) async throws -> BuildResult = { packageRoot in
+            try await SwiftlyKit.build(packageRoot, environmentStorage: storage)
+        }
+        let removal = EnvironmentRemovalPlan.toolchain(
+            SwiftVersion(major: 6, minor: 3, patch: 3),
+            in: storage
+        )
+
+        _ = EnvironmentStorage.standard
+        _ = staged
+        _ = fastTrack
+        _ = removal
+    }
+
     @Test("The staged SwiftPM environment workflow compiles without testable access")
     func stagedSwiftPMEnvironmentCompiles() {
 

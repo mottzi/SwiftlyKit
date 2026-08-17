@@ -165,6 +165,111 @@ struct SwiftPMTests {
         }
     }
 
+    @Test("Package-default scratch storage remains valid inside the package")
+    func packageDefaultScratchStorage() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: directory.path(percentEncoded: false) + "\n")
+            ])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+
+            let result = try await swiftPM.build(
+                BuildRequest(ExecutableProduct(name: "Tool")),
+                using: buildEnvironment(in: directory)
+            )
+
+            #expect(result.executable == executable)
+            let commands = await runner.commands
+            #expect(commands.count == 3)
+            #expect(commands.allSatisfy { !$0.arguments.contains("--scratch-path") })
+        }
+    }
+
+    @Test("Every selected-tool command uses the same custom environment namespace")
+    func customEnvironmentStorageEnvironment() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let packageRoot = directory.appending(path: "package")
+            try FileManager.default.createDirectory(at: packageRoot, withIntermediateDirectories: false)
+            let scratch = directory.deletingLastPathComponent().appending(path: "scratch")
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: directory.path(percentEncoded: false) + "\n")
+            ])
+            let swiftlyRoot = directory.appending(path: "swiftly")
+            let swiftlyExecutable = swiftlyRoot.appending(path: "bin/swiftly")
+            try makeSwiftPMTestExecutable(at: swiftlyExecutable)
+            let detectedSwiftly = try await SwiftlyInstallation.detect(storage: .directory(swiftlyRoot))
+            let swiftly = try #require(detectedSwiftly)
+            let inherited = SwiftPMEnvironment.inherited.snapshot(inheriting: [
+                "PATH": "/trusted/path",
+                "HOME": "/trusted/home",
+                "DEVELOPER_DIR": "/trusted/developer-dir",
+                "SWIFTLY_HOME_DIR": "/ambient/home",
+                "SWIFTLY_BIN_DIR": "/ambient/bin",
+                "SWIFTLY_TOOLCHAINS_DIR": "/ambient/toolchains"
+            ])
+            let environment = buildEnvironment(
+                in: packageRoot,
+                swiftPMEnvironment: inherited,
+                swiftly: swiftly,
+                environmentStorage: .directory(swiftlyRoot)
+            )
+
+            _ = try await SwiftPM(runner: runner, validateEnvironment: { _ in }).build(
+                BuildRequest(
+                    ExecutableProduct(name: "Tool"),
+                    scratchStorage: .directory(scratch)
+                ),
+                using: environment
+            )
+
+            let commands = await runner.commands
+            #expect(commands.allSatisfy {
+                guard let value = $0.environment?["SWIFTLY_HOME_DIR"] else { return false }
+                return normalizedPath(value) == normalizedPath(swiftlyRoot.path(percentEncoded: false))
+            })
+            #expect(commands.allSatisfy {
+                guard let value = $0.environment?["SWIFTLY_BIN_DIR"] else { return false }
+                return normalizedPath(value) == normalizedPath(
+                    swiftlyRoot.appending(path: "bin").path(percentEncoded: false)
+                )
+            })
+            #expect(commands.allSatisfy {
+                guard let value = $0.environment?["SWIFTLY_TOOLCHAINS_DIR"] else { return false }
+                return normalizedPath(value) == normalizedPath(
+                    swiftlyRoot.appending(path: "toolchains").path(percentEncoded: false)
+                )
+            })
+            #expect(commands.allSatisfy { $0.environment?["PATH"] == "/trusted/path" })
+            #expect(commands.allSatisfy { $0.environment?["HOME"] == "/trusted/home" })
+            #expect(commands.allSatisfy {
+                $0.environment?["DEVELOPER_DIR"] == "/trusted/developer-dir"
+            })
+            let sdkSelectionCommands = commands.filter {
+                $0.arguments.contains("--swift-sdks-path")
+            }
+            #expect(sdkSelectionCommands.count == 2)
+            for command in sdkSelectionCommands {
+                let selectedSDKPath = try argument(after: "--swift-sdks-path", in: command.arguments)
+                #expect(URL(filePath: selectedSDKPath).pathComponents.starts(with: scratch.pathComponents))
+                #expect(normalizedPath(selectedSDKPath) != normalizedPath(
+                    swiftlyRoot.appending(path: "swift-sdks").path(percentEncoded: false)
+                ))
+            }
+        }
+    }
+
     @Test("Standard shared storage leaves SwiftPM shared-location flags unset")
     func standardSharedStorage() async throws {
 
@@ -289,6 +394,61 @@ struct SwiftPMTests {
                 )
             }
 
+            #expect(await runner.commands.isEmpty)
+        }
+    }
+
+    @Test(
+        "Environment storage rejects overlap before running a build command",
+        arguments: EnvironmentStorageOverlap.allCases
+    )
+    func rejectsEnvironmentStorageOverlap(overlap: EnvironmentStorageOverlap) async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let packageRoot = directory.appending(path: "package")
+            try FileManager.default.createDirectory(at: packageRoot, withIntermediateDirectories: false)
+            let root = directory.appending(path: "swiftly")
+            let expectedRoot = try CanonicalFileURL.resolve(root).standardizedFileURL
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let scratchOutsidePackage = directory.appending(path: "scratch")
+            let (scratch, shared, output) = switch overlap {
+                case .scratch:
+                    (SwiftPMScratchStorage.directory(root), SwiftPMSharedStorage.standard, BuildOutput.buildStorage)
+                case .shared:
+                    (
+                        SwiftPMScratchStorage.directory(scratchOutsidePackage),
+                        SwiftPMSharedStorage(cacheDirectory: root),
+                        BuildOutput.buildStorage
+                    )
+                case .publication:
+                    (
+                        SwiftPMScratchStorage.directory(scratchOutsidePackage),
+                        SwiftPMSharedStorage.standard,
+                        BuildOutput.publish(to: root)
+                    )
+            }
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: directory.path(percentEncoded: false) + "\n")
+            ])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let environment = buildEnvironment(
+                in: packageRoot,
+                swiftPMSharedStorage: shared,
+                environmentStorage: .directory(root)
+            )
+
+            await #expect(throws: SwiftPMError.unsafeEnvironmentStorage(expectedRoot)) {
+                try await swiftPM.build(
+                    BuildRequest(
+                        ExecutableProduct(name: "Tool"),
+                        scratchStorage: scratch,
+                        output: output
+                    ),
+                    using: environment
+                )
+            }
             #expect(await runner.commands.isEmpty)
         }
     }
@@ -936,6 +1096,14 @@ struct SwiftPMTests {
 
 }
 
+enum EnvironmentStorageOverlap: String, CaseIterable, Sendable {
+
+    case scratch
+    case shared
+    case publication
+
+}
+
 private func createBundleForSwiftPMTest(named name: String, in directory: URL) throws -> URL {
 
     let bundle = directory.appending(path: name, directoryHint: .isDirectory)
@@ -970,22 +1138,45 @@ private func buildEnvironment(
     in directory: URL,
     swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot(),
     swiftPMTraits: SwiftPMTraits = .packageDefaults,
-    swiftPMSharedStorage: SwiftPMSharedStorage = .standard
+    swiftPMSharedStorage: SwiftPMSharedStorage = .standard,
+    swiftly: SwiftlyInstallation? = nil,
+    environmentStorage: EnvironmentStorage = .standard
 ) -> LocalBuildEnvironment {
 
-    LocalBuildEnvironment(
+    let swiftlyURL: URL = switch environmentStorage {
+        case .standard:
+            URL(filePath: "/swiftly")
+        case .directory(let root):
+            root.appending(path: "bin/swiftly")
+    }
+
+    return LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
-    staticLinuxSDK: StaticLinuxSDK(
-        identifier: "sdk",
-        version: "1.0.0"
-    ),
+        staticLinuxSDK: StaticLinuxSDK(
+            identifier: "sdk",
+            version: "1.0.0"
+        ),
         packageRoot: directory,
-        swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
+        swiftly: swiftly ?? SwiftlyInstallation(executableURL: swiftlyURL),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64),
         swiftPMEnvironment: swiftPMEnvironment,
         swiftPMTraits: swiftPMTraits,
-        swiftPMSharedStorage: swiftPMSharedStorage
+        swiftPMSharedStorage: swiftPMSharedStorage,
+        environmentStorage: environmentStorage
+    )
+}
+
+private func makeSwiftPMTestExecutable(at url: URL) throws {
+
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    try Data("#!/bin/sh\nprintf '1.2.3\\n'\n".utf8).write(to: url)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: 0o755],
+        ofItemAtPath: url.path(percentEncoded: false)
     )
 }
 

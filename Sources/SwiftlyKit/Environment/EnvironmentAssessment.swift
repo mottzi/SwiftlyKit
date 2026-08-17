@@ -9,18 +9,21 @@ public struct EnvironmentAssessment: Sendable {
     let packageInputs: PackageInputSnapshot
     let release: OfficialStableRelease
     let target: BuildTarget
+    let environmentStorage: EnvironmentStorage
 
     init(
         packageInputs: PackageInputSnapshot,
         release: OfficialStableRelease,
         requiredComponents: [PreparationComponent],
-        target: BuildTarget
+        target: BuildTarget,
+        environmentStorage: EnvironmentStorage = .standard
     ) {
 
         self.packageInputs = packageInputs
         self.release = release
         self.requiredComponents = requiredComponents
         self.target = target
+        self.environmentStorage = environmentStorage
     }
 
 }

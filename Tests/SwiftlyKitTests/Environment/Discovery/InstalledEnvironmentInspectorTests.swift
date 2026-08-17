@@ -69,6 +69,131 @@ struct InstalledEnvironmentInspectorTests {
 
     }
 
+    @Test("An absent custom SDK registry is empty without running SwiftPM or creating it")
+    func absentCustomSDKRegistryIsReadOnly() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Inspector") { directory in
+            let storageRoot = directory.appending(path: "environment")
+            let executable = storageRoot.appending(path: "bin/swiftly")
+            try makeInspectorExecutable(at: executable)
+            try makeInspectorExecutable(at: storageRoot.appending(
+                path: "toolchains/swift-6.2.1-RELEASE.xctoolchain/usr/bin/swift"
+            ))
+            let swiftly = try #require(
+                try await SwiftlyInstallation.detect(
+                    storage: .directory(storageRoot),
+                    versionProbe: { _ in "1.2.3" }
+                )
+            )
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: #"{"toolchains":[{"version":{"name":"6.2.1","type":"stable"}}]}"#)
+            ])
+            let inspector = InstalledEnvironmentInspector(
+                runner: runner,
+                isToolchainUsable: { _ in true }
+            )
+
+            let inventory = try await inspector.inspectAll(swiftly: swiftly)
+
+            #expect(inventory.toolchains == [inspectorVersion("6.2.1")])
+            #expect(inventory.sdks.isEmpty)
+            #expect(!FileManager.default.fileExists(
+                atPath: storageRoot.appending(path: "swift-sdks").path(percentEncoded: false)
+            ))
+            #expect(await runner.commands.map(\.arguments) == [
+                ["list", "--format", "json"]
+            ])
+        }
+    }
+
+    @Test("Custom toolchain usability rejects an executable symlink outside its namespace")
+    func customToolchainSymlinkEscapeIsRejected() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Inspector") { directory in
+            let storageRoot = directory.appending(path: "environment")
+            let version = inspectorVersion("6.2.1")
+            let escapedExecutable = directory.appending(path: "outside/swift")
+            let toolchainExecutable = storageRoot.appending(
+                path: "toolchains/swift-6.2.1-RELEASE.xctoolchain/usr/bin/swift"
+            )
+            let swiftlyExecutable = storageRoot.appending(path: "bin/swiftly")
+            try makeInspectorExecutable(at: swiftlyExecutable)
+            try makeInspectorExecutable(at: escapedExecutable)
+            try FileManager.default.createDirectory(
+                at: toolchainExecutable.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createSymbolicLink(
+                at: toolchainExecutable,
+                withDestinationURL: escapedExecutable
+            )
+
+            let swiftly = try #require(
+                try await SwiftlyInstallation.detect(
+                    storage: .directory(storageRoot),
+                    versionProbe: { _ in "1.2.3" }
+                )
+            )
+            let recorder = RecordingSubprocessRunner(results: [
+                .success(output: #"{"toolchains":[{"version":{"name":"6.2.1","type":"stable"}}]}"#)
+            ])
+            let inspector = InstalledEnvironmentInspector(runner: recorder)
+
+            let inventory = try await inspector.inspect(
+                swiftly: swiftly,
+                selectedToolchain: version
+            )
+
+            #expect(inventory.toolchains.isEmpty)
+            #expect(inventory.sdks.isEmpty)
+            #expect(await recorder.commands.count == 1)
+        }
+    }
+
+    @Test("An existing custom SDK registry is inspected with its exact SwiftPM path")
+    func customSDKRegistryUsesExactPath() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Inspector") { directory in
+            let storageRoot = directory.appending(path: "environment")
+            let sdkDirectory = storageRoot.appending(path: "swift-sdks")
+            try FileManager.default.createDirectory(at: sdkDirectory, withIntermediateDirectories: true)
+            let executable = storageRoot.appending(path: "bin/swiftly")
+            try makeInspectorExecutable(at: executable)
+            try makeInspectorExecutable(at: storageRoot.appending(
+                path: "toolchains/swift-6.2.1-RELEASE.xctoolchain/usr/bin/swift"
+            ))
+            let swiftly = try #require(
+                try await SwiftlyInstallation.detect(
+                    storage: .directory(storageRoot),
+                    versionProbe: { _ in "1.2.3" }
+                )
+            )
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: #"{"toolchains":[{"version":{"name":"6.2.1","type":"stable"}}]}"#),
+                .success(output: "swift-6.2.1-RELEASE_static-linux-0.0.1\n")
+            ])
+            let inspector = InstalledEnvironmentInspector(
+                runner: runner,
+                isToolchainUsable: { _ in true }
+            )
+
+            _ = try await inspector.inspect(
+                swiftly: swiftly,
+                selectedToolchain: inspectorVersion("6.2.1")
+            )
+
+            let commands = await runner.commands
+            let sdkCommand = try #require(commands.last)
+            #expect(commands.count == 2)
+            #expect(sdkCommand.arguments.prefix(5) == [
+                "run", "swift", "sdk", "list", "--swift-sdks-path"
+            ])
+            let sdkPathArgument = try #require(sdkCommand.arguments.dropFirst(5).first)
+            #expect(URL(filePath: sdkPathArgument).pathComponents == sdkDirectory.pathComponents)
+            #expect(sdkCommand.arguments.suffix(1) == ["+6.2.1"])
+        }
+    }
+
     @Test("Does not ask SwiftPM for SDKs when the exact toolchain is absent")
     func absentToolchainSkipsSDKProbe() async throws {
 
@@ -391,4 +516,17 @@ struct InstalledEnvironmentInspectorTests {
 
 private func inspectorVersion(_ value: String) -> SwiftVersion {
     SwiftVersion(value)!
+}
+
+private func makeInspectorExecutable(at url: URL) throws {
+
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    try Data("#!/bin/sh\nprintf '1.2.3\\n'\n".utf8).write(to: url)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: 0o755],
+        ofItemAtPath: url.path(percentEncoded: false)
+    )
 }

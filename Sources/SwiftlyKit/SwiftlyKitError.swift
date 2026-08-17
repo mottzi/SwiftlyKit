@@ -97,6 +97,9 @@ public enum SwiftlyKitError: Equatable, Sendable {
     /// An explicit SwiftPM shared-storage location is invalid or overlaps selected scratch storage.
     case unsafeSwiftPMSharedStorage(URL)
 
+    /// A custom environment namespace is invalid or overlaps mutable workflow state.
+    case unsafeEnvironmentStorage(URL)
+
     /// Automatic cleanup cannot preserve an output located inside build storage.
     case outputInsideBuildStorage(URL)
 
@@ -221,6 +224,11 @@ extension SwiftlyKitError: LocalizedError {
             case .unsafeSwiftPMSharedStorage(let url):
                 "SwiftPM shared storage at \(url.path(percentEncoded: false)) must be an absolute local directory "
                     + "outside the selected scratch storage."
+
+            case .unsafeEnvironmentStorage(let url):
+                "Environment storage at \(url.path(percentEncoded: false)) must be an absolute local directory. "
+                    + "Its derived Swiftly and SDK paths must stay inside it, and it must not overlap package "
+                    + "or SwiftPM workflow state."
 
             case .outputInsideBuildStorage(let url):
                 "The output at \(url.path(percentEncoded: false)) must be outside build storage when cleanup is requested."

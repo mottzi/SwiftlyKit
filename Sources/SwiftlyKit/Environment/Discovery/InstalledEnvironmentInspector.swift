@@ -61,6 +61,14 @@ struct InstalledEnvironmentInspector {
             preferred: preferredToolchain
         )
 
+        if customSDKRegistryIsAbsent(swiftly) {
+            return EnvironmentRemovalInventory(
+                toolchains: registered,
+                sdks: [],
+                sdkInspection: .absent
+            )
+        }
+
         for manager in candidates {
             do {
                 let sdks = try await registeredSDKs(swiftly: swiftly, manager: manager)
@@ -99,7 +107,8 @@ extension InstalledEnvironmentInspector {
 
         let command = SubprocessCommand(
             executableURL: swiftly.executableURL,
-            arguments: ["list", "--format", "json"]
+            arguments: ["list", "--format", "json"],
+            environment: swiftly.processEnvironment
         )
 
         let result = try await run(command)
@@ -107,14 +116,22 @@ extension InstalledEnvironmentInspector {
         guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
         guard let data = result.standardOutput.data(using: .utf8) else { throw InstalledEnvironmentError.invalidOutput }
 
-        return try Self.parseSwiftlyList(data).filter(isToolchainUsable)
+        let usability: @Sendable (SwiftVersion) -> Bool
+        if let location = swiftly.location {
+            usability = { Self.liveToolchainUsability($0, in: location) }
+        } else {
+            usability = isToolchainUsable
+        }
+
+        return try Self.parseSwiftlyList(data).filter(usability)
     }
 
     private func rawToolchains(swiftly: SwiftlyInstallation) async throws -> [ToolchainPayload] {
 
         let command = SubprocessCommand(
             executableURL: swiftly.executableURL,
-            arguments: ["list", "--format", "json"]
+            arguments: ["list", "--format", "json"],
+            environment: swiftly.processEnvironment
         )
 
         let result = try await run(command)
@@ -133,10 +150,12 @@ extension InstalledEnvironmentInspector {
         toolchain: SwiftVersion
     ) async throws -> [InstalledStaticLinuxSDK] {
 
+        guard !customSDKRegistryIsAbsent(swiftly) else { return [] }
+
         let command = swiftly.command(
             tool: "swift",
             toolchain: toolchain,
-            arguments: ["sdk", "list"]
+            arguments: swiftly.sdkCommandArguments(["sdk", "list"])
         )
         
         let result = try await run(command)
@@ -148,10 +167,12 @@ extension InstalledEnvironmentInspector {
 
     private func registeredSDKs(swiftly: SwiftlyInstallation, manager: SwiftVersion) async throws -> [RegisteredSDK] {
 
+        guard !customSDKRegistryIsAbsent(swiftly) else { return [] }
+
         let command = swiftly.command(
             tool: "swift",
             toolchain: manager,
-            arguments: ["sdk", "list"]
+            arguments: swiftly.sdkCommandArguments(["sdk", "list"])
         )
 
         let result = try await run(command)
@@ -159,6 +180,17 @@ extension InstalledEnvironmentInspector {
         guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
 
         return try Self.parseRegisteredSDKList(result.standardOutput)
+    }
+
+    private func customSDKRegistryIsAbsent(_ swiftly: SwiftlyInstallation) -> Bool {
+
+        guard let sdkDirectory = swiftly.location?.swiftPMSDKDirectory else { return false }
+
+        var isDirectory: ObjCBool = false
+        return !FileManager.default.fileExists(
+            atPath: sdkDirectory.path(percentEncoded: false),
+            isDirectory: &isDirectory
+        )
     }
 
     private func run(_ command: SubprocessCommand) async throws -> SubprocessResult {
@@ -285,19 +317,26 @@ extension InstalledEnvironmentInspector {
 extension InstalledEnvironmentInspector {
 
     private static func liveToolchainUsability(_ version: SwiftVersion) -> Bool {
-        
-        let defaultToolchainsDirectory = FileManager.default.homeDirectoryForCurrentUser.appending(
-            path: "Library/Developer/Toolchains",
-            directoryHint: .isDirectory
-        )
-        
-        let toolchainsDirectory = ProcessInfo.processInfo.environment["SWIFTLY_TOOLCHAINS_DIR"].map {
-            URL(filePath: $0, directoryHint: .isDirectory)
-        } ?? defaultToolchainsDirectory
-        
+        guard let location = try? EnvironmentStorage.standard.resolved() else { return false }
+        return liveToolchainUsability(version, in: location)
+    }
+
+    private static func liveToolchainUsability(_ version: SwiftVersion, in location: EnvironmentStorageLocation) -> Bool {
+
+        let toolchainsDirectory = location.toolchainsDirectory
         let executable = toolchainsDirectory.appending(path: "swift-\(version)-RELEASE.xctoolchain/usr/bin/swift")
 
-        return FileManager.default.isExecutableFile(atPath: executable.path(percentEncoded: false))
+        guard FileManager.default.isExecutableFile(atPath: executable.path(percentEncoded: false)) else {
+            return false
+        }
+        guard case .directory = location.storage else { return true }
+
+        guard let resolvedToolchainsDirectory = try? CanonicalFileURL.resolve(toolchainsDirectory),
+              let resolvedExecutable = try? CanonicalFileURL.resolve(executable),
+              resolvedExecutable.pathComponents.starts(with: resolvedToolchainsDirectory.pathComponents)
+        else { return false }
+
+        return true
     }
 
 }

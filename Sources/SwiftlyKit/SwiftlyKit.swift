@@ -10,10 +10,12 @@ public struct SwiftlyKit: Sendable {
     private let remover: EnvironmentRemover
     private let swiftPM: SwiftPM
     
-    /// Creates a SwiftlyKit instance for the current host and user environment.
-    public init() {
+    /// Creates a stateless SwiftlyKit facade for one deterministic Swiftly namespace.
+    /// The default uses standard per-user locations. A custom root applies to discovery,
+    /// preparation, selected-tool commands, and removal plans.
+    public init(environmentStorage: EnvironmentStorage = .standard) {
         self.init(
-            assessor: EnvironmentAssessor(),
+            assessor: EnvironmentAssessor(environmentStorage: environmentStorage),
             preparer: EnvironmentPreparer(),
             swiftPM: SwiftPM(),
             remover: EnvironmentRemover()
@@ -291,9 +293,9 @@ extension SwiftlyKit {
         try await SwiftlyKit().removeEnvironment(plan, onEvent: onEvent)
     }
 
-    /// Runs the complete fast track for one verified build and returns its runnable result.
-    /// Uses one SwiftPM environment, trait, and shared-storage configuration for the complete workflow.
-    /// Applies build choices and can record removal plans before toolchain or SDK installation.
+    /// Runs the complete fast track with one SwiftPM workflow and selected environment storage.
+    /// Applies build choices, can record removal plans before installations, and
+    /// returns one verified runnable result.
     public static func build(
         _ packageRoot: URL,
         product: String? = nil,
@@ -307,11 +309,12 @@ extension SwiftlyKit {
         swiftPMEnvironment: SwiftPMEnvironment = .inherited,
         swiftPMTraits: SwiftPMTraits = .packageDefaults,
         swiftPMSharedStorage: SwiftPMSharedStorage = .standard,
+        environmentStorage: EnvironmentStorage = .standard,
         recordRemovalPlan: EnvironmentRemovalPlan.Recorder? = nil,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> BuildResult {
 
-        try await SwiftlyKit().build(
+        try await SwiftlyKit(environmentStorage: environmentStorage).build(
             packageRoot,
             product: product,
             for: target,

@@ -35,7 +35,8 @@ extension SwiftPM {
         let scratchDirectory = try SwiftPMScratchDirectory(
             storage: storage,
             packageRoot: environment.packageRoot,
-            sharedStorage: environment.swiftPMSharedStorage
+            sharedStorage: environment.swiftPMSharedStorage,
+            environmentStorage: environment.environmentStorage
         )
 
         let operation: SwiftPMError.Operation

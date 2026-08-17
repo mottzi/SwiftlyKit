@@ -34,11 +34,14 @@ struct RegisteredSDK: Hashable, Sendable {
 /// The result of probing Swift's shared SDK registry through one manager.
 enum SDKInspection: Hashable, Sendable {
 
-    /// The registry was read successfully through this registered toolchain.
+    /// The selected SDK registry was read successfully through this registered toolchain.
     case available(manager: SwiftVersion)
 
-    /// No registered stable toolchain could run `swift sdk list`.
+    /// No registered stable toolchain could read the selected SDK registry.
     case unavailable
+
+    /// A custom SDK registry does not exist yet and is therefore empty.
+    case absent
 
     /// A manager returned success, but its SDK listing was malformed.
     case malformed

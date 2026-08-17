@@ -30,4 +30,54 @@ struct SDKBundleLocatorTests {
         }
     }
 
+    @Test("Locates a custom SDK registry only below its environment storage root")
+    func customEnvironmentStorageLocation() throws {
+
+        try withTemporaryDirectory(prefix: "SwiftlyKit-SDKLocator") { directory in
+            let identifier = "swift-6.3.3-RELEASE_static-linux-0.1.0"
+            let storageRoot = directory.appending(path: "environment")
+            let customBundle = storageRoot.appending(
+                path: "swift-sdks/\(identifier).artifactbundle"
+            )
+            try FileManager.default.createDirectory(at: customBundle, withIntermediateDirectories: true)
+
+            #expect(
+                SDKBundleLocator.locate(
+                    identifier: identifier,
+                    in: .directory(storageRoot),
+                    homeDirectory: directory.appending(path: "unrelated-home")
+                ) == customBundle.standardizedFileURL
+            )
+            #expect(
+                SDKBundleLocator.locate(
+                    identifier: identifier,
+                    homeDirectory: directory.appending(path: "unrelated-home")
+                ) == nil
+            )
+        }
+    }
+
+    @Test("A custom SDK bundle symlink cannot escape its registry")
+    func customSDKBundleSymlinkEscapeIsRejected() throws {
+
+        try withTemporaryDirectory(prefix: "SwiftlyKit-SDKLocator") { directory in
+            let identifier = "swift-6.3.3-RELEASE_static-linux-0.1.0"
+            let storageRoot = directory.appending(path: "environment")
+            let sdkDirectory = storageRoot.appending(path: "swift-sdks")
+            let outsideBundle = directory.appending(path: "outside.artifactbundle")
+            let customBundle = sdkDirectory.appending(path: "\(identifier).artifactbundle")
+            try FileManager.default.createDirectory(at: sdkDirectory, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: outsideBundle, withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(at: customBundle, withDestinationURL: outsideBundle)
+
+            #expect(
+                SDKBundleLocator.locate(
+                    identifier: identifier,
+                    in: .directory(storageRoot),
+                    homeDirectory: directory.appending(path: "unrelated-home")
+                ) == nil
+            )
+        }
+    }
+
 }

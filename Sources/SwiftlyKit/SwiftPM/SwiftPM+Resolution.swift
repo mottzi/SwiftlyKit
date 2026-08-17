@@ -13,7 +13,8 @@ extension SwiftPM {
         let scratchDirectory = try SwiftPMScratchDirectory(
             storage: scratchStorage,
             packageRoot: environment.packageRoot,
-            sharedStorage: environment.swiftPMSharedStorage
+            sharedStorage: environment.swiftPMSharedStorage,
+            environmentStorage: environment.environmentStorage
         )
 
         await report(

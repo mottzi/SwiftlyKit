@@ -5,6 +5,77 @@ import Testing
 @Suite("Environment assessor")
 struct EnvironmentAssessorTests {
 
+    @Test("Assessment captures the selected environment storage namespace")
+    func assessmentCapturesEnvironmentStorage() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            let storage = EnvironmentStorage.directory(
+                packageRoot.deletingLastPathComponent().appending(path: "swiftly")
+            )
+            let release = assessorRelease()
+            let assessor = EnvironmentAssessor(
+                environmentStorage: storage,
+                assessHost: { .ready },
+                detectSwiftly: { nil },
+                loadReleases: { [release] },
+                inspectInventory: { _ in
+                    InstalledEnvironmentInventory(toolchains: [], sdks: [])
+                },
+                locateSDK: { _ in nil }
+            )
+
+            let assessment = try await assessor.assess(
+                packageRoot,
+                for: .linux(.arm64),
+                toolchain: .automatic
+            )
+
+            #expect(
+                try assessment.environmentStorage.resolved().homeDirectory
+                    == storage.resolved().homeDirectory
+            )
+
+            let choices = try await assessor.compatibleEnvironments(
+                packageRoot,
+                for: .linux(.arm64)
+            )
+            let choice = try #require(choices.first)
+            #expect(
+                try choice.environmentStorage.resolved().homeDirectory
+                    == storage.resolved().homeDirectory
+            )
+        }
+    }
+
+    @Test("Assessment rejects an environment root that overlaps the package")
+    func assessmentRejectsPackageOverlap() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            let assessor = EnvironmentAssessor(
+                environmentStorage: .directory(packageRoot),
+                assessHost: { .ready },
+                detectSwiftly: {
+                    Issue.record("Swiftly detection must not run for unsafe storage.")
+                    return nil
+                }
+            )
+
+            await #expect(throws: SwiftlyKitError.unsafeEnvironmentStorage(packageRoot)) {
+                try await assessor.assess(
+                    packageRoot,
+                    for: .linux(.arm64),
+                    toolchain: .automatic
+                )
+            }
+        }
+    }
+
     @Test("Missing Swiftly describes every required installation without inspecting installed state")
     func missingSwiftlyRequirements() async throws {
 

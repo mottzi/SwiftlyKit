@@ -6,9 +6,7 @@ struct EnvironmentRemover {
     private(set) var temporaryDirectory: URL = FileManager.default.temporaryDirectory
     private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
 
-    private(set) var detectSwiftly: @Sendable () async throws -> SwiftlyInstallation? = {
-        try await SwiftlyInstallation.detect()
-    }
+    private(set) var detectSwiftlyInStorage: @Sendable (EnvironmentStorage) async throws -> SwiftlyInstallation?
 
     private(set) var inspect:
         @Sendable (SwiftlyInstallation, SwiftVersion?, Bool) async throws -> EnvironmentRemovalInventory = {
@@ -22,9 +20,7 @@ struct EnvironmentRemover {
     init(
         temporaryDirectory: URL = FileManager.default.temporaryDirectory,
         runner: any SubprocessRunning = LiveSubprocessRunner(),
-        detectSwiftly: @escaping @Sendable () async throws -> SwiftlyInstallation? = {
-            try await SwiftlyInstallation.detect()
-        },
+        detectSwiftly: (@Sendable () async throws -> SwiftlyInstallation?)? = nil,
         inspect:
             @escaping @Sendable (SwiftlyInstallation, SwiftVersion?, Bool) async throws -> EnvironmentRemovalInventory = {
             try await InstalledEnvironmentInspector().inspectForRemoval(
@@ -36,15 +32,24 @@ struct EnvironmentRemover {
     ) {
         self.temporaryDirectory = temporaryDirectory
         self.runner = runner
-        self.detectSwiftly = detectSwiftly
+        if let detectSwiftly {
+            self.detectSwiftlyInStorage = { _ in try await detectSwiftly() }
+        } else {
+            self.detectSwiftlyInStorage = { storage in
+                try await SwiftlyInstallation.detect(storage: storage)
+            }
+        }
         self.inspect = inspect
     }
 
     func remove(_ plan: EnvironmentRemovalPlan, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
 
+        let environmentStorage = plan.environmentStorage
+        _ = try environmentStorage.resolved()
+
         let swiftly: SwiftlyInstallation
         do {
-            guard let detected = try await detectSwiftly() else {
+            guard let detected = try await detectSwiftlyInStorage(environmentStorage) else {
                 throw SwiftlyKitError.incompatibleSwiftly
             }
             swiftly = detected
@@ -138,24 +143,23 @@ extension EnvironmentRemover {
 
             case .staticLinuxSDK(let identifier):
                 try requireSDKState(state)
+                guard state.contains(sdk: identifier) else { return [] }
                 guard let manager = state.sdkManager else {
                     throw SwiftlyKitError.environmentRemovalFailed(
                         "No installed Swift toolchain can inspect the shared SDK registry."
                     )
                 }
-                return state.contains(sdk: identifier)
-                    ? [.sdk(ManagedSDK(identifier: identifier, manager: manager))]
-                    : []
+                return [.sdk(ManagedSDK(identifier: identifier, manager: manager))]
 
             case .environment(let toolchainVersion, let identifier):
                 try requireSDKState(state)
-                guard let manager = state.sdkManager else {
-                    throw SwiftlyKitError.environmentRemovalFailed(
-                        "No installed Swift toolchain can inspect the shared SDK registry."
-                    )
-                }
                 var operations: [Operation] = []
                 if state.contains(sdk: identifier) {
+                    guard let manager = state.sdkManager else {
+                        throw SwiftlyKitError.environmentRemovalFailed(
+                            "No installed Swift toolchain can inspect the shared SDK registry."
+                        )
+                    }
                     operations.append(.sdk(ManagedSDK(identifier: identifier, manager: manager)))
                 }
                 if let toolchain = state.toolchain(toolchainVersion) {
@@ -217,7 +221,7 @@ extension EnvironmentRemover {
     private func requireSDKState(_ state: EnvironmentRemovalInventory) throws {
 
         switch state.sdkInspection {
-            case .available:
+            case .available, .absent:
                 return
             case .unavailable:
                 throw SwiftlyKitError.environmentRemovalFailed(
@@ -266,14 +270,17 @@ extension EnvironmentRemover {
                     swiftly.command(
                         tool: "swift",
                         toolchain: managedSDK.manager,
-                        arguments: ["sdk", "remove", managedSDK.identifier],
+                        arguments: swiftly.sdkCommandArguments([
+                            "sdk", "remove", managedSDK.identifier
+                        ]),
                         workingDirectory: temporaryDirectory
                     )
                 case .toolchain(let version):
                     SubprocessCommand(
                         executableURL: swiftly.executableURL,
                         arguments: ["uninstall", version.description, "--assume-yes"],
-                        workingDirectory: temporaryDirectory
+                        workingDirectory: temporaryDirectory,
+                        environment: swiftly.processEnvironment
                     )
             }
         }

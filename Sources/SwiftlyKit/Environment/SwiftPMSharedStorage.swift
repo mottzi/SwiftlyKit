@@ -37,11 +37,8 @@ extension SwiftPMSharedStorage {
 
     /// Returns the first shared-storage location that overlaps the scratch directory.
     func overlappingDirectory(with scratchDirectory: URL) -> URL? {
-        let scratchPath = scratchDirectory.standardizedFileURL.pathComponents
-
         for directory in [cacheDirectory, configurationDirectory, securityDirectory].compactMap({ $0 }) {
-            let sharedPath = directory.standardizedFileURL.pathComponents
-            guard sharedPath.starts(with: scratchPath) || scratchPath.starts(with: sharedPath) else { continue }
+            guard fileURLsOverlap(directory, scratchDirectory) else { continue }
             return directory
         }
 

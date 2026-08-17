@@ -59,7 +59,9 @@ extension SwiftPM {
     private static func liveValidateEnvironment(_ environment: LocalBuildEnvironment) throws {
         try SwiftPMEnvironmentValidator.validate(
             environment,
-            locateSDK: { SDKBundleLocator.locate(identifier: $0) }
+            locateSDK: { identifier in
+                SDKBundleLocator.locate(identifier: identifier, in: environment.environmentStorage)
+            }
         )
     }
 

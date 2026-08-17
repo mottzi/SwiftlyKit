@@ -31,18 +31,15 @@ struct EnvironmentRemovalPlanTests {
             #expect(try decoder.decode(EnvironmentRemovalPlan.self, from: data) == plan)
         }
 
-        let encoded = String(
-            data: try encoder.encode(try EnvironmentRemovalPlan.environment(
-                toolchain: version,
-                staticLinuxSDKIdentifier: sdk.identifier
-            )),
-            encoding: .utf8
+        let encoded = try encoder.encode(try EnvironmentRemovalPlan.environment(
+            toolchain: version,
+            staticLinuxSDKIdentifier: sdk.identifier
+        ))
+        let payload = try #require(
+            try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
         )
-        #expect(
-            encoded == "{\"kind\":\"environment\",\"schemaVersion\":1,"
-                + "\"sdkIdentifier\":\"swift-6.3.3-RELEASE_static-linux-0.1.0\","
-                + "\"toolchain\":{\"major\":6,\"minor\":3,\"patch\":3}}"
-        )
+        #expect(payload["schemaVersion"] as? Int == 2)
+        #expect(payload["storage"] != nil)
 
         let zeroVersionSDK = StaticLinuxSDK(
             identifier: "swift-0.1.0-RELEASE_static-linux-0.1.0",
@@ -201,6 +198,175 @@ struct EnvironmentRemovalPlanTests {
         #expect(await toolchainRunner.commands.map(\.arguments) == [
             ["uninstall", "6.3.3", "--assume-yes"]
         ])
+    }
+
+    @Test("Custom removal plans use their own environment namespace")
+    func customStorageRemovalCommands() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-CustomRemoval") { directory in
+            let storageRoot = directory.appending(path: "swiftly")
+            let executable = storageRoot.appending(path: "bin/swiftly")
+            try makeRemovalTestExecutable(at: executable)
+            let detected = try await SwiftlyInstallation.detect(storage: .directory(storageRoot))
+            let swiftly = try #require(detected)
+            let initial = EnvironmentRemovalInventory(
+                toolchains: [RegisteredToolchain(
+                    version: version,
+                    isInUse: false,
+                    isDefault: false,
+                    selectionStateIsKnown: true
+                )],
+                sdks: [],
+                sdkInspection: .notRequested
+            )
+            let after = EnvironmentRemovalInventory(
+                toolchains: [],
+                sdks: [],
+                sdkInspection: .notRequested
+            )
+            let runner = RecordingSubprocessRunner(results: [.success()])
+            let states = RemovalStateSequence(values: [initial, after])
+            let remover = EnvironmentRemover(
+                runner: runner,
+                detectSwiftly: { swiftly },
+                inspect: { _, _, _ in try await states.next() }
+            )
+
+            try await remover.remove(
+                .toolchain(version, in: .directory(storageRoot))
+            )
+
+            let command = try #require(await runner.commands.first)
+            #expect(removalPath(command.environment?["SWIFTLY_HOME_DIR"]) == removalPath(storageRoot))
+            #expect(removalPath(command.environment?["SWIFTLY_BIN_DIR"]) == removalPath(
+                storageRoot.appending(path: "bin")
+            ))
+            #expect(removalPath(command.environment?["SWIFTLY_TOOLCHAINS_DIR"]) == removalPath(
+                storageRoot.appending(path: "toolchains")
+            ))
+            #expect(FileManager.default.fileExists(atPath: storageRoot.path(percentEncoded: false)))
+            #expect(FileManager.default.fileExists(atPath: executable.path(percentEncoded: false)))
+        }
+    }
+
+    @Test("Custom SDK removal inspects and mutates only its selected registry")
+    func customSDKRemovalUsesCustomRegistry() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-CustomRemoval") { directory in
+            let storageRoot = directory.appending(path: "swiftly")
+            let sdkDirectory = storageRoot.appending(path: "swift-sdks")
+            try FileManager.default.createDirectory(at: sdkDirectory, withIntermediateDirectories: true)
+            let executable = storageRoot.appending(path: "bin/swiftly")
+            try makeRemovalTestExecutable(at: executable)
+            let swiftly = try #require(
+                try await SwiftlyInstallation.detect(storage: .directory(storageRoot))
+            )
+            let toolchains = #"""
+                {
+                "toolchains":[
+                    {"inUse":false,"isDefault":false,"version":{"name":"6.3.3","type":"stable"}}
+                ]
+            }
+            """#
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: toolchains),
+                .success(output: "\(sdk.identifier)\n"),
+                .success(),
+                .success(output: toolchains),
+                .success(output: ""),
+                .success(),
+                .success(output: #"{"toolchains":[]}"#)
+            ])
+            let inspector = InstalledEnvironmentInspector(runner: runner)
+            let remover = EnvironmentRemover(
+                runner: runner,
+                detectSwiftly: { swiftly },
+                inspect: { swiftly, preferredToolchain, includeSDKs in
+                    try await inspector.inspectForRemoval(
+                        swiftly: swiftly,
+                        toolchain: preferredToolchain,
+                        includeSDKs: includeSDKs
+                    )
+                }
+            )
+
+            try await remover.remove(
+                try .environment(
+                    toolchain: version,
+                    staticLinuxSDKIdentifier: sdk.identifier,
+                    in: .directory(storageRoot)
+                )
+            )
+
+            let commands = await runner.commands
+            let initialSDKList = try #require(commands.dropFirst(1).first)
+            let removeSDK = try #require(commands.dropFirst(2).first)
+            let finalSDKList = try #require(commands.dropFirst(4).first)
+            let uninstall = try #require(commands.dropFirst(5).first)
+            #expect(initialSDKList.arguments.prefix(5) == [
+                "run", "swift", "sdk", "list", "--swift-sdks-path"
+            ])
+            let listPath = try #require(initialSDKList.arguments.dropFirst(5).first)
+            #expect(URL(filePath: listPath).pathComponents == sdkDirectory.pathComponents)
+            #expect(initialSDKList.arguments.suffix(1) == ["+6.3.3"])
+            #expect(removeSDK.arguments.prefix(5) == [
+                "run", "swift", "sdk", "remove", sdk.identifier
+            ])
+            let removePathOption = try #require(removeSDK.arguments.firstIndex(of: "--swift-sdks-path"))
+            let removePath = try #require(removeSDK.arguments.dropFirst(removePathOption + 1).first)
+            #expect(URL(filePath: removePath).pathComponents == sdkDirectory.pathComponents)
+            #expect(removeSDK.arguments.suffix(1) == ["+6.3.3"])
+            #expect(finalSDKList.arguments == initialSDKList.arguments)
+            #expect(uninstall.arguments == ["uninstall", "6.3.3", "--assume-yes"])
+        }
+    }
+
+    @Test("An absent custom SDK registry is an idempotent removal no-op")
+    func absentCustomSDKRegistryIsNotCreatedDuringRemoval() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-CustomRemoval") { directory in
+            let storageRoot = directory.appending(path: "swiftly")
+            let executable = storageRoot.appending(path: "bin/swiftly")
+            try makeRemovalTestExecutable(at: executable)
+            let swiftly = try #require(
+                try await SwiftlyInstallation.detect(storage: .directory(storageRoot))
+            )
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: #"""
+                    {
+                    "toolchains":[
+                        {"inUse":false,"isDefault":false,"version":{"name":"6.3.3","type":"stable"}}
+                    ]
+                }
+                """#)
+            ])
+            let inspector = InstalledEnvironmentInspector(runner: runner)
+            let remover = EnvironmentRemover(
+                runner: runner,
+                detectSwiftly: { swiftly },
+                inspect: { swiftly, preferredToolchain, includeSDKs in
+                    try await inspector.inspectForRemoval(
+                        swiftly: swiftly,
+                        toolchain: preferredToolchain,
+                        includeSDKs: includeSDKs
+                    )
+                }
+            )
+
+            try await remover.remove(
+                try .staticLinuxSDK(
+                    identifier: sdk.identifier,
+                    in: .directory(storageRoot)
+                )
+            )
+
+            #expect(await runner.commands.map(\.arguments) == [
+                ["list", "--format", "json"]
+            ])
+            #expect(!FileManager.default.fileExists(
+                atPath: storageRoot.appending(path: "swift-sdks").path(percentEncoded: false)
+            ))
+        }
     }
 
     @Test("Absent exact targets are idempotent no-ops")
@@ -813,4 +979,32 @@ private actor BlockingRemovalRunner: SubprocessRunning {
         releaseWaiter = nil
     }
 
+}
+
+private func makeRemovalTestExecutable(at url: URL) throws {
+
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    try Data("#!/bin/sh\nprintf '1.2.3\\n'\n".utf8).write(to: url)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: 0o755],
+        ofItemAtPath: url.path(percentEncoded: false)
+    )
+}
+
+private func removalPath(_ value: String?) -> String {
+
+    guard let value else { return "" }
+    let path = URL(filePath: value).standardizedFileURL
+        .path(percentEncoded: false)
+    let normalized = path.hasPrefix("/private/") ? String(path.dropFirst("/private".count)) : path
+    guard normalized != "/" else { return normalized }
+    return normalized.hasSuffix("/") ? String(normalized.dropLast()) : normalized
+}
+
+private func removalPath(_ value: URL) -> String {
+
+    removalPath(value.path(percentEncoded: false))
 }

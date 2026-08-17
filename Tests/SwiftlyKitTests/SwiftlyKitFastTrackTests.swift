@@ -158,6 +158,68 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
+    @Test("The fast track carries custom environment storage through every selected-tool command")
+    func customEnvironmentStorageEnvironment() async throws {
+
+        try await withFastTrackTemporaryDirectory { packageRoot in
+            let swiftlyRoot = packageRoot.deletingLastPathComponent().appending(path: "swiftly")
+            let swiftlyExecutable = swiftlyRoot.appending(path: "bin/swiftly")
+            try makeFastTrackExecutable(at: swiftlyExecutable)
+            let sdkIdentifier = sdkIdentifier(
+                for: SwiftVersion(major: 6, minor: 2, patch: 1)
+            )
+            try FileManager.default.createDirectory(
+                at: swiftlyRoot.appending(path: "swift-sdks/\(sdkIdentifier).artifactbundle"),
+                withIntermediateDirectories: true
+            )
+            let storage = EnvironmentStorage.directory(swiftlyRoot)
+            let scratch = packageRoot.deletingLastPathComponent().appending(path: "scratch")
+            let executable = packageRoot.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .x86_64)
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: packageJSON),
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: packageRoot.path(percentEncoded: false) + "\n")
+            ])
+            let kit = fastTrackKit(
+                packageRoot: packageRoot,
+                runner: runner,
+                environmentStorage: storage
+            )
+            let inherited = ProcessInfo.processInfo.environment
+            _ = try await kit.build(
+                packageRoot,
+                product: nil,
+                for: .linux(.x86_64),
+                configuration: .release,
+                scratchStorage: .directory(scratch),
+                onEvent: nil
+            )
+
+            let commands = await runner.commands
+            #expect(commands.count == 4)
+            #expect(commands.allSatisfy {
+                normalizedPath(URL(filePath: $0.environment?["SWIFTLY_HOME_DIR"] ?? ""))
+                    == normalizedPath(swiftlyRoot)
+            })
+            #expect(commands.allSatisfy {
+                normalizedPath(URL(filePath: $0.environment?["SWIFTLY_BIN_DIR"] ?? ""))
+                    == normalizedPath(swiftlyRoot.appending(path: "bin"))
+            })
+            #expect(commands.allSatisfy {
+                normalizedPath(URL(filePath: $0.environment?["SWIFTLY_TOOLCHAINS_DIR"] ?? ""))
+                    == normalizedPath(swiftlyRoot.appending(path: "toolchains"))
+            })
+            #expect(commands.allSatisfy { $0.environment?["PATH"] == inherited["PATH"] })
+            #expect(commands.allSatisfy { $0.environment?["HOME"] == inherited["HOME"] })
+            #expect(commands.allSatisfy {
+                $0.environment?["DEVELOPER_DIR"] == inherited["DEVELOPER_DIR"]
+            })
+        }
+    }
+
     @Test("An unspecified product rejects an ambiguous package")
     func ambiguousProduct() async throws {
 
@@ -436,10 +498,17 @@ private func fastTrackKit(
     packageRoot: URL,
     runner: RecordingSubprocessRunner,
     versions: [SwiftVersion] = [SwiftVersion(major: 6, minor: 2, patch: 1)],
-    installed: Bool = true
+    installed: Bool = true,
+    environmentStorage: EnvironmentStorage = .standard
 ) -> SwiftlyKit {
 
-    let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
+    let swiftlyURL: URL = switch environmentStorage {
+        case .standard:
+            packageRoot.appending(path: "swiftly")
+        case .directory(let root):
+            root.appending(path: "bin/swiftly")
+    }
+    let swiftly = SwiftlyInstallation(executableURL: swiftlyURL)
     let inventory = InstalledEnvironmentInventory(
         toolchains: installed ? versions : [],
         sdks: installed ? versions.map { version in
@@ -466,6 +535,7 @@ private func fastTrackKit(
 
     return SwiftlyKit(
         assessor: EnvironmentAssessor(
+            environmentStorage: environmentStorage,
             assessHost: { .ready },
             detectSwiftly: { swiftly },
             loadReleases: { releases },
@@ -484,6 +554,19 @@ private func fastTrackKit(
             runner: runner,
             validateEnvironment: { _ in }
         )
+    )
+}
+
+private func makeFastTrackExecutable(at url: URL) throws {
+
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    try Data("#!/bin/sh\nexit 0\n".utf8).write(to: url)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: 0o755],
+        ofItemAtPath: url.path(percentEncoded: false)
     )
 }
 

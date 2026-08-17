@@ -3,28 +3,46 @@ import Foundation
 /// Read-only orchestration that resolves one exact build environment.
 struct EnvironmentAssessor {
 
-    private(set) var assessHost: @Sendable () async throws -> HostReadiness = {
-        try await HostPreflight().assess()
-    }
+    private(set) var environmentStorage: EnvironmentStorage
+    private(set) var assessHost: @Sendable () async throws -> HostReadiness
+    private(set) var detectSwiftly: @Sendable () async throws -> SwiftlyInstallation?
+    private(set) var loadReleases: @Sendable () async throws -> [OfficialStableRelease]
+    private(set) var loadCachedReleases: @Sendable () async -> [OfficialStableRelease]?
+    private(set) var inspectInventory: @Sendable (SwiftlyInstallation) async throws -> InstalledEnvironmentInventory
+    private(set) var locateSDK: @Sendable (String) -> URL?
 
-    private(set) var detectSwiftly: @Sendable () async throws -> SwiftlyInstallation? = {
-        try await SwiftlyInstallation.detect()
-    }
-
-    private(set) var loadReleases: @Sendable () async throws -> [OfficialStableRelease] = {
-        try await SwiftOrgReleaseCatalog.shared.stableReleases()
-    }
-
-    private(set) var loadCachedReleases: @Sendable () async -> [OfficialStableRelease]? = {
-        await SwiftOrgReleaseCatalog.shared.cachedReleases()
-    }
-
-    private(set) var inspectInventory: @Sendable (SwiftlyInstallation) async throws -> InstalledEnvironmentInventory = {
-        try await InstalledEnvironmentInspector().inspectAll(swiftly: $0)
-    }
-
-    private(set) var locateSDK: @Sendable (String) -> URL? = {
-        SDKBundleLocator.locate(identifier: $0)
+    init(
+        environmentStorage: EnvironmentStorage = .standard,
+        assessHost: @escaping @Sendable () async throws -> HostReadiness = {
+            try await HostPreflight().assess()
+        },
+        detectSwiftly: (@Sendable () async throws -> SwiftlyInstallation?)? = nil,
+        loadReleases: @escaping @Sendable () async throws -> [OfficialStableRelease] = {
+            try await SwiftOrgReleaseCatalog.shared.stableReleases()
+        },
+        loadCachedReleases: @escaping @Sendable () async -> [OfficialStableRelease]? = {
+            await SwiftOrgReleaseCatalog.shared.cachedReleases()
+        },
+        inspectInventory: @escaping @Sendable (SwiftlyInstallation) async throws -> InstalledEnvironmentInventory = {
+            try await InstalledEnvironmentInspector().inspectAll(swiftly: $0)
+        },
+        locateSDK: (@Sendable (String) -> URL?)? = nil
+    ) {
+        self.environmentStorage = environmentStorage
+        self.assessHost = assessHost
+        if let detectSwiftly {
+            self.detectSwiftly = detectSwiftly
+        } else {
+            self.detectSwiftly = {
+                try await SwiftlyInstallation.detect(storage: environmentStorage)
+            }
+        }
+        self.loadReleases = loadReleases
+        self.loadCachedReleases = loadCachedReleases
+        self.inspectInventory = inspectInventory
+        self.locateSDK = locateSDK ?? { identifier in
+            SDKBundleLocator.locate(identifier: identifier, in: environmentStorage)
+        }
     }
 
     func assess(
@@ -83,6 +101,7 @@ extension EnvironmentAssessor {
         try (await assessHost()).requireReady()
 
         let packageInputs = try PackageInputSnapshot.capture(at: packageRoot)
+        let validatedStorage = try environmentStorage.validated(against: packageInputs.packageRoot)
         let swiftly = try await detectSwiftly()
         let inventory = try await installedInventory(swiftly)
 
@@ -90,7 +109,8 @@ extension EnvironmentAssessor {
             packageInputs: packageInputs,
             inventory: inventory,
             isSwiftlyAvailable: swiftly != nil,
-            target: target
+            target: target,
+            environmentStorage: validatedStorage
         )
     }
 
@@ -167,7 +187,8 @@ extension EnvironmentAssessor {
             packageInputs: observation.packageInputs,
             release: release,
             requiredComponents: requiredComponents,
-            target: observation.target
+            target: observation.target,
+            environmentStorage: observation.environmentStorage
         )
     }
 
@@ -207,6 +228,7 @@ extension EnvironmentAssessor {
         let inventory: InstalledEnvironmentInventory
         let isSwiftlyAvailable: Bool
         let target: BuildTarget
+        let environmentStorage: EnvironmentStorage
     }
 
     private static let catalogUnavailable = SwiftlyKitError.networkFailure(

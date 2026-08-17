@@ -22,10 +22,7 @@ extension SwiftPM {
 extension SwiftPM {
 
     /// Creates a SwiftPM command with the snapshot bound to the prepared environment.
-    static func command(
-        _ environment: LocalBuildEnvironment,
-        swiftArguments: [String]
-    ) -> SubprocessCommand {
+    static func command(_ environment: LocalBuildEnvironment, swiftArguments: [String]) -> SubprocessCommand {
 
         var swiftArguments = swiftArguments
         if !swiftArguments.isEmpty {
@@ -73,9 +70,25 @@ extension SwiftPM {
     ) -> SubprocessCommand {
 
         var processEnvironment = processEnvironment
-        processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftly.executableURL
-            .deletingLastPathComponent()
-            .path(percentEncoded: false)
+
+        let hasCustomStorage: Bool
+        if case .directory = environment.environmentStorage,
+           let location = try? environment.environmentStorage.resolved() {
+            hasCustomStorage = true
+            for name in processEnvironment.keys.filter({ $0.hasPrefix("SWIFTLY_") }) {
+                processEnvironment[name] = nil
+            }
+            for (name, value) in location.environment {
+                processEnvironment[name] = value
+            }
+        } else {
+            hasCustomStorage = false
+        }
+        if !hasCustomStorage {
+            processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftly.executableURL
+                .deletingLastPathComponent()
+                .path(percentEncoded: false)
+        }
 
         return environment.swiftly.command(
             tool: tool,
