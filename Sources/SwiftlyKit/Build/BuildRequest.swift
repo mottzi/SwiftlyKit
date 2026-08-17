@@ -23,11 +23,11 @@ public struct BuildRequest: Sendable {
     public let strip: Bool
     
     /// Creates a request for one discovered executable product.
-    /// Defaults to a debug build in package `.build` with SwiftPM's concurrent-job default.
+    /// Defaults to a release build in package `.build` with SwiftPM's concurrent-job default.
     /// The default does not strip, publish, or clean the output.
     public init(
         _ product: ExecutableProduct,
-        configuration: BuildConfiguration = .debug,
+        configuration: BuildConfiguration = .release,
         jobs: Int? = nil,
         storage: BuildStorage = .packageDefault,
         output: BuildOutput = .buildStorage,

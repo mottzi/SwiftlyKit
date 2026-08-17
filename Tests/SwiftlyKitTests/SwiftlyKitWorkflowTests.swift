@@ -17,7 +17,10 @@ struct SwiftlyKitWorkflowTests {
                 packageInputs: try PackageInputSnapshot.capture(at: packageRoot),
                 release: OfficialStableRelease(
                     version: version,
-                    staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
+                    staticLinuxSDK: StaticLinuxSDK(
+                        identifier: "sdk",
+                        version: "1.0.0"
+                    ),
                     staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
                         downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
                         checksum: String(repeating: "a", count: 64),
@@ -49,6 +52,55 @@ struct SwiftlyKitWorkflowTests {
         }
     }
 
+    @Test("The staged public seam propagates recorder errors unchanged")
+    func stagedRecorderRefusalIsUnchanged() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8)
+                .write(to: packageRoot.appending(path: "Package.swift"))
+            let version = SwiftVersion(major: 6, minor: 2, patch: 1)
+            let sdk = StaticLinuxSDK(
+                identifier: "swift-6.2.1-RELEASE_static-linux-0.0.1",
+                version: "0.0.1"
+            )
+            let assessment = EnvironmentAssessment(
+                packageInputs: try PackageInputSnapshot.capture(at: packageRoot),
+                release: OfficialStableRelease(
+                    version: version,
+                    staticLinuxSDK: sdk,
+                    staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
+                        downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
+                        checksum: String(repeating: "a", count: 64),
+                        supportedArchitectures: [.arm64]
+                    )!
+                ),
+                requiredComponents: [.toolchain],
+                target: .linux(.arm64)
+            )
+            let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
+            let runner = RecordingSubprocessRunner(results: [.success()])
+            let kit = SwiftlyKit(
+                assessor: EnvironmentAssessor(),
+                preparer: EnvironmentPreparer(
+                    runner: runner,
+                    assessHost: { .ready },
+                    detectSwiftly: { swiftly },
+                    inspect: { _, _ in InstalledEnvironmentInventory(toolchains: [], sdks: []) },
+                    revalidate: { _ in }
+                ),
+                swiftPM: SwiftPM()
+            )
+
+            await #expect(throws: WorkflowRecorderRefusal.self) {
+                try await kit.prepare(
+                    assessment,
+                    recordRemovalPlan: { _ in throw WorkflowRecorderRefusal() }
+                )
+            }
+            #expect(await runner.commands.isEmpty)
+        }
+    }
+
     @Test("A discovered environment carries package and target context through preparation")
     func capabilityDrivenProductDiscovery() async throws {
 
@@ -71,7 +123,10 @@ struct SwiftlyKitWorkflowTests {
             )
             let release = OfficialStableRelease(
                 version: version,
-                staticLinuxSDK: StaticLinuxSDK(identifier: sdkIdentifier, version: "0.0.1"),
+                staticLinuxSDK: StaticLinuxSDK(
+                    identifier: sdkIdentifier,
+                    version: "0.0.1"
+                ),
                 staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
                     downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
                     checksum: String(repeating: "a", count: 64),
@@ -128,7 +183,10 @@ struct SwiftlyKitWorkflowTests {
             let secondKit = workflowKit(runner: runner)
             let environment = LocalBuildEnvironment(
                 swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
-                staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
+                staticLinuxSDK: StaticLinuxSDK(
+                    identifier: "sdk",
+                    version: "1.0.0"
+                ),
                 packageRoot: packageRoot,
                 swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
                 sdkBundleURL: packageRoot.appending(path: "sdk.artifactbundle"),
@@ -277,7 +335,10 @@ private func fastTrackWorkflowKit(packageRoot: URL, gate: MutationGate, runner: 
 
     let version = SwiftVersion(major: 6, minor: 2, patch: 1)
     let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
-    let sdk = StaticLinuxSDK(identifier: "sdk", version: "1.0.0")
+    let sdk = StaticLinuxSDK(
+        identifier: "sdk",
+        version: "1.0.0"
+    )
     let inventory = InstalledEnvironmentInventory(
         toolchains: [version],
         sdks: [InstalledStaticLinuxSDK(toolchainVersion: version, identifier: sdk.identifier)]
@@ -320,7 +381,10 @@ private func workflowEnvironment(packageRoot: URL) -> LocalBuildEnvironment {
 
     LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
-        staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
+        staticLinuxSDK: StaticLinuxSDK(
+            identifier: "sdk",
+            version: "1.0.0"
+        ),
         packageRoot: packageRoot,
         swiftly: SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly")),
         sdkBundleURL: packageRoot.appending(path: "sdk.artifactbundle"),
@@ -348,4 +412,8 @@ private func secondCommandStarts(within duration: Duration, runner: WorkflowMuta
         group.cancelAll()
         return result
     }
+}
+
+private struct WorkflowRecorderRefusal: Error {
+
 }

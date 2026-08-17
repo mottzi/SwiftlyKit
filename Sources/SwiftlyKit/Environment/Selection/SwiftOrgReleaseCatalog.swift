@@ -198,7 +198,10 @@ extension SwiftOrgReleaseCatalog {
 
         guard let downloadURL = URL(string: downloadURLString) else { return nil }
 
-        let sdk = StaticLinuxSDK(identifier: identifier, version: sdkVersion)
+        let sdk = StaticLinuxSDK(
+            identifier: identifier,
+            version: sdkVersion
+        )
         guard let metadata = StaticLinuxSDKMetadata(
             downloadURL: downloadURL,
             checksum: checksum,

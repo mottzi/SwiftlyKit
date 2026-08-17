@@ -1,7 +1,8 @@
 import Foundation
 
-/// Typed failures from coordination, host checks, environment preparation, package inspection, builds, and cleanup.
-public enum SwiftlyKitError: Equatable {
+/// Typed failures from coordination, host checks, environment preparation and removal,
+/// package inspection, builds, and cleanup.
+public enum SwiftlyKitError: Equatable, Sendable {
 
     /// SwiftlyKit could not establish safe coordination for a mutating workflow.
     case mutationCoordinationFailed(String)
@@ -110,6 +111,12 @@ public enum SwiftlyKitError: Equatable {
 
     /// SwiftPM could not remove the complete effective scratch directory.
     case buildStorageResetFailed(String)
+
+    /// SwiftlyKit refused an environment removal because the requested scope was unsafe.
+    case unsafeEnvironmentRemoval(String)
+
+    /// An environment removal command or its postcondition failed.
+    case environmentRemovalFailed(String)
 
 }
 
@@ -228,6 +235,12 @@ extension SwiftlyKitError: LocalizedError {
 
             case .buildStorageResetFailed(let detail):
                 "SwiftPM could not reset build storage: \(detail)"
+
+            case .unsafeEnvironmentRemoval(let detail):
+                "SwiftlyKit refused to remove the environment: \(detail)"
+
+            case .environmentRemovalFailed(let detail):
+                "SwiftlyKit could not remove the environment: \(detail)"
         }
     }
 

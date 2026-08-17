@@ -35,36 +35,54 @@ struct EnvironmentPreparer {
         try $0.packageInputs.validateCurrent()
     }
 
-    /// Revalidates first, performs only authorized mutations, and binds the supplied SwiftPM workflow configuration.
+    /// Prepares the environment authorized by one accepted assessment.
     func prepare(
         _ assessment: EnvironmentAssessment,
         swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot(),
         swiftPMTraits: SwiftPMTraits = .packageDefaults,
+        recordRemovalPlan: EnvironmentRemovalPlan.Recorder? = nil,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> LocalBuildEnvironment {
 
-        try (await assessHost()).requireReady()
-        try await revalidate(assessment)
-        try Task.checkCancellation()
+        do {
+            try (await assessHost()).requireReady()
+            try await revalidate(assessment)
+            try Task.checkCancellation()
 
-        let (swiftly, inventory) = try await installRequiredComponents(assessment, onEvent: onEvent)
+            let prepared = try await installRequiredComponents(
+                assessment,
+                recordRemovalPlan: recordRemovalPlan,
+                onEvent: onEvent
+            )
 
-        guard inventory.contains(toolchain: assessment.swiftVersion, sdk: assessment.staticLinuxSDK.identifier)
-        else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
+            guard prepared.inventory.contains(
+                toolchain: assessment.swiftVersion,
+                sdk: assessment.staticLinuxSDK.identifier
+            ) else {
+                throw SwiftlyKitError.staleAssessment
+            }
 
-        let sdkBundleURL = locateSDK(assessment.staticLinuxSDK.identifier)
-        guard let sdkBundleURL else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
+            guard let sdkBundleURL = locateSDK(assessment.staticLinuxSDK.identifier) else {
+                throw SwiftlyKitError.staleAssessment
+            }
 
-        return LocalBuildEnvironment(
-            swiftVersion: assessment.swiftVersion,
-            staticLinuxSDK: assessment.staticLinuxSDK,
-            packageRoot: assessment.packageRoot,
-            swiftly: swiftly,
-            sdkBundleURL: sdkBundleURL,
-            target: assessment.target,
-            swiftPMEnvironment: swiftPMEnvironment,
-            swiftPMTraits: swiftPMTraits
-        )
+            return LocalBuildEnvironment(
+                swiftVersion: assessment.swiftVersion,
+                staticLinuxSDK: assessment.staticLinuxSDK,
+                packageRoot: assessment.packageRoot,
+                swiftly: prepared.swiftly,
+                sdkBundleURL: sdkBundleURL,
+                target: assessment.target,
+                swiftPMEnvironment: swiftPMEnvironment,
+                swiftPMTraits: swiftPMTraits
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as EnvironmentPlanRecordingError {
+            throw error
+        } catch {
+            throw Self.mapError(error)
+        }
     }
 
 }
@@ -73,79 +91,101 @@ extension EnvironmentPreparer {
 
     private func installRequiredComponents(
         _ assessment: EnvironmentAssessment,
+        recordRemovalPlan: EnvironmentRemovalPlan.Recorder?,
         onEvent: SwiftlyKitEvent.Handler?
-    ) async throws -> (swiftly: SwiftlyInstallation, inventory: InstalledEnvironmentInventory) {
+    ) async throws -> InstalledComponents {
 
-        var swiftly = try await detectSwiftly()
+        do {
+            var swiftly = try await detectSwiftly()
         
-        if swiftly == nil {
-            guard assessment.requiredComponents.contains(.swiftly)
-            else { throw EnvironmentPreparationError.swiftlyUnavailableAfterInstallation }
+            if swiftly == nil {
+                guard assessment.requiredComponents.contains(.swiftly)
+                else { throw EnvironmentPreparationError.swiftlyUnavailableAfterInstallation }
             
-            try await bootstrapSwiftly(onEvent: onEvent)
-            swiftly = try await detectSwiftly()
-        }
-        
-        guard let swiftly else { throw EnvironmentPreparationError.swiftlyUnavailableAfterInstallation }
-
-        let toolchain = assessment.swiftVersion
-        let sdk = assessment.release.staticLinuxSDK
-        let sdkMetadata = assessment.release.staticLinuxSDKMetadata
-
-        var state = try await inspect(swiftly, toolchain)
-
-        if !state.contains(toolchain: toolchain) {
-            guard assessment.requiredComponents.contains(.toolchain)
-            else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
-
-            await report(
-                .toolchain,
-                "Installing Swift \(toolchain) without changing the selected default.",
-                to: onEvent
-            )
-
-            let installToolchainCommand = SubprocessCommand(
-                executableURL: swiftly.executableURL,
-                arguments: ["install", toolchain.description, "--verify", "--assume-yes"],
-                workingDirectory: temporaryDirectory
-            )
-
-            try await checkedRun(installToolchainCommand, onEvent: onEvent)
-
-            state = try await inspect(swiftly, toolchain)
-
-            guard state.contains(toolchain: toolchain) else {
-                throw EnvironmentPreparationError.installationFailed(
-                    "Swiftly did not report the selected toolchain after installation."
-                )
+                try await bootstrapSwiftly(onEvent: onEvent)
+                swiftly = try await detectSwiftly()
             }
+        
+            guard let swiftly else { throw EnvironmentPreparationError.swiftlyUnavailableAfterInstallation }
+
+            let toolchain = assessment.swiftVersion
+            let sdk = assessment.release.staticLinuxSDK
+            let sdkMetadata = assessment.release.staticLinuxSDKMetadata
+
+            var state = try await inspect(swiftly, toolchain)
+            var installedToolchain = false
+
+            if !state.contains(toolchain: toolchain) {
+                guard assessment.requiredComponents.contains(.toolchain)
+                else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
+
+                await report(
+                    .toolchain,
+                    "Installing Swift \(toolchain) without changing the selected default.",
+                    to: onEvent
+                )
+
+                let installToolchainCommand = SubprocessCommand(
+                    executableURL: swiftly.executableURL,
+                    arguments: ["install", toolchain.description, "--verify", "--assume-yes"],
+                    workingDirectory: temporaryDirectory
+                )
+
+                try await record(.toolchain(toolchain), using: recordRemovalPlan)
+                try await checkedRun(installToolchainCommand, onEvent: onEvent)
+                installedToolchain = true
+
+                state = try await inspect(swiftly, toolchain)
+
+                guard state.contains(toolchain: toolchain) else {
+                    throw EnvironmentPreparationError.installationFailed(
+                        "Swiftly did not report the selected toolchain after installation."
+                    )
+                }
+            }
+
+            if !state.contains(toolchain: toolchain, sdk: sdk.identifier) {
+                guard assessment.requiredComponents.contains(.staticLinuxSDK)
+                else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
+
+                await report(
+                    .staticLinuxSDK,
+                    "Installing the matching checksummed Static Linux SDK.",
+                    to: onEvent
+                )
+
+                let installSDKCommand = swiftly.command(
+                    tool: "swift",
+                    toolchain: toolchain,
+                    arguments: [
+                        "sdk", "install", sdkMetadata.downloadURL.absoluteString,
+                        "--checksum", sdkMetadata.checksum
+                    ],
+                    workingDirectory: temporaryDirectory
+                )
+
+                let removalPlan: EnvironmentRemovalPlan
+                if installedToolchain {
+                    removalPlan = try .environment(
+                        toolchain: toolchain,
+                        staticLinuxSDKIdentifier: sdk.identifier
+                    )
+                } else {
+                    removalPlan = try .staticLinuxSDK(identifier: sdk.identifier)
+                }
+                try await record(removalPlan, using: recordRemovalPlan)
+                try await checkedRun(installSDKCommand, onEvent: onEvent)
+                state = try await inspect(swiftly, toolchain)
+            }
+
+            return InstalledComponents(swiftly: swiftly, inventory: state)
+        } catch let error as EnvironmentPlanRecordingError {
+            throw error
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw Self.mapError(error)
         }
-
-        if !state.contains(toolchain: toolchain, sdk: sdk.identifier) {
-            guard assessment.requiredComponents.contains(.staticLinuxSDK)
-            else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
-
-            await report(
-                .staticLinuxSDK,
-                "Installing the matching checksummed Static Linux SDK.",
-                to: onEvent
-            )
-
-            let installSDKCommand = swiftly.command(
-                tool: "swift",
-                toolchain: toolchain,
-                arguments: [
-                    "sdk", "install", sdkMetadata.downloadURL.absoluteString,
-                    "--checksum", sdkMetadata.checksum
-                ],
-                workingDirectory: temporaryDirectory
-            )
-
-            try await checkedRun(installSDKCommand, onEvent: onEvent)
-            state = try await inspect(swiftly, toolchain)
-        }
-
-        return (swiftly, state)
     }
 
 }
@@ -255,9 +295,49 @@ extension EnvironmentPreparer {
 
 extension EnvironmentPreparer {
 
+    private func record(_ plan: EnvironmentRemovalPlan, using recorder: EnvironmentRemovalPlan.Recorder?) async throws {
+
+        guard let recorder else { return }
+
+        do {
+            try await recorder(plan)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw EnvironmentPlanRecordingError(underlying: error)
+        }
+    }
+
     private static func bounded(_ value: String) -> String {
         String(value.prefix(8 * 1024))
     }
+
+    private static func mapError(_ error: any Error) -> SwiftlyKitError {
+        switch error {
+            case let error as SwiftlyKitError: return error
+            case let error as EnvironmentPreparationError: return error.swiftlyKitError
+            case let error as InstalledEnvironmentError: return error.swiftlyKitError
+            default: return .swiftlyInstallationFailed("An unexpected environment error occurred.")
+        }
+    }
+
+}
+
+extension EnvironmentPreparer {
+
+    private struct InstalledComponents {
+
+        let swiftly: SwiftlyInstallation
+        let inventory: InstalledEnvironmentInventory
+    }
+
+}
+
+/// Preserves a removal-plan recorder error until the public facade returns it unchanged.
+struct EnvironmentPlanRecordingError: Error {
+
+    let underlying: any Error
 
 }
 

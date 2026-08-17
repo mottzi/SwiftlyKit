@@ -311,28 +311,53 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
+    @Test("The fast track propagates recorder errors unchanged")
+    func recorderRefusalIsUnchanged() async throws {
+
+        try await withFastTrackTemporaryDirectory { packageRoot in
+            let runner = RecordingSubprocessRunner(results: [])
+            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner, installed: false)
+
+            await #expect(throws: FastTrackRecorderRefusal.self) {
+                try await kit.build(
+                    packageRoot,
+                    product: nil,
+                    for: .linux(.x86_64),
+                    configuration: .release,
+                    recordRemovalPlan: { _ in throw FastTrackRecorderRefusal() },
+                    onEvent: nil
+                )
+            }
+            #expect(await runner.commands.isEmpty)
+        }
+    }
+
 }
 
 private func fastTrackKit(
     packageRoot: URL,
     runner: RecordingSubprocessRunner,
-    versions: [SwiftVersion] = [SwiftVersion(major: 6, minor: 2, patch: 1)]
+    versions: [SwiftVersion] = [SwiftVersion(major: 6, minor: 2, patch: 1)],
+    installed: Bool = true
 ) -> SwiftlyKit {
 
     let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
     let inventory = InstalledEnvironmentInventory(
-        toolchains: versions,
-        sdks: versions.map { version in
+        toolchains: installed ? versions : [],
+        sdks: installed ? versions.map { version in
             InstalledStaticLinuxSDK(
                 toolchainVersion: version,
                 identifier: sdkIdentifier(for: version)
             )
-        }
+        } : []
     )
     let releases = versions.map { version in
         OfficialStableRelease(
             version: version,
-            staticLinuxSDK: StaticLinuxSDK(identifier: sdkIdentifier(for: version), version: "1.0.0"),
+            staticLinuxSDK: StaticLinuxSDK(
+                identifier: sdkIdentifier(for: version),
+                version: "1.0.0"
+            ),
             staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
                 downloadURL: URL(string: "https://download.swift.org/sdk.tar.gz")!,
                 checksum: String(repeating: "a", count: 64),
@@ -379,4 +404,8 @@ private func withFastTrackTemporaryDirectory<T>(_ body: (URL) async throws -> T)
         try Data("// swift-tools-version: 6.0\n".utf8).write(to: directory.appending(path: "Package.swift"))
         return try await body(directory)
     }
+}
+
+private struct FastTrackRecorderRefusal: Error {
+
 }

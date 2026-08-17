@@ -12,7 +12,7 @@ struct BuildRequestTests {
             ExecutableProduct(name: "Server")
         )
 
-        #expect(request.configuration == .debug)
+        #expect(request.configuration == .release)
         #expect(request.jobs == nil)
         #expect(request.storage == .packageDefault)
         #expect(request.output == .buildStorage)

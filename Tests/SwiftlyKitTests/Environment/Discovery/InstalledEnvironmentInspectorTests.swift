@@ -185,6 +185,208 @@ struct InstalledEnvironmentInspectorTests {
         )])
     }
 
+    @Test("Removal inspection retains selection flags and marks unusable SDK state")
+    func removalInspectionRetainsSafetyState() async throws {
+
+        let toolchain = inspectorVersion("6.3.3")
+        let recorder = RecordingSubprocessRunner(results: [
+            .success(
+                output: #"{"toolchains":["#
+                    + #"{"inUse":true,"isDefault":true,"version":{"name":"6.3.3","type":"stable"}}"#
+                    + #"]}"#
+            ),
+            .failure(standardError: "swift unavailable")
+        ])
+        let inspector = InstalledEnvironmentInspector(runner: recorder)
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+
+        let inventory = try await inspector.inspectForRemoval(swiftly: swiftly, toolchain: toolchain, includeSDKs: true)
+
+        #expect(inventory.toolchain(toolchain)?.isInUse == true)
+        #expect(inventory.toolchain(toolchain)?.isDefault == true)
+        #expect(inventory.sdkInspection == .unavailable)
+        #expect(await recorder.commands.count == 2)
+        #expect((await recorder.commands)[1].arguments == ["run", "swift", "sdk", "list", "+6.3.3"])
+    }
+
+    @Test("Removal inspection retains arbitrary registered SDK identifiers")
+    func removalInspectionRetainsArbitrarySDKs() async throws {
+
+        let toolchain = inspectorVersion("6.3.3")
+        let recorder = RecordingSubprocessRunner(results: [
+            .success(
+                output: #"{"toolchains":["#
+                    + #"{"inUse":false,"isDefault":false,"version":{"name":"6.3.3","type":"stable"}},"#
+                    + #"{"inUse":false,"isDefault":false,"version":{"name":"6.2.1","type":"stable"}}"#
+                    + #"]}"#
+            ),
+            .success(output: "custom-sdk\nswift-6.3.3-RELEASE_static-linux-0.1.0\n")
+        ])
+        let inspector = InstalledEnvironmentInspector(runner: recorder)
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+
+        let inventory = try await inspector.inspectForRemoval(swiftly: swiftly, toolchain: toolchain, includeSDKs: true)
+
+        #expect(inventory.sdks.map(\.identifier) == [
+            "custom-sdk",
+            "swift-6.3.3-RELEASE_static-linux-0.1.0"
+        ])
+        #expect(inventory.sdkInspection == .available(manager: toolchain))
+        #expect(await recorder.commands.count == 2)
+    }
+
+    @Test("Malformed removal SDK output becomes uninspectable")
+    func malformedRemovalSDKOutputIsUninspectable() async throws {
+
+        let toolchain = inspectorVersion("6.3.3")
+        let recorder = RecordingSubprocessRunner(results: [
+            .success(
+                output: #"{"toolchains":["#
+                    + #"{"inUse":false,"isDefault":false,"version":{"name":"6.3.3","type":"stable"}}"#
+                    + #"]}"#
+            ),
+            .success(output: "custom sdk\n")
+        ])
+        let inspector = InstalledEnvironmentInspector(runner: recorder)
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+
+        let inventory = try await inspector.inspectForRemoval(swiftly: swiftly, toolchain: toolchain, includeSDKs: true)
+
+        #expect(inventory.sdks.isEmpty)
+        #expect(inventory.sdkInspection == .malformed)
+    }
+
+    @Test("Toolchain-only removal inspection skips the shared SDK registry")
+    func toolchainOnlyInspectionDoesNotListSDKs() async throws {
+
+        let toolchain = inspectorVersion("6.3.3")
+        let recorder = RecordingSubprocessRunner(results: [
+            .success(
+                output: #"{"toolchains":["#
+                    + #"{"inUse":false,"isDefault":false,"version":{"name":"6.3.3","type":"stable"}}"#
+                    + #"]}"#
+            )
+        ])
+        let inspector = InstalledEnvironmentInspector(runner: recorder)
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+
+        let inventory = try await inspector.inspectForRemoval(
+            swiftly: swiftly,
+            toolchain: toolchain,
+            includeSDKs: false
+        )
+
+        #expect(inventory.toolchain(toolchain) != nil)
+        #expect(inventory.sdkInspection == .notRequested)
+        #expect(await recorder.commands.count == 1)
+    }
+
+    @Test("SDK inspection uses an alternate manager when the paired toolchain is absent")
+    func alternateManagerCanInspectSharedSDKRegistry() async throws {
+
+        let paired = inspectorVersion("6.3.3")
+        let manager = inspectorVersion("6.3.2")
+        let recorder = RecordingSubprocessRunner(results: [
+            .success(
+                output: #"{"toolchains":["#
+                    + #"{"inUse":false,"isDefault":false,"version":{"name":"6.3.2","type":"stable"}}"#
+                    + #"]}"#
+            ),
+            .success(output: "swift-6.3.3-RELEASE_static-linux-0.1.0\n")
+        ])
+        let inspector = InstalledEnvironmentInspector(runner: recorder)
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+
+        let inventory = try await inspector.inspectForRemoval(
+            swiftly: swiftly,
+            toolchain: paired,
+            includeSDKs: true
+        )
+
+        #expect(inventory.sdkInspection == .available(manager: manager))
+        #expect(inventory.contains(sdk: "swift-6.3.3-RELEASE_static-linux-0.1.0"))
+        #expect((await recorder.commands).map(\.arguments) == [
+            ["list", "--format", "json"],
+            ["run", "swift", "sdk", "list", "+6.3.2"]
+        ])
+    }
+
+    @Test("SDK inspection falls back when the preferred manager cannot run")
+    func SDKInspectionFallsBackToAnotherManager() async throws {
+
+        let preferred = inspectorVersion("6.3.3")
+        let fallback = inspectorVersion("6.3.2")
+        let recorder = RecordingSubprocessRunner(results: [
+            .success(
+                output: #"{"toolchains":["#
+                    + #"{"inUse":false,"isDefault":false,"version":{"name":"6.3.3","type":"stable"}},"#
+                    + #"{"inUse":false,"isDefault":false,"version":{"name":"6.3.2","type":"stable"}}"#
+                    + #"]}"#
+            ),
+            .failure(standardError: "unsupported"),
+            .success(output: "custom-sdk\n")
+        ])
+        let inspector = InstalledEnvironmentInspector(runner: recorder)
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+
+        let inventory = try await inspector.inspectForRemoval(
+            swiftly: swiftly,
+            toolchain: preferred,
+            includeSDKs: true
+        )
+
+        #expect(inventory.sdkInspection == .available(manager: fallback))
+        #expect(inventory.sdks == [RegisteredSDK(identifier: "custom-sdk")])
+        #expect((await recorder.commands).count == 3)
+    }
+
+    @Test("Malformed successful SDK output fails closed without fallback")
+    func malformedSDKOutputDoesNotFallBack() async throws {
+
+        let preferred = inspectorVersion("6.3.3")
+        let recorder = RecordingSubprocessRunner(results: [
+            .success(
+                output: #"{"toolchains":["#
+                    + #"{"inUse":false,"isDefault":false,"version":{"name":"6.3.3","type":"stable"}},"#
+                    + #"{"inUse":false,"isDefault":false,"version":{"name":"6.3.2","type":"stable"}}"#
+                    + #"]}"#
+            ),
+            .success(output: "malformed sdk identifier\n"),
+            .success(output: "should not be read\n")
+        ])
+        let inspector = InstalledEnvironmentInspector(runner: recorder)
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+
+        let inventory = try await inspector.inspectForRemoval(
+            swiftly: swiftly,
+            toolchain: preferred,
+            includeSDKs: true
+        )
+
+        #expect(inventory.sdkInspection == .malformed)
+        #expect(await recorder.commands.count == 2)
+    }
+
+    @Test("SDK inspection reports unavailable when no manager exists")
+    func noSDKManagerIsNotTreatedAsEmptyRegistry() async throws {
+
+        let recorder = RecordingSubprocessRunner(results: [
+            .success(output: #"{"toolchains":[]}"#)
+        ])
+        let inspector = InstalledEnvironmentInspector(runner: recorder)
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+
+        let inventory = try await inspector.inspectForRemoval(
+            swiftly: swiftly,
+            toolchain: inspectorVersion("6.3.3"),
+            includeSDKs: true
+        )
+
+        #expect(inventory.sdks.isEmpty)
+        #expect(inventory.sdkInspection == .unavailable)
+        #expect(await recorder.commands.count == 1)
+    }
+
 }
 
 private func inspectorVersion(_ value: String) -> SwiftVersion {

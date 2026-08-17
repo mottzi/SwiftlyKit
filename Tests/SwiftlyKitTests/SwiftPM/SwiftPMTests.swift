@@ -55,9 +55,7 @@ struct SwiftPMTests {
             (configuration: BuildConfiguration.release, argument: "release")
         ]
     )
-    func exactBuildCommand(
-        mapping: (configuration: BuildConfiguration, argument: String)
-    ) async throws {
+    func exactBuildCommand(mapping: (configuration: BuildConfiguration, argument: String)) async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
@@ -787,7 +785,10 @@ private func buildEnvironment(
 
     LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
-        staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
+    staticLinuxSDK: StaticLinuxSDK(
+        identifier: "sdk",
+        version: "1.0.0"
+    ),
         packageRoot: directory,
         swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/swiftly")),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),

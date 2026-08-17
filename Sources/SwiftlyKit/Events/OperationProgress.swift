@@ -30,6 +30,9 @@ extension OperationProgress {
         /// Installation of a required environment component.
         case preparingEnvironment
 
+        /// Removal of exact Swiftly-managed environment resources.
+        case removingEnvironment
+
         /// Explicit SwiftPM package dependency resolution.
         case resolvingDependencies
 

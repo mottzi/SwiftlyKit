@@ -1,6 +1,6 @@
 import Foundation
 
-enum EnvironmentPreparationError: Error, Equatable {
+enum EnvironmentPreparationError: Error, Equatable, Sendable {
     case invalidDownloadURL
     case invalidHTTPResponse(Int)
     case downloadFailed

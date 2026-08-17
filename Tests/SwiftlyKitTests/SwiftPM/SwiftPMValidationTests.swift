@@ -72,7 +72,10 @@ private func validationEnvironment(in directory: URL, toolsVersion: String) thro
 
     return LocalBuildEnvironment(
         swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
-        staticLinuxSDK: StaticLinuxSDK(identifier: "sdk", version: "1.0.0"),
+        staticLinuxSDK: StaticLinuxSDK(
+            identifier: "sdk",
+            version: "1.0.0"
+        ),
         packageRoot: directory,
         swiftly: SwiftlyInstallation(executableURL: swiftly),
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),

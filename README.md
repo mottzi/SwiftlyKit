@@ -138,8 +138,9 @@ or deploy it.
 > [!IMPORTANT]
 > The fast track authorizes SwiftlyKit to install Swiftly, the selected
 > toolchain, and its SDK when needed. It can also resolve dependencies and
-> update `Package.resolved`. Use the staged API when your app must ask before
-> making these changes.
+> update `Package.resolved`. Use the staged workflow if your app must ask
+> before making these changes. See [Removal plans](#removal-plans) if the
+> caller must record resources for later removal.
 
 ## Staged workflow
 
@@ -206,8 +207,13 @@ compatible.
 ### 2. Prepare the environment
 
 Pass the selected assessment to `prepare(_:)`. This call authorizes only the
-components in `requiredComponents`. You can also bind values that every later
-SwiftPM operation must use:
+components in `requiredComponents` and returns the Local build environment:
+
+```swift
+let environment = try await kit.prepare(assessment)
+```
+
+You can also bind values that every later SwiftPM operation must use:
 
 ```swift
 let values = try SwiftPMEnvironment([
@@ -236,8 +242,76 @@ rest of the staged workflow. See [SwiftPM configuration](#swiftpm-configuration)
 for the available policies and their security limits.
 
 If `Package.swift` or the applicable `.swift-version` file changes after
-assessment, preparation throws `SwiftlyKitError.staleAssessment`. Run assessment
-again before you continue.
+assessment, `prepare(_:)` throws `SwiftlyKitError.staleAssessment`. Run
+assessment again before you continue.
+
+#### Removal plans
+
+Preparation can stop after SwiftlyKit starts a toolchain or SDK installation.
+Supply `recordRemovalPlan` if the caller must retain an exact removal request
+for those resources:
+
+```swift
+let recorder: EnvironmentRemovalPlan.Recorder = { plan in
+    try await removalPlanStore.replace(with: plan)
+}
+
+let environment = try await kit.prepare(
+    assessment,
+    recordRemovalPlan: recorder
+)
+```
+
+The fast track accepts the same recorder:
+
+```swift
+let result = try await SwiftlyKit.build(
+    packageRoot,
+    recordRemovalPlan: recorder
+)
+```
+
+The recorder is optional. SwiftlyKit awaits it after live inspection finds a
+missing toolchain or SDK and before it starts that installation command. If
+both resources are missing, SwiftlyKit calls the recorder first with a
+toolchain plan and then with a full environment plan. Store each call as the
+latest plan. If the recorder throws, SwiftlyKit does not start that installation
+command and propagates the error unchanged.
+
+Because the recorder finishes first, the stored plan remains available if the
+installation fails, is canceled, or the process stops. A plan can name a
+resource that the installation command did not create. The plan is
+conservative; it is not proof of ownership.
+
+SwiftlyKit does not persist plans or remove resources automatically. Start a
+fresh, non-canceled operation to remove a persisted plan:
+
+```swift
+let plan = try await removalPlanStore.load()
+try await SwiftlyKit.remove(plan)
+```
+
+Removal reads live Swiftly state again. It treats an observable absent target
+as success. It refuses active or default toolchains and uninspectable SDK
+state. A full environment plan removes the exact SDK before its toolchain.
+
+Plans are Codable. You can also create a plan for exact resources that were not
+installed by the current operation:
+
+```swift
+let toolchainPlan = EnvironmentRemovalPlan.toolchain(
+    SwiftVersion(major: 6, minor: 3, patch: 3)
+)
+
+let sdkPlan = try EnvironmentRemovalPlan.staticLinuxSDK(
+    identifier: "swift-6.3.3-RELEASE_static-linux-0.1.0"
+)
+
+let environmentPlan = try EnvironmentRemovalPlan.environment(
+    toolchain: SwiftVersion(major: 6, minor: 3, patch: 3),
+    staticLinuxSDKIdentifier: "swift-6.3.3-RELEASE_static-linux-0.1.0"
+)
+```
 
 ### 3. Select an executable product
 
@@ -290,7 +364,7 @@ result and throws `SwiftlyKitError.packageChangedDuringBuild`. See
 
 | Option | Default | Behavior |
 | --- | --- | --- |
-| `configuration` | `.debug` | Selects the SwiftPM debug or release configuration. |
+| `configuration` | `.release` | Selects the SwiftPM debug or release configuration. |
 | `jobs` | `nil` | Limits concurrent SwiftPM build jobs. `nil` uses the SwiftPM default. |
 | `storage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
 | `output` | `.buildStorage` | Returns a `BuildResult` in SwiftPM build storage. `.publish(to:replacingExisting:cleanup:)` copies the runnable files to your directory, runs the requested cleanup, and returns the result. |
@@ -461,7 +535,7 @@ let environment = try await kit.prepare(
 The handler can receive:
 
 - `SwiftlyKitEvent.progress` for preparation, dependency resolution, build,
-  strip, publication, and cleanup activities.
+  environment removal, strip, publication, and cleanup activities.
 - `SwiftlyKitEvent.output` for standard output and standard error chunks from
   delegated commands.
 
@@ -583,7 +657,8 @@ SwiftlyKit does not:
 - change the default Swift toolchain;
 - run `swiftly use`;
 - update or replace an existing Swiftly installation;
-- remove Swiftly, a toolchain, or an SDK;
+- remove Swiftly. Exact toolchain or SDK removal is available only when the
+  consumer explicitly requests environment removal;
 - remove build scratch storage unless the consumer requests `.reset` or calls
   `resetBuildStorage(in:using:)`;
 - install Xcode or select Apple developer tools;
@@ -600,17 +675,19 @@ user's permissions.
 ## Concurrency, cancellation, and errors
 
 All long operations are `async throws` functions. Across cooperating SwiftlyKit
-processes for one macOS user, only one preparation, dependency resolution,
-build, or cleanup operation runs at a time. A waiting operation responds to task
-cancellation. The fast track blocks other mutations for its complete workflow.
+processes for one macOS user, only one preparation, removal, dependency
+resolution, build, or cleanup operation runs at a time. A waiting operation
+responds to task cancellation. The fast track blocks other mutations for its
+complete workflow.
 The staged API blocks other mutations for one mutating call at a time.
 
 Assessment and product discovery remain concurrent and read-only. Because their
 view of installed state can become outdated, preparation checks the required
 state again before making changes.
 
-Do not start another mutating SwiftlyKit operation from an event handler.
-SwiftlyKit rejects the operation with `mutationCoordinationFailed`. Direct
+Do not start or await another mutating SwiftlyKit operation from an event
+handler or removal-plan recorder. SwiftlyKit rejects the operation with
+`mutationCoordinationFailed`. Direct
 `swift` and `swiftly` commands, filesystem changes, and other tools do not
 participate in SwiftlyKit's coordination. Do not use them to modify the same
 installation, package, build storage, SDK, or output while SwiftlyKit is working.
@@ -644,6 +721,8 @@ errors include:
 - `outputPublicationFailed`
 - `unsafeBuildStorage`
 - `outputInsideBuildStorage`
+- `unsafeEnvironmentRemoval`
+- `environmentRemovalFailed`
 - `postBuildCleanupFailed`
 - `buildArtifactCleanupFailed`
 - `buildStorageResetFailed`
@@ -669,6 +748,7 @@ do {
 | `HostReadiness` | Reports whether the host is supported and developer tools are active, without inspecting a package. |
 | `EnvironmentChoices` | Lists exact compatible assessments and applies automatic or exact selection without another system inspection. |
 | `EnvironmentAssessment` | Describes the selected environment and required installations. |
+| `EnvironmentRemovalPlan` | Describes exact caller-requested toolchain/SDK removal; Codable and persistable. |
 | `SwiftPMEnvironment` | Adds, redacts, or removes values for one complete SwiftPM workflow. |
 | `SwiftPMTraits` | Selects package defaults, no traits, all traits, or a validated explicit set. |
 | `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, SDK, and SwiftPM configuration. |

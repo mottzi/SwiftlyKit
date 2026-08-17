@@ -7,6 +7,7 @@ public struct SwiftlyKit: Sendable {
     private let mutationGate: MutationGate
     private let assessor: EnvironmentAssessor
     private let preparer: EnvironmentPreparer
+    private let remover: EnvironmentRemover
     private let swiftPM: SwiftPM
     
     /// Creates a SwiftlyKit instance for the current host and user environment.
@@ -14,7 +15,8 @@ public struct SwiftlyKit: Sendable {
         self.init(
             assessor: EnvironmentAssessor(),
             preparer: EnvironmentPreparer(),
-            swiftPM: SwiftPM()
+            swiftPM: SwiftPM(),
+            remover: EnvironmentRemover()
         )
     }
 
@@ -22,11 +24,13 @@ public struct SwiftlyKit: Sendable {
         mutationGate: MutationGate = .shared,
         assessor: EnvironmentAssessor,
         preparer: EnvironmentPreparer,
-        swiftPM: SwiftPM
+        swiftPM: SwiftPM,
+        remover: EnvironmentRemover = EnvironmentRemover()
     ) {
         self.mutationGate = mutationGate
         self.assessor = assessor
         self.preparer = preparer
+        self.remover = remover
         self.swiftPM = swiftPM
     }
 
@@ -51,10 +55,7 @@ extension SwiftlyKit {
     /// Returns exact compatible environments from one read-only package and installed-state observation.
     /// Results contain each Swift version once in newest-first order.
     /// Installed-state results can become stale before the caller selects an environment.
-    public func compatibleEnvironments(
-        _ packageRoot: URL,
-        for target: BuildTarget
-    ) async throws -> EnvironmentChoices {
+    public func compatibleEnvironments(_ packageRoot: URL, for target: BuildTarget) async throws -> EnvironmentChoices {
         
         try await assessor.compatibleEnvironments(packageRoot, for: target)
     }
@@ -71,27 +72,40 @@ extension SwiftlyKit {
         try await assessor.assess(packageRoot, for: target, toolchain: toolchain)
     }
     
-    /// Prepares accepted components and binds one SwiftPM environment snapshot and trait configuration to later operations.
+    /// Prepares accepted components and binds SwiftPM configuration to later operations.
+    /// An optional recorder receives each conservative removal plan before toolchain or SDK installation.
     /// Caller-supplied SwiftPM workflow values do not reach installation or download processes.
     public func prepare(
         _ assessment: EnvironmentAssessment,
         swiftPMEnvironment: SwiftPMEnvironment = .inherited,
         swiftPMTraits: SwiftPMTraits = .packageDefaults,
+        recordRemovalPlan: EnvironmentRemovalPlan.Recorder? = nil,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> LocalBuildEnvironment {
 
         let snapshot = swiftPMEnvironment.snapshot()
-        
-        return try await mutationGate.withAccess {
-            try await prepareUnderLease(
-                assessment,
-                swiftPMEnvironment: snapshot,
-                swiftPMTraits: swiftPMTraits,
-                onEvent: onEvent
-            )
+
+        do {
+            return try await mutationGate.withAccess {
+                try await prepareUnderLease(
+                    assessment,
+                    swiftPMEnvironment: snapshot,
+                    swiftPMTraits: swiftPMTraits,
+                    recordRemovalPlan: recordRemovalPlan,
+                    onEvent: onEvent
+                )
+            }
+        } catch let error as EnvironmentPlanRecordingError {
+            throw error.underlying
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as SwiftlyKitError {
+            throw error
+        } catch {
+            throw SwiftlyKitError.mutationCoordinationFailed("An unexpected coordination error occurred.")
         }
     }
-    
+
     /// Returns explicit and implicit executable products in name order without resolving package dependencies.
     public func executableProducts(using environment: LocalBuildEnvironment) async throws -> ExecutableProducts {
         
@@ -160,27 +174,17 @@ extension SwiftlyKit {
         _ assessment: EnvironmentAssessment,
         swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
         swiftPMTraits: SwiftPMTraits,
+        recordRemovalPlan: EnvironmentRemovalPlan.Recorder?,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> LocalBuildEnvironment {
 
-        do {
-            return try await preparer.prepare(
-                assessment,
-                swiftPMEnvironment: swiftPMEnvironment,
-                swiftPMTraits: swiftPMTraits,
-                onEvent: onEvent
-            )
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as SwiftlyKitError {
-            throw error
-        } catch let error as EnvironmentPreparationError {
-            throw error.swiftlyKitError
-        } catch let error as InstalledEnvironmentError {
-            throw error.swiftlyKitError
-        } catch {
-            throw SwiftlyKitError.swiftlyInstallationFailed("An unexpected environment error occurred.")
-        }
+        try await preparer.prepare(
+            assessment,
+            swiftPMEnvironment: swiftPMEnvironment,
+            swiftPMTraits: swiftPMTraits,
+            recordRemovalPlan: recordRemovalPlan,
+            onEvent: onEvent
+        )
     }
 
     private func resolveDependenciesUnderLease(
@@ -235,10 +239,30 @@ extension SwiftlyKit {
 }
 
 extension SwiftlyKit {
+
+    /// Removes one exact environment plan with this facade's dependencies under one mutation lease.
+    func removeEnvironment(_ plan: EnvironmentRemovalPlan, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
+
+        try await mutationGate.withAccess {
+            try await remover.remove(plan, onEvent: onEvent)
+        }
+    }
+
+}
+
+extension SwiftlyKit {
     
+    /// Removes exact Swift toolchain and Static Linux SDK resources without retaining state.
+    /// Rechecks live state, treats observable absent targets as success, and refuses unsafe requests.
+    /// Removes an SDK before its paired toolchain for a full environment plan.
+    public static func remove(_ plan: EnvironmentRemovalPlan, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
+
+        try await SwiftlyKit().removeEnvironment(plan, onEvent: onEvent)
+    }
+
     /// Runs the complete fast track for one verified build and returns its runnable result.
     /// Uses one SwiftPM environment snapshot, trait configuration, and mutation lease for the complete workflow.
-    /// Applies toolchain, runtime-resource, and output choices and rejects package source changes during compilation.
+    /// Applies build choices and can record removal plans before toolchain or SDK installation.
     public static func build(
         _ packageRoot: URL,
         product: String? = nil,
@@ -251,6 +275,7 @@ extension SwiftlyKit {
         strip: Bool = false,
         swiftPMEnvironment: SwiftPMEnvironment = .inherited,
         swiftPMTraits: SwiftPMTraits = .packageDefaults,
+        recordRemovalPlan: EnvironmentRemovalPlan.Recorder? = nil,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> BuildResult {
 
@@ -266,6 +291,7 @@ extension SwiftlyKit {
             strip: strip,
             swiftPMEnvironment: swiftPMEnvironment,
             swiftPMTraits: swiftPMTraits,
+            recordRemovalPlan: recordRemovalPlan,
             onEvent: onEvent
         )
     }
@@ -283,26 +309,32 @@ extension SwiftlyKit {
         strip: Bool = false,
         swiftPMEnvironment: SwiftPMEnvironment = .inherited,
         swiftPMTraits: SwiftPMTraits = .packageDefaults,
+        recordRemovalPlan: EnvironmentRemovalPlan.Recorder? = nil,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> BuildResult {
 
         try BuildRequest.validate(jobs: jobs)
         let snapshot = swiftPMEnvironment.snapshot()
-        return try await mutationGate.withAccess {
-            try await buildUnderLease(
-                packageRoot,
-                product: productName,
-                for: target,
-                toolchain: toolchain,
-                configuration: configuration,
-                jobs: jobs,
-                storage: storage,
-                output: output,
-                strip: strip,
-                swiftPMEnvironment: snapshot,
-                swiftPMTraits: swiftPMTraits,
-                onEvent: onEvent
-            )
+        do {
+            return try await mutationGate.withAccess {
+                try await buildUnderLease(
+                    packageRoot,
+                    product: productName,
+                    for: target,
+                    toolchain: toolchain,
+                    configuration: configuration,
+                    jobs: jobs,
+                    storage: storage,
+                    output: output,
+                    strip: strip,
+                    swiftPMEnvironment: snapshot,
+                    swiftPMTraits: swiftPMTraits,
+                    recordRemovalPlan: recordRemovalPlan,
+                    onEvent: onEvent
+                )
+            }
+        } catch let error as EnvironmentPlanRecordingError {
+            throw error.underlying
         }
     }
 
@@ -318,6 +350,7 @@ extension SwiftlyKit {
         strip: Bool,
         swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
         swiftPMTraits: SwiftPMTraits,
+        recordRemovalPlan: EnvironmentRemovalPlan.Recorder?,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> BuildResult {
 
@@ -326,6 +359,7 @@ extension SwiftlyKit {
             assessment,
             swiftPMEnvironment: swiftPMEnvironment,
             swiftPMTraits: swiftPMTraits,
+            recordRemovalPlan: recordRemovalPlan,
             onEvent: onEvent
         )
         let products = try await executableProducts(using: environment)

@@ -1,8 +1,8 @@
 # SwiftlyKit architecture
 
 SwiftlyKit exposes one public facade with a convenience fast track and a staged
-workflow. Both routes use the same three internal workflow components:
-`EnvironmentAssessor`, `EnvironmentPreparer`, and `SwiftPM`.
+workflow. Both routes use the same internal workflow components:
+`EnvironmentAssessor`, `EnvironmentPreparer`, `EnvironmentRemover`, and `SwiftPM`.
 
 ```mermaid
 flowchart LR
@@ -16,18 +16,21 @@ flowchart LR
     Choices -->|select| Assessment
     Assessor --> Assessment[EnvironmentAssessment]
     Assessment --> Preparer[EnvironmentPreparer]
-    Preparer --> Environment[LocalBuildEnvironment]
+    Preparer -->|LocalBuildEnvironment| Environment
+    Preparer -.->|recordRemovalPlan| RemovalPlan[EnvironmentRemovalPlan]
     Environment --> SwiftPM
     SwiftPM --> Products[ExecutableProducts]
     Products -->|select| Product[ExecutableProduct]
     SwiftPM --> Stability[PackageSourceStability]
-    Facade -->|prepare / resolve / build| Gate[MutationGate]
+    Facade -->|prepare / remove / resolve / build| Gate[MutationGate]
     Gate --> Preparer
+    Gate --> Remover
     Gate --> SwiftPM
     Facade -->|executableProducts| SwiftPM
     Assessor --> Subprocess[SubprocessRunning]
     Requester --> Subprocess
     Preparer --> Subprocess
+    Remover --> Subprocess
     SwiftPM --> Subprocess
 ```
 
@@ -37,18 +40,33 @@ The static `SwiftlyKit.build` fast track creates a `SwiftlyKit` value and runs t
 staged operations in order: assess, prepare, discover products, select one, and
 build. If the build reports that dependency resolution is required, the fast
 track resolves once and retries the build. It is orchestration over the staged
-interface, not a separate build pipeline. It forwards exact toolchain selection
-and build choices, including stripping, into those same staged operations.
+interface, not a separate build pipeline. Both paths accept the same optional
+`recordRemovalPlan` callback for toolchain and SDK installation, and retain
+their natural throwing result types.
 
 The staged API keeps authorization and build choices explicit. Assessment is
 read-only: it captures the canonical package root and package-input bytes,
 observes installed environment state, and retains the target and selected
 official release. Passing that assessment to `prepare` authorizes only its
-`requiredComponents`. Preparation returns an immutable `LocalBuildEnvironment`
-capability containing the exact package, target, Swiftly executable, toolchain,
-SDK, SwiftPM process environment snapshot, and package-trait configuration used
-by later operations. `BuildRequest` then contains only the choices for one
-product build.
+`requiredComponents`. Preparation returns the immutable `LocalBuildEnvironment`
+capability on success. If a caller supplies `recordRemovalPlan`, SwiftlyKit
+calls it with a cumulative plan before each authorized toolchain or SDK
+installation command.
+The callback can persist that plan across failure, cancellation, and abrupt
+termination. `BuildRequest` then contains only the choices for one product
+build.
+
+`EnvironmentRemovalPlan` describes an exact toolchain, SDK, or paired
+environment scope. Plans can be persisted and retried, but are not ownership or
+security tokens. `remove(_:)` observes live Swiftly state, refuses active or
+default toolchains and uninspectable shared SDK state, and preflights the
+complete scope before issuing commands. Unrelated SDK registrations do not
+block an exact removal. Full removal removes the SDK before its paired
+toolchain; absent targets are no-ops. SwiftlyKit stays stateless: callers
+decide when to remove a generated or explicitly constructed plan.
+Manual SDK plans use only the exact registry identifier. Full-environment plans
+carry both the exact toolchain version and SDK identifier; neither requires
+release-catalog metadata.
 
 Release-catalog observation is process-wide and single-flight. One validated
 live result remains in memory for one hour and atomically replaces one raw,
@@ -95,10 +113,11 @@ the persistent file is not stale state and must not be deleted for recovery.
 Failure to prepare or open the lock produces `mutationCoordinationFailed`.
 Reentrant mutation through the same asynchronous task context also produces
 `mutationCoordinationFailed` instead of waiting for its own active lease. A
-detached task does not inherit that context. An awaited event handler must not
-await another mutating operation, directly or through detached work.
+detached task does not inherit that context. An awaited event handler or removal
+plan recorder must not await another mutating SwiftlyKit operation, directly or
+through detached work.
 
-Preparation, dependency resolution, builds, and explicit cleanup each hold one
+Preparation, removal, dependency resolution, builds, and explicit cleanup each hold one
 lease for their complete public operation. The static fast track holds one lease
 across assessment, preparation, product discovery, dependency resolution, build,
 parent-side inspection, optional stripping, output publication, and requested
@@ -183,15 +202,20 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   host, release, discovery, and selection steps and produces one
   `EnvironmentAssessment` or an `EnvironmentChoices` snapshot.
 - `Environment/Discovery` detects Swiftly, constructs Swiftly-run commands, and
-  owns `InstalledEnvironmentInventory`, the canonical installed toolchain and
-  SDK representation.
+  owns the filtered `InstalledEnvironmentInventory` used by normal environment
+  selection. Removal also uses a separate raw registered-SDK safety view so
+  unrelated SDK identifiers are never discarded during destructive preflight.
 - `Environment/Selection` deterministically selects one exact official stable
   release and matching SDK, preferring a compatible installed pair for automatic
   selection. It also coalesces live catalog requests and owns the bounded,
   private, disposable release-catalog snapshot.
 - `Environment/Preparation` revalidates the assessment, performs only authorized
   installations, refreshes installed inventory after mutations, and returns the
-  prepared capability.
+  prepared local build environment. It can send conservative removal plans to
+  a caller-supplied recorder before toolchain or SDK installation.
+- `Environment/Removal` observes raw registered Swiftly state, performs complete
+  safety preflight, removes exact SDK/toolchain targets, and verifies each
+  postcondition. It never removes Swiftly itself.
 - `Environment/SwiftPMEnvironment` and `Environment/SwiftPMTraits` validate and
   normalize workflow-scoped SwiftPM process and package-graph configuration.
 - `Build` contains the public build value types.
@@ -245,9 +269,26 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   downloads require HTTPS and a successful response, the installer must pass
   signature and Apple-trust checks, and SDK installation uses the published
   checksum.
-- Installed state has one canonical inventory representation. Automatic
-  selection considers the inventory without allowing installed state to replace
+- Preparation calls the optional removal-plan recorder before each authorized
+  toolchain or SDK mutation. The cumulative plan covers resources observed
+  absent immediately before that attempt. The recorder is write-ahead, so a
+  caller can recover the plan after ordinary failure, cancellation, or process
+  termination; SwiftlyKit never removes resources automatically.
+- Removal-plan recorders and event handlers must not await another mutating
+  SwiftlyKit operation, including removal, directly or through detached work.
+- Environment removal uses exact stable versions and SDK identifiers, performs
+  one complete preflight before the first destructive command, refuses active or
+  default toolchains and uninspectable shared SDK state, removes only the exact
+  requested SDK before its paired toolchain, verifies postconditions, and treats
+  absent targets as success. Unrelated SDK registrations never block the exact
+  request.
+- Normal selection uses one filtered canonical inventory. Removal intentionally
+  uses a separate exact raw safety view that preserves every SDK identifier and
+  selection flag; automatic selection never allows installed state to replace
   the selected official release metadata.
+- `StaticLinuxSDK` carries the catalog identity and release version used for
+  preparation. Removal plans use the exact SDK identifier and carry a toolchain
+  version only for full-environment removal because the SDK registry is shared.
 - Public SwiftPM package inspection, dependency resolution, and build operations
   revalidate the package tools version, Swiftly executable, and exact SDK bundle
   of their `LocalBuildEnvironment`. Standalone build-storage cleanup deliberately

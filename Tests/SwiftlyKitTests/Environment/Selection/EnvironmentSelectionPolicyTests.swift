@@ -141,7 +141,10 @@ private func selectionRelease(
     let identifier = "swift-\(version)-RELEASE_static-linux-0.1.0"
     return OfficialStableRelease(
         version: parsedVersion,
-        staticLinuxSDK: StaticLinuxSDK(identifier: identifier, version: "0.1.0"),
+        staticLinuxSDK: StaticLinuxSDK(
+            identifier: identifier,
+            version: "0.1.0"
+        ),
         staticLinuxSDKMetadata: StaticLinuxSDKMetadata(
             downloadURL: URL(string: "https://download.swift.org/\(identifier).tar.gz")!,
             checksum: String(repeating: "a", count: 64),

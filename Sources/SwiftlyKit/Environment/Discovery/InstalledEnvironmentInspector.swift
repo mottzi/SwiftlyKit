@@ -36,6 +36,59 @@ struct InstalledEnvironmentInspector {
         return InstalledEnvironmentInventory(toolchains: toolchains, sdks: sdks)
     }
 
+    /// Inspects registered toolchains and shared SDK state for exact removal safety.
+    /// It prefers the requested toolchain for SDK inspection and does not mutate state.
+    func inspectForRemoval(
+        swiftly: SwiftlyInstallation,
+        toolchain preferredToolchain: SwiftVersion?,
+        includeSDKs: Bool
+    ) async throws -> EnvironmentRemovalInventory {
+
+        try Task.checkCancellation()
+
+        let payload = try await rawToolchains(swiftly: swiftly)
+        let registered = Self.registeredToolchains(from: payload)
+        guard includeSDKs else {
+            return EnvironmentRemovalInventory(
+                toolchains: registered,
+                sdks: [],
+                sdkInspection: .notRequested
+            )
+        }
+
+        let candidates = Self.sdkManagerCandidates(
+            registered: registered,
+            preferred: preferredToolchain
+        )
+
+        for manager in candidates {
+            do {
+                let sdks = try await registeredSDKs(swiftly: swiftly, manager: manager)
+                return EnvironmentRemovalInventory(
+                    toolchains: registered,
+                    sdks: sdks,
+                    sdkInspection: .available(manager: manager)
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as InstalledEnvironmentError {
+                if case .invalidOutput = error {
+                    return EnvironmentRemovalInventory(
+                        toolchains: registered,
+                        sdks: [],
+                        sdkInspection: .malformed
+                    )
+                }
+            }
+        }
+
+        return EnvironmentRemovalInventory(
+            toolchains: registered,
+            sdks: [],
+            sdkInspection: .unavailable
+        )
+    }
+
 }
 
 extension InstalledEnvironmentInspector {
@@ -57,6 +110,24 @@ extension InstalledEnvironmentInspector {
         return try Self.parseSwiftlyList(data).filter(isToolchainUsable)
     }
 
+    private func rawToolchains(swiftly: SwiftlyInstallation) async throws -> [ToolchainPayload] {
+
+        let command = SubprocessCommand(
+            executableURL: swiftly.executableURL,
+            arguments: ["list", "--format", "json"]
+        )
+
+        let result = try await run(command)
+
+        guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
+        guard let data = result.standardOutput.data(using: .utf8) else {
+            throw InstalledEnvironmentError.invalidOutput
+        }
+
+        do { return try JSONDecoder().decode(ToolchainListPayload.self, from: data).toolchains }
+        catch { throw InstalledEnvironmentError.invalidOutput }
+    }
+
     private func installedSDKs(
         swiftly: SwiftlyInstallation,
         toolchain: SwiftVersion
@@ -73,6 +144,21 @@ extension InstalledEnvironmentInspector {
         guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
 
         return Self.parseSDKList(result.standardOutput, toolchainVersion: toolchain)
+    }
+
+    private func registeredSDKs(swiftly: SwiftlyInstallation, manager: SwiftVersion) async throws -> [RegisteredSDK] {
+
+        let command = swiftly.command(
+            tool: "swift",
+            toolchain: manager,
+            arguments: ["sdk", "list"]
+        )
+
+        let result = try await run(command)
+
+        guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
+
+        return try Self.parseRegisteredSDKList(result.standardOutput)
     }
 
     private func run(_ command: SubprocessCommand) async throws -> SubprocessResult {
@@ -120,6 +206,80 @@ extension InstalledEnvironmentInspector {
         .sorted { $0.identifier < $1.identifier }
     }
 
+    /// Parses every registered SDK identifier for removal safety. Unlike the
+    /// selection parser, this intentionally keeps non-Static-Linux identifiers
+    /// and rejects any nonempty malformed line.
+    private static func parseRegisteredSDKList(_ output: String) throws -> [RegisteredSDK] {
+
+        var identifiers = Set<String>()
+        for line in output.split(omittingEmptySubsequences: false, whereSeparator: \Character.isNewline) {
+            let identifier = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard identifier.isEmpty || isSafeSDKIdentifier(identifier) else {
+                throw InstalledEnvironmentError.invalidOutput
+            }
+            guard !identifier.isEmpty else { continue }
+            identifiers.insert(identifier)
+        }
+
+        return identifiers
+            .map { RegisteredSDK(identifier: $0) }
+            .sorted { $0.identifier < $1.identifier }
+    }
+
+    private static func registeredToolchains(from payload: [ToolchainPayload]) -> [RegisteredToolchain] {
+
+        let stable = payload.compactMap { item -> (SwiftVersion, ToolchainPayload)? in
+            guard item.version.type == "stable",
+                  let version = SwiftVersion(item.version.name)
+            else { return nil }
+            return (version, item)
+        }
+
+        let versions = Set(stable.map(\.0)).sorted(by: >)
+        return versions.map { version in
+            let matches = stable.filter { $0.0 == version }.map(\.1)
+            guard matches.count == 1, let item = matches.first else {
+                return RegisteredToolchain(
+                    version: version,
+                    isInUse: false,
+                    isDefault: false,
+                    selectionStateIsKnown: false
+                )
+            }
+            return RegisteredToolchain(
+                version: version,
+                isInUse: item.inUse ?? false,
+                isDefault: item.isDefault ?? false,
+                selectionStateIsKnown: item.inUse != nil && item.isDefault != nil
+            )
+        }
+    }
+
+    private static func sdkManagerCandidates(
+        registered: [RegisteredToolchain],
+        preferred: SwiftVersion?
+    ) -> [SwiftVersion] {
+
+        let others = registered.map(\.version).filter { $0 != preferred }.sorted(by: >)
+        if let preferred, registered.contains(where: { $0.version == preferred }) {
+            return [preferred] + others
+        }
+        return others
+    }
+
+    private static func isSafeSDKIdentifier(_ identifier: String) -> Bool {
+
+        guard !identifier.isEmpty,
+              !identifier.hasPrefix("-"),
+              !identifier.contains("/"),
+              !identifier.contains("\\")
+        else { return false }
+
+        return identifier.unicodeScalars.allSatisfy {
+            $0.value >= 0x21 && $0.value <= 0x7E && !CharacterSet.whitespacesAndNewlines.contains($0)
+        }
+    }
+
 }
 
 extension InstalledEnvironmentInspector {
@@ -150,6 +310,8 @@ extension InstalledEnvironmentInspector {
 
     private struct ToolchainPayload: Decodable {
         let version: VersionPayload
+        let inUse: Bool?
+        let isDefault: Bool?
     }
 
     private struct VersionPayload: Decodable {

@@ -38,6 +38,53 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("Environment preparation and removal plans compile without testable access")
+    func environmentLifecycleCompiles() {
+
+        let plans: @Sendable (EnvironmentAssessment) throws -> [EnvironmentRemovalPlan] = { assessment in
+            let plans = [
+                EnvironmentRemovalPlan.toolchain(assessment.swiftVersion),
+                try EnvironmentRemovalPlan.staticLinuxSDK(identifier: assessment.staticLinuxSDK.identifier),
+                try EnvironmentRemovalPlan.environment(
+                    toolchain: assessment.swiftVersion,
+                    staticLinuxSDKIdentifier: assessment.staticLinuxSDK.identifier
+                )
+            ]
+            let data = try JSONEncoder().encode(plans[2])
+            _ = try JSONDecoder().decode(EnvironmentRemovalPlan.self, from: data)
+            return plans
+        }
+
+        let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
+            try await SwiftlyKit().prepare(assessment)
+        }
+
+        let remove: @Sendable (EnvironmentRemovalPlan) async throws -> Void = { plan in
+            try await SwiftlyKit.remove(plan)
+        }
+
+        _ = plans
+        _ = staged
+        _ = remove
+    }
+
+    @Test("Removal-plan recording compiles in staged and fast-track workflows")
+    func removalPlanRecordingCompiles() {
+
+        let recorder: EnvironmentRemovalPlan.Recorder = { plan in
+            _ = plan
+        }
+        let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
+            try await SwiftlyKit().prepare(assessment, recordRemovalPlan: recorder)
+        }
+        let fastTrack: @Sendable (URL) async throws -> BuildResult = { packageRoot in
+            try await SwiftlyKit.build(packageRoot, recordRemovalPlan: recorder)
+        }
+
+        _ = staged
+        _ = fastTrack
+    }
+
     @Test("The fast-track SwiftPM environment workflow compiles without testable access")
     func fastTrackSwiftPMEnvironmentCompiles() {
 
