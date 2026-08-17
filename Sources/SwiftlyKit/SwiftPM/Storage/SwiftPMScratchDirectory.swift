@@ -7,8 +7,9 @@ struct SwiftPMScratchDirectory {
     let isExplicit: Bool
 
     init(
-        storage: BuildStorage,
-        packageRoot: URL
+        storage: SwiftPMScratchStorage,
+        packageRoot: URL,
+        sharedStorage: SwiftPMSharedStorage = .standard
     ) throws(SwiftPMError) {
 
         let configuredURL: URL
@@ -34,6 +35,13 @@ struct SwiftPMScratchDirectory {
         guard !packageRoot.pathComponents.starts(with: url.pathComponents)
         else { throw SwiftPMError.unsafeBuildStorage(url) }
 
+        let canonicalURL: URL
+        do { canonicalURL = try CanonicalFileURL.resolve(url) }
+        catch { throw SwiftPMError.unsafeBuildStorage(url) }
+
+        if let directory = sharedStorage.overlappingDirectory(with: canonicalURL) {
+            throw SwiftPMError.unsafeSwiftPMSharedStorage(directory)
+        }
         self.url = url
     }
     

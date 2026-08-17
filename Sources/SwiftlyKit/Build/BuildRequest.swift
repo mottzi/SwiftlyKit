@@ -13,7 +13,7 @@ public struct BuildRequest: Sendable {
     public let jobs: Int?
     
     /// The SwiftPM scratch storage used by the build.
-    public let storage: BuildStorage
+    public let scratchStorage: SwiftPMScratchStorage
     
     /// The location and post-publication lifecycle of the runnable output.
     public let output: BuildOutput
@@ -29,14 +29,14 @@ public struct BuildRequest: Sendable {
         _ product: ExecutableProduct,
         configuration: BuildConfiguration = .release,
         jobs: Int? = nil,
-        storage: BuildStorage = .packageDefault,
+        scratchStorage: SwiftPMScratchStorage = .packageDefault,
         output: BuildOutput = .buildStorage,
         strip: Bool = false
     ) {
         self.product = product
         self.configuration = configuration
         self.jobs = jobs
-        self.storage = storage
+        self.scratchStorage = scratchStorage
         self.output = output
         self.strip = strip
     }

@@ -172,6 +172,94 @@ struct SwiftlyKitWorkflowTests {
         }
     }
 
+    @Test("Staged workflows reuse shared storage and allow a separate resolution scratch directory")
+    func stagedStorageIsCapturedAcrossWorkflow() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            let executable = packageRoot.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: packageJSON),
+                .success(output: packageJSON),
+                .failure(standardError: "automatic resolution is disabled"),
+                .success(output: "resolved"),
+                .success(output: packageJSON),
+                .success(output: "built"),
+                .success(output: packageRoot.path(percentEncoded: false) + "\n")
+            ])
+            let gate = MutationGate(lockFile: packageRoot.appending(path: "mutation.lock"))
+            let kit = fastTrackWorkflowKit(packageRoot: packageRoot, gate: gate, runner: runner)
+            let cache = packageRoot.appending(path: "cache")
+            let configuration = packageRoot.appending(path: "configuration")
+            let security = packageRoot.appending(path: "security")
+            let sharedStorage = SwiftPMSharedStorage(
+                cacheDirectory: cache,
+                configurationDirectory: configuration,
+                securityDirectory: security
+            )
+            let scratch = packageRoot.appending(path: "scratch")
+            let resolutionScratch = packageRoot.appending(path: "resolution-scratch")
+
+            let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))
+            let environment = try await kit.prepare(
+                assessment,
+                swiftPMSharedStorage: sharedStorage
+            )
+            let products = try await kit.executableProducts(using: environment)
+            let request = BuildRequest(
+                try products.select("Tool"),
+                scratchStorage: .directory(scratch)
+            )
+
+            await #expect(throws: SwiftlyKitError.dependencyResolutionRequired) {
+                try await kit.build(request, using: environment)
+            }
+            try await kit.resolveDependencies(
+                in: .directory(resolutionScratch),
+                using: environment
+            )
+            let result = try await kit.build(request, using: environment)
+
+            #expect(result.executable == executable)
+            let commands = await runner.commands
+            #expect(commands.count == 7)
+            for command in commands {
+                #expect(
+                    normalizedPath(URL(filePath: try argument(after: "--cache-path", in: command.arguments)))
+                        == normalizedPath(cache)
+                )
+                #expect(
+                    normalizedPath(URL(filePath: try argument(after: "--config-path", in: command.arguments)))
+                        == normalizedPath(configuration)
+                )
+                #expect(
+                    normalizedPath(URL(filePath: try argument(after: "--security-path", in: command.arguments)))
+                        == normalizedPath(security)
+                )
+            }
+            #expect(
+                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[2].arguments)))
+                    == normalizedPath(scratch)
+            )
+            #expect(
+                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[3].arguments)))
+                    == normalizedPath(resolutionScratch)
+            )
+            #expect(
+                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[5].arguments)))
+                    == normalizedPath(scratch)
+            )
+            #expect(
+                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[6].arguments)))
+                    == normalizedPath(scratch)
+            )
+        }
+    }
+
     @Test("Independent facades serialize public mutating workflows within one process")
     func mutatingWorkflowsAreSerialized() async throws {
 
@@ -195,7 +283,7 @@ struct SwiftlyKitWorkflowTests {
             )
 
             let resolution = Task {
-                try await firstKit.resolveDependencies(using: environment)
+                try await firstKit.resolveDependencies(in: .packageDefault, using: environment)
             }
             await runner.waitUntilFirstCommandStarts()
 
@@ -244,7 +332,7 @@ struct SwiftlyKitWorkflowTests {
             await runner.waitUntilFirstCommandStarts()
 
             let resolution = Task {
-                try await kit.resolveDependencies(using: environment)
+                try await kit.resolveDependencies(in: .packageDefault, using: environment)
             }
 
             let overlapped = await secondCommandStarts(within: .milliseconds(100), runner: runner)
@@ -331,7 +419,11 @@ private func workflowKit(runner: WorkflowMutationRunner) -> SwiftlyKit {
     )
 }
 
-private func fastTrackWorkflowKit(packageRoot: URL, gate: MutationGate, runner: WorkflowMutationRunner) -> SwiftlyKit {
+private func fastTrackWorkflowKit<Runner: SubprocessRunning>(
+    packageRoot: URL,
+    gate: MutationGate,
+    runner: Runner
+) -> SwiftlyKit {
 
     let version = SwiftVersion(major: 6, minor: 2, patch: 1)
     let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
@@ -389,7 +481,8 @@ private func workflowEnvironment(packageRoot: URL) -> LocalBuildEnvironment {
         swiftly: SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly")),
         sdkBundleURL: packageRoot.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64),
-        swiftPMEnvironment: SwiftPMEnvironment.inherited.snapshot()
+        swiftPMEnvironment: SwiftPMEnvironment.inherited.snapshot(),
+        swiftPMSharedStorage: .standard
     )
 }
 
@@ -416,4 +509,15 @@ private func secondCommandStarts(within duration: Duration, runner: WorkflowMuta
 
 private struct WorkflowRecorderRefusal: Error {
 
+}
+
+private func argument(after option: String, in arguments: [String]) throws -> String {
+    let optionIndex = try #require(arguments.firstIndex(of: option))
+    return try #require(arguments.dropFirst(optionIndex + 1).first)
+}
+
+private func normalizedPath(_ url: URL) -> String {
+    let path = url.standardizedFileURL.path(percentEncoded: false)
+    let normalized = path.hasPrefix("/private/") ? String(path.dropFirst("/private".count)) : path
+    return normalized.hasSuffix("/") ? String(normalized.dropLast()) : normalized
 }

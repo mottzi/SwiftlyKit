@@ -14,7 +14,7 @@ struct BuildRequestTests {
 
         #expect(request.configuration == .release)
         #expect(request.jobs == nil)
-        #expect(request.storage == .packageDefault)
+        #expect(request.scratchStorage == .packageDefault)
         #expect(request.output == .buildStorage)
         #expect(request.strip == false)
     }

@@ -11,6 +11,7 @@ enum SwiftPMError: Error, Equatable {
     case runtimeResourceVerificationFailed
     case invalidExecutable(String)
     case unsafeBuildStorage(URL)
+    case unsafeSwiftPMSharedStorage(URL)
     case outputInsideBuildStorage(URL)
     case outputAlreadyExists(URL)
     case outputPublicationFailed(URL)
@@ -47,6 +48,9 @@ extension SwiftPMError {
 
             case .unsafeBuildStorage(let url):
                 .unsafeBuildStorage(url)
+
+            case .unsafeSwiftPMSharedStorage(let url):
+                .unsafeSwiftPMSharedStorage(url)
 
             case .outputInsideBuildStorage(let url):
                 .outputInsideBuildStorage(url)

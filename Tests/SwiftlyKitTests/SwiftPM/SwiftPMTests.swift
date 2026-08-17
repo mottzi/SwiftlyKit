@@ -22,6 +22,7 @@ struct SwiftPMTests {
             (.runtimeResourceVerificationFailed, .runtimeResourceVerificationFailed),
             (.invalidExecutable("invalid"), .executableVerificationFailed("invalid")),
             (.unsafeBuildStorage(output), .unsafeBuildStorage(output)),
+            (.unsafeSwiftPMSharedStorage(output), .unsafeSwiftPMSharedStorage(output)),
             (.outputInsideBuildStorage(output), .outputInsideBuildStorage(output)),
             (.outputAlreadyExists(output), .outputAlreadyExists(output)),
             (.outputPublicationFailed(output), .outputPublicationFailed(output)),
@@ -30,8 +31,14 @@ struct SwiftPMTests {
                 .postBuildCleanupFailed(output: output, detail: "cleanup failed")
             ),
             (.commandFailed(operation: .building, diagnostic: "build failed"), .buildFailed("build failed")),
-            (.commandFailed(operation: .inspectingPackage, diagnostic: "invalid manifest"), .packageInspectionFailed("invalid manifest")),
-            (.commandFailed(operation: .resolvingDependencies, diagnostic: "unresolved"), .dependencyResolutionFailed("unresolved")),
+            (
+                .commandFailed(operation: .inspectingPackage, diagnostic: "invalid manifest"),
+                .packageInspectionFailed("invalid manifest")
+            ),
+            (
+                .commandFailed(operation: .resolvingDependencies, diagnostic: "unresolved"),
+                .dependencyResolutionFailed("unresolved")
+            ),
             (.commandFailed(operation: .stripping, diagnostic: "objcopy failed"), .stripFailed("objcopy failed")),
             (
                 .commandFailed(operation: .cleaningBuildArtifacts, diagnostic: "clean failed"),
@@ -74,17 +81,26 @@ struct SwiftPMTests {
                 "SWIFTLY_HOME_DIR": "/trusted/swiftly-home",
                 "SWIFTLY_TOOLCHAINS_DIR": "/trusted/toolchains"
             ])
+            let sharedRoot = directory.deletingLastPathComponent()
+                .appending(path: "SwiftlyKit-shared-\(UUID().uuidString)", directoryHint: .isDirectory)
+            let sharedStorage = SwiftPMSharedStorage(
+                cacheDirectory: sharedRoot.appending(path: "cache", directoryHint: .isDirectory),
+                configurationDirectory: sharedRoot.appending(path: "configuration", directoryHint: .isDirectory),
+                securityDirectory: sharedRoot.appending(path: "security", directoryHint: .isDirectory)
+            )
+            defer { try? FileManager.default.removeItem(at: sharedRoot) }
             let environment = buildEnvironment(
                 in: directory,
                 swiftPMEnvironment: snapshot,
-                swiftPMTraits: try SwiftPMTraits(["Beta", "Alpha"], includingDefaults: true)
+                swiftPMTraits: try SwiftPMTraits(["Beta", "Alpha"], includingDefaults: true),
+                swiftPMSharedStorage: sharedStorage
             )
             let scratch = directory.appending(path: "scratch")
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: mapping.configuration,
                 jobs: 3,
-                storage: .directory(scratch)
+                scratchStorage: .directory(scratch)
             )
 
             let swiftPM = SwiftPM(
@@ -125,6 +141,78 @@ struct SwiftPMTests {
             #expect(commands[2].environment?["CUSTOM"] == "value")
             #expect(commands[2].arguments.contains("--show-bin-path"))
             #expect(try argument(after: "--jobs", in: commands[2].arguments) == "3")
+
+            for command in commands {
+                #expect(normalizedPath(try argument(after: "--cache-path", in: command.arguments))
+                    == normalizedPath(sharedRoot.appending(path: "cache").path(percentEncoded: false)))
+                #expect(normalizedPath(try argument(after: "--config-path", in: command.arguments))
+                    == normalizedPath(sharedRoot.appending(path: "configuration").path(percentEncoded: false)))
+                #expect(normalizedPath(try argument(after: "--security-path", in: command.arguments))
+                    == normalizedPath(sharedRoot.appending(path: "security").path(percentEncoded: false)))
+            }
+
+            let packageIndex = try #require(commands[0].arguments.firstIndex(of: "package"))
+            let packageCacheIndex = try #require(commands[0].arguments.firstIndex(of: "--cache-path"))
+            #expect(packageIndex < packageCacheIndex)
+            #expect(packageCacheIndex < dumpIndex)
+
+            let buildIndex = try #require(commands[1].arguments.firstIndex(of: "build"))
+            let buildCacheIndex = try #require(commands[1].arguments.firstIndex(of: "--cache-path"))
+            #expect(buildIndex < buildCacheIndex)
+            let showBinPathIndex = try #require(commands[2].arguments.firstIndex(of: "--show-bin-path"))
+            let showBinPathCacheIndex = try #require(commands[2].arguments.firstIndex(of: "--cache-path"))
+            #expect(showBinPathCacheIndex < showBinPathIndex)
+        }
+    }
+
+    @Test("Standard shared storage leaves SwiftPM shared-location flags unset")
+    func standardSharedStorage() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
+            ])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+
+            _ = try await swiftPM.executableProducts(using: buildEnvironment(in: directory))
+
+            let command = try #require(await runner.commands.first)
+            let arguments = command.arguments
+            for option in ["--cache-path", "--config-path", "--security-path"] {
+                #expect(!arguments.contains(option))
+            }
+        }
+    }
+
+    @Test("Partial shared storage emits only the selected SwiftPM location flag")
+    func partialSharedStorage() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let cache = directory.deletingLastPathComponent()
+                .appending(path: "SwiftlyKit-cache-\(UUID().uuidString)", directoryHint: .isDirectory)
+            defer { try? FileManager.default.removeItem(at: cache) }
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
+            ])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let environment = buildEnvironment(
+                in: directory,
+                swiftPMSharedStorage: SwiftPMSharedStorage(cacheDirectory: cache)
+            )
+
+            _ = try await swiftPM.executableProducts(using: environment)
+
+            let command = try #require(await runner.commands.first)
+            let arguments = command.arguments
+            #expect(normalizedPath(try argument(after: "--cache-path", in: arguments))
+                == normalizedPath(cache.path(percentEncoded: false)))
+            #expect(!arguments.contains("--config-path"))
+            #expect(!arguments.contains("--security-path"))
+            let packageIndex = try #require(arguments.firstIndex(of: "package"))
+            let dumpIndex = try #require(arguments.firstIndex(of: "dump-package"))
+            let cacheIndex = try #require(arguments.firstIndex(of: "--cache-path"))
+            #expect(packageIndex < cacheIndex)
+            #expect(cacheIndex < dumpIndex)
         }
     }
 
@@ -149,6 +237,11 @@ struct SwiftPMTests {
             let commands = await runner.commands
             #expect(!commands[1].arguments.contains("--jobs"))
             #expect(!commands[2].arguments.contains("--jobs"))
+            for command in commands {
+                #expect(!command.arguments.contains("--cache-path"))
+                #expect(!command.arguments.contains("--config-path"))
+                #expect(!command.arguments.contains("--security-path"))
+            }
         }
     }
 
@@ -166,6 +259,33 @@ struct SwiftPMTests {
                 try await swiftPM.build(
                     BuildRequest(ExecutableProduct(name: "Tool"), jobs: jobs),
                     using: buildEnvironment(in: directory)
+                )
+            }
+
+            #expect(await runner.commands.isEmpty)
+        }
+    }
+
+    @Test("A scratch directory overlapping shared SwiftPM storage fails before a subprocess")
+    func rejectsScratchSharedStorageOverlap() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let scratch = directory.appending(path: "scratch", directoryHint: .isDirectory)
+            let runner = RecordingSubprocessRunner(results: [])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let sharedStorage = try SwiftPMSharedStorage(cacheDirectory: scratch).validated()
+            let environment = buildEnvironment(
+                in: directory,
+                swiftPMSharedStorage: sharedStorage
+            )
+
+            await #expect(throws: SwiftPMError.self) {
+                try await swiftPM.build(
+                    BuildRequest(
+                        ExecutableProduct(name: "Tool"),
+                        scratchStorage: .directory(scratch)
+                    ),
+                    using: environment
                 )
             }
 
@@ -194,7 +314,7 @@ struct SwiftPMTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: .release,
-                storage: .directory(scratch)
+                scratchStorage: .directory(scratch)
             )
             let swiftPM = SwiftPM(
                 runner: runner,
@@ -519,6 +639,7 @@ struct SwiftPMTests {
             )
 
             try await swiftPM.resolveDependencies(
+                in: .packageDefault,
                 using: environment,
                 onEvent: { await events.record($0) }
             )
@@ -530,11 +651,61 @@ struct SwiftPMTests {
             ])
             #expect(commands[0].workingDirectory == directory)
             #expect(commands[0].environment?["RESOLUTION_VALUE"] == "enabled")
+            #expect(!commands[0].arguments.contains("--scratch-path"))
+            #expect(!commands[0].arguments.contains("--cache-path"))
+            #expect(!commands[0].arguments.contains("--config-path"))
+            #expect(!commands[0].arguments.contains("--security-path"))
             #expect(await events.operations == [.resolvingDependencies])
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "resolved"),
                 EventOutput(stream: .standardError, text: "warning")
             ])
+        }
+    }
+
+    @Test("Dependency resolution forwards explicit scratch and shared SwiftPM storage")
+    func dependencyResolutionStorage() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let scratch = directory.appending(path: "resolution-scratch", directoryHint: .isDirectory)
+            let sharedRoot = directory.deletingLastPathComponent()
+                .appending(path: "SwiftlyKit-resolution-shared-\(UUID().uuidString)", directoryHint: .isDirectory)
+            let sharedStorage = SwiftPMSharedStorage(
+                cacheDirectory: sharedRoot.appending(path: "cache", directoryHint: .isDirectory),
+                configurationDirectory: sharedRoot.appending(path: "configuration", directoryHint: .isDirectory),
+                securityDirectory: sharedRoot.appending(path: "security", directoryHint: .isDirectory)
+            )
+            defer { try? FileManager.default.removeItem(at: sharedRoot) }
+            let runner = RecordingSubprocessRunner(results: [.success(output: "resolved")])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let environment = buildEnvironment(
+                in: directory,
+                swiftPMTraits: .none,
+                swiftPMSharedStorage: sharedStorage
+            )
+
+            try await swiftPM.resolveDependencies(
+                in: .directory(scratch),
+                using: environment
+            )
+
+            let command = try #require(await runner.commands.first)
+            let arguments = command.arguments
+            let packageIndex = try #require(arguments.firstIndex(of: "package"))
+            let resolveIndex = try #require(arguments.firstIndex(of: "resolve"))
+            for option in ["--cache-path", "--config-path", "--security-path", "--scratch-path"] {
+                let optionIndex = try #require(arguments.firstIndex(of: option))
+                #expect(packageIndex < optionIndex)
+                #expect(optionIndex < resolveIndex)
+            }
+            #expect(normalizedPath(try argument(after: "--cache-path", in: arguments))
+                == normalizedPath(sharedRoot.appending(path: "cache").path(percentEncoded: false)))
+            #expect(normalizedPath(try argument(after: "--config-path", in: arguments))
+                == normalizedPath(sharedRoot.appending(path: "configuration").path(percentEncoded: false)))
+            #expect(normalizedPath(try argument(after: "--security-path", in: arguments))
+                == normalizedPath(sharedRoot.appending(path: "security").path(percentEncoded: false)))
+            #expect(normalizedPath(try argument(after: "--scratch-path", in: arguments))
+                == normalizedPath(scratch.path(percentEncoded: false)))
         }
     }
 
@@ -554,7 +725,10 @@ struct SwiftPMTests {
                 operation: .resolvingDependencies,
                 diagnostic: "resolution failed\ncontext"
             )) {
-                try await swiftPM.resolveDependencies(using: buildEnvironment(in: directory))
+                try await swiftPM.resolveDependencies(
+                    in: .packageDefault,
+                    using: buildEnvironment(in: directory)
+                )
             }
         }
     }
@@ -584,10 +758,19 @@ struct SwiftPMTests {
             let values = try SwiftPMEnvironment([
                 "BUILD_SECRET": .sensitive("private")
             ])
+            let sharedRoot = directory.deletingLastPathComponent()
+                .appending(path: "SwiftlyKit-strip-shared-\(UUID().uuidString)", directoryHint: .isDirectory)
+            let sharedStorage = SwiftPMSharedStorage(
+                cacheDirectory: sharedRoot.appending(path: "cache", directoryHint: .isDirectory),
+                configurationDirectory: sharedRoot.appending(path: "configuration", directoryHint: .isDirectory),
+                securityDirectory: sharedRoot.appending(path: "security", directoryHint: .isDirectory)
+            )
+            defer { try? FileManager.default.removeItem(at: sharedRoot) }
             let environment = buildEnvironment(
                 in: directory,
                 swiftPMEnvironment: values.snapshot(inheriting: ["BASE": "value"]),
-                swiftPMTraits: try SwiftPMTraits(["StripFeature"], includingDefaults: false)
+                swiftPMTraits: try SwiftPMTraits(["StripFeature"], includingDefaults: false),
+                swiftPMSharedStorage: sharedStorage
             )
             let swiftPM = SwiftPM(
                 runner: runner,
@@ -620,6 +803,12 @@ struct SwiftPMTests {
             #expect(commands[3].sensitiveEnvironmentKeys.isEmpty)
             #expect(!commands[3].arguments.contains("--traits"))
             #expect(!commands[3].arguments.contains("StripFeature"))
+            for option in ["--cache-path", "--config-path", "--security-path"] {
+                #expect(commands[0].arguments.contains(option))
+                #expect(commands[1].arguments.contains(option))
+                #expect(commands[2].arguments.contains(option))
+                #expect(!commands[3].arguments.contains(option))
+            }
             #expect(await events.operations == [.building, .stripping, .publishing])
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "built"),
@@ -780,7 +969,8 @@ private func createSwiftPMResourceMetadata(product: String, module: String, bund
 private func buildEnvironment(
     in directory: URL,
     swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot(),
-    swiftPMTraits: SwiftPMTraits = .packageDefaults
+    swiftPMTraits: SwiftPMTraits = .packageDefaults,
+    swiftPMSharedStorage: SwiftPMSharedStorage = .standard
 ) -> LocalBuildEnvironment {
 
     LocalBuildEnvironment(
@@ -794,13 +984,20 @@ private func buildEnvironment(
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64),
         swiftPMEnvironment: swiftPMEnvironment,
-        swiftPMTraits: swiftPMTraits
+        swiftPMTraits: swiftPMTraits,
+        swiftPMSharedStorage: swiftPMSharedStorage
     )
 }
 
 private func argument(after option: String, in arguments: [String]) throws -> String {
     let optionIndex = try #require(arguments.firstIndex(of: option))
     return try #require(arguments.dropFirst(optionIndex + 1).first)
+}
+
+private func normalizedPath(_ path: String) -> String {
+    let normalized = URL(filePath: path).standardizedFileURL.path(percentEncoded: false)
+    guard normalized != "/" else { return normalized }
+    return normalized.hasSuffix("/") ? String(normalized.dropLast()) : normalized
 }
 
 private struct EventOutput: Equatable {

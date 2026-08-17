@@ -40,9 +40,12 @@ struct EnvironmentPreparer {
         _ assessment: EnvironmentAssessment,
         swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot(),
         swiftPMTraits: SwiftPMTraits = .packageDefaults,
+        swiftPMSharedStorage: SwiftPMSharedStorage = .standard,
         recordRemovalPlan: EnvironmentRemovalPlan.Recorder? = nil,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> LocalBuildEnvironment {
+
+        let sharedStorage = try swiftPMSharedStorage.validated()
 
         do {
             try (await assessHost()).requireReady()
@@ -74,7 +77,8 @@ struct EnvironmentPreparer {
                 sdkBundleURL: sdkBundleURL,
                 target: assessment.target,
                 swiftPMEnvironment: swiftPMEnvironment,
-                swiftPMTraits: swiftPMTraits
+                swiftPMTraits: swiftPMTraits,
+                swiftPMSharedStorage: sharedStorage
             )
         } catch is CancellationError {
             throw CancellationError()

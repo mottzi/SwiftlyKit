@@ -94,6 +94,9 @@ public enum SwiftlyKitError: Equatable, Sendable {
     /// The selected build storage contains the package root and could remove package sources.
     case unsafeBuildStorage(URL)
 
+    /// An explicit SwiftPM shared-storage location is invalid or overlaps selected scratch storage.
+    case unsafeSwiftPMSharedStorage(URL)
+
     /// Automatic cleanup cannot preserve an output located inside build storage.
     case outputInsideBuildStorage(URL)
 
@@ -214,6 +217,10 @@ extension SwiftlyKitError: LocalizedError {
 
             case .unsafeBuildStorage(let url):
                 "Build storage at \(url.path(percentEncoded: false)) must not contain the package root."
+
+            case .unsafeSwiftPMSharedStorage(let url):
+                "SwiftPM shared storage at \(url.path(percentEncoded: false)) must be an absolute local directory "
+                    + "outside the selected scratch storage."
 
             case .outputInsideBuildStorage(let url):
                 "The output at \(url.path(percentEncoded: false)) must be outside build storage when cleanup is requested."

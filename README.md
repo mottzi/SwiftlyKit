@@ -112,7 +112,7 @@ let publicationDirectory = URL(filePath: "/path/to/output/MyTool")
 let result = try await SwiftlyKit.build(
     packageRoot,
     product: "MyTool",
-    storage: .directory(URL(filePath: "/path/to/scratch")),
+    scratchStorage: .directory(URL(filePath: "/path/to/scratch")),
     output: .publish(to: publicationDirectory, cleanup: .reset),
     strip: true
 )
@@ -336,7 +336,7 @@ let request = BuildRequest(
     product,
     configuration: .release,
     jobs: 4,
-    storage: .directory(URL(filePath: "/path/to/scratch")),
+    scratchStorage: .directory(URL(filePath: "/path/to/scratch")),
     output: .publish(to: publicationDirectory, cleanup: .reset),
     strip: true
 )
@@ -346,14 +346,15 @@ let result: BuildResult
 do {
     result = try await kit.build(request, using: environment)
 } catch SwiftlyKitError.dependencyResolutionRequired {
-    try await kit.resolveDependencies(using: environment)
+    try await kit.resolveDependencies(in: request.scratchStorage, using: environment)
     result = try await kit.build(request, using: environment)
 }
 ```
 
 A staged build never resolves dependencies automatically.
-`resolveDependencies(using:)` can access the network and update
-`Package.resolved`.
+`resolveDependencies(in:using:)` can access the network and update
+`Package.resolved`. Pass a different `SwiftPMScratchStorage` if resolution must
+use a separate scratch directory.
 
 SwiftlyKit monitors the root package and its resolved dependencies during
 compilation. If relevant source or dependency state changes, it withholds the
@@ -366,7 +367,7 @@ result and throws `SwiftlyKitError.packageChangedDuringBuild`. See
 | --- | --- | --- |
 | `configuration` | `.release` | Selects the SwiftPM debug or release configuration. |
 | `jobs` | `nil` | Limits concurrent SwiftPM build jobs. `nil` uses the SwiftPM default. |
-| `storage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
+| `scratchStorage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
 | `output` | `.buildStorage` | Returns a `BuildResult` in SwiftPM build storage. `.publish(to:replacingExisting:cleanup:)` copies the runnable files to your directory, runs the requested cleanup, and returns the result. |
 | `strip` | `false` | Strips a SwiftlyKit-owned executable with the selected toolchain, then verifies it again. |
 
@@ -384,6 +385,49 @@ throws `SwiftlyKitError.outputAlreadyExists` if the destination exists. Set
 `replacingExisting` to replace the complete existing directory atomically.
 SwiftlyKit publishes only after stripping and verification succeed. It starts
 cleanup only after publication succeeds.
+
+### SwiftPM storage
+
+SwiftPM uses two kinds of storage:
+
+| Type | Contents | Cleanup |
+| --- | --- | --- |
+| `SwiftPMScratchStorage` | Build files and package dependency state for one package. | `clean` or `reset` can remove files from it. |
+| `SwiftPMSharedStorage` | Cache, configuration, and security files that SwiftPM can use across packages. | SwiftlyKit never removes it. |
+
+SwiftlyKit uses the package `.build` directory for scratch storage by default.
+The fast track uses the selected build scratch directory when it must resolve
+dependencies. In the staged workflow, you select scratch storage separately
+for each build, resolution, or cleanup operation.
+
+SwiftlyKit uses the standard SwiftPM shared directories by default. Most
+callers do not need to change them. A CI job can select a reusable cache. A host
+app can keep SwiftPM configuration and security files in app-owned directories:
+
+```swift
+let sharedStorage = SwiftPMSharedStorage(
+    cacheDirectory: URL(filePath: "/path/to/swiftpm-cache"),
+    configurationDirectory: URL(filePath: "/path/to/swiftpm-configuration"),
+    securityDirectory: URL(filePath: "/path/to/swiftpm-security")
+)
+
+// Staged workflow
+let environment = try await kit.prepare(
+    assessment,
+    swiftPMSharedStorage: sharedStorage
+)
+
+// Or use the fast track
+let result = try await SwiftlyKit.build(
+    packageRoot,
+    swiftPMSharedStorage: sharedStorage
+)
+```
+
+Set only the directories that you need. A `nil` directory keeps the standard
+SwiftPM location. You own each explicit directory. SwiftPM can change its
+files. If several processes use the same directory, you must control their
+access.
 
 `BuildCleanup.retain` keeps all scratch storage and is the default.
 `BuildCleanup.clean` delegates to `swift package clean`. It removes compiled
@@ -404,12 +448,12 @@ operations:
 
 ```swift
 try await kit.cleanBuildArtifacts(
-    in: request.storage,
+    in: request.scratchStorage,
     using: environment
 )
 
 try await kit.resetBuildStorage(
-    in: request.storage,
+    in: request.scratchStorage,
     using: environment
 )
 ```
@@ -717,6 +761,7 @@ errors include:
 - `packageChangedDuringBuild`
 - `packageSourceStabilityUnavailable`
 - `runtimeResourceVerificationFailed`
+- `unsafeSwiftPMSharedStorage`
 - `outputAlreadyExists`
 - `outputPublicationFailed`
 - `unsafeBuildStorage`
@@ -751,11 +796,12 @@ do {
 | `EnvironmentRemovalPlan` | Describes exact caller-requested toolchain/SDK removal; Codable and persistable. |
 | `SwiftPMEnvironment` | Adds, redacts, or removes values for one complete SwiftPM workflow. |
 | `SwiftPMTraits` | Selects package defaults, no traits, all traits, or a validated explicit set. |
-| `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, SDK, and SwiftPM configuration. |
+| `LocalBuildEnvironment` | Binds later operations to one prepared package, target, toolchain, SDK, and SwiftPM workflow configuration. |
 | `ExecutableProducts` | Lists discovered products and selects a named or sole executable. |
 | `BuildRequest` | Selects one product and its build options. |
 | `BuildResult` | Contains the executable, its required resource bundles, and their directory. |
-| `BuildStorage` | Selects package-default or explicit SwiftPM scratch storage. |
+| `SwiftPMScratchStorage` | Selects package-default or explicit SwiftPM scratch storage. |
+| `SwiftPMSharedStorage` | Selects caller-owned SwiftPM cache, configuration, and security locations. |
 | `BuildOutput`, `BuildCleanup` | Control output publication and later cleanup of build storage. |
 | `BuildTarget`, `LinuxArchitecture` | Select the Linux architecture. |
 | `BuildConfiguration` | Selects a debug or release build. |

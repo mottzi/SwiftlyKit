@@ -216,8 +216,9 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - `Environment/Removal` observes raw registered Swiftly state, performs complete
   safety preflight, removes exact SDK/toolchain targets, and verifies each
   postcondition. It never removes Swiftly itself.
-- `Environment/SwiftPMEnvironment` and `Environment/SwiftPMTraits` validate and
-  normalize workflow-scoped SwiftPM process and package-graph configuration.
+- `Environment/SwiftPMEnvironment`, `Environment/SwiftPMTraits`, and
+  `Environment/SwiftPMSharedStorage` validate and normalize workflow-scoped
+  SwiftPM process, package-graph, and shared-storage configuration.
 - `Build` contains the public build value types.
 - `SwiftPM` validates a prepared capability and coordinates product discovery,
   explicit dependency resolution, build execution, optional stripping, and
@@ -232,9 +233,9 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - `SwiftPM/SourceStability` owns resolved-graph source discovery, canonical path
   identity, deterministic snapshots, recursive event observation, and the
   build-scoped accept-or-withhold decision.
-- `SwiftPM/Storage` converts a public `BuildStorage` choice into a canonical,
-  safety-checked scratch directory and hides the retained exact-SDK directory
-  layout and its cross-process create-or-verify protocol.
+- `SwiftPM/Storage` converts a public `SwiftPMScratchStorage` choice into a
+  canonical, safety-checked scratch directory and hides the retained exact-SDK
+  directory layout and its cross-process create-or-verify protocol.
 - `Subprocess` is the only adapter to `swift-subprocess`. Production uses
   `LiveSubprocessRunner`; tests use the same `SubprocessRunning` seam.
 - `Events` contains the optional awaited progress and output interface. Command
@@ -302,12 +303,18 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - One immutable trait configuration reaches package inspection, resolved-graph
   discovery, explicit resolution, build, bin-path lookup, clean, and reset. Its
   arguments never reach Swiftly or selected non-SwiftPM tools.
+- One immutable shared-storage configuration reaches the same SwiftPM commands.
+  Explicit cache, configuration, and security directories remain caller-owned;
+  SwiftlyKit cleanup removes only selected scratch storage. Standard locations
+  remain implicit, and shared-storage arguments never reach Swiftly or selected
+  non-SwiftPM tools.
 - SDK selection resolves only after the retained directory is verified. If
   another process wins atomic link creation, SwiftlyKit verifies and reuses that
   exact selection; conflicting filesystem state is never accepted.
 - Product discovery and builds disable automatic dependency resolution. Staged
   builds surface a structured resolution-required error; only the fast track
-  performs the explicit resolve-and-retry sequence.
+  performs the explicit resolve-and-retry sequence. Staged resolution accepts
+  its own scratch selection, while the fast track reuses its build scratch.
 - Executable products are unique and ordered by name. Named and sole-product
   selection use the same `ExecutableProducts.select` behavior in staged and
   fast-track workflows.

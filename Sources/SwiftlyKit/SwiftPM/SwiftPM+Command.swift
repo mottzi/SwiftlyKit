@@ -27,7 +27,15 @@ extension SwiftPM {
         swiftArguments: [String]
     ) -> SubprocessCommand {
 
-        Self.command(
+        var swiftArguments = swiftArguments
+        if !swiftArguments.isEmpty {
+            swiftArguments.insert(
+                contentsOf: environment.swiftPMSharedStorage.commandArguments,
+                at: 1
+            )
+        }
+
+        return Self.command(
             environment,
             tool: "swift",
             toolArguments: swiftArguments,

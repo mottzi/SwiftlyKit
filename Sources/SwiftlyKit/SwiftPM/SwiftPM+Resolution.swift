@@ -3,11 +3,18 @@ import Foundation
 extension SwiftPM {
 
     func resolveDependencies(
+        in scratchStorage: SwiftPMScratchStorage,
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws {
 
         try validateEnvironment(environment)
+
+        let scratchDirectory = try SwiftPMScratchDirectory(
+            storage: scratchStorage,
+            packageRoot: environment.packageRoot,
+            sharedStorage: environment.swiftPMSharedStorage
+        )
 
         await report(
             .resolvingDependencies,
@@ -15,7 +22,14 @@ extension SwiftPM {
             to: onEvent
         )
 
-        let arguments = ["package"] + environment.swiftPMTraits.arguments + ["resolve"]
+        var arguments = ["package"] + environment.swiftPMTraits.arguments
+        if scratchDirectory.isExplicit {
+            arguments += [
+                "--scratch-path",
+                scratchDirectory.url.path(percentEncoded: false)
+            ]
+        }
+        arguments += ["resolve"]
         let resolutionCommand = Self.command(
             environment,
             swiftArguments: arguments

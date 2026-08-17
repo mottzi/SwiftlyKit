@@ -15,6 +15,7 @@ public struct LocalBuildEnvironment: Sendable {
     let target: BuildTarget
     let swiftPMEnvironment: SwiftPMEnvironment.Snapshot
     let swiftPMTraits: SwiftPMTraits
+    let swiftPMSharedStorage: SwiftPMSharedStorage
 
     init(
         swiftVersion: SwiftVersion,
@@ -24,7 +25,8 @@ public struct LocalBuildEnvironment: Sendable {
         sdkBundleURL: URL,
         target: BuildTarget,
         swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
-        swiftPMTraits: SwiftPMTraits = .packageDefaults
+        swiftPMTraits: SwiftPMTraits = .packageDefaults,
+        swiftPMSharedStorage: SwiftPMSharedStorage = .standard
     ) {
         self.swiftVersion = swiftVersion
         self.staticLinuxSDK = staticLinuxSDK
@@ -34,6 +36,7 @@ public struct LocalBuildEnvironment: Sendable {
         self.target = target
         self.swiftPMEnvironment = swiftPMEnvironment
         self.swiftPMTraits = swiftPMTraits
+        self.swiftPMSharedStorage = swiftPMSharedStorage
     }
 
 }

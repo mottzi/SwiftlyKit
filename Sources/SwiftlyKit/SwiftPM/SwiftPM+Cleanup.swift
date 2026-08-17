@@ -3,7 +3,7 @@ import Foundation
 extension SwiftPM {
 
     func cleanBuildArtifacts(
-        in storage: BuildStorage,
+        in storage: SwiftPMScratchStorage,
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws {
@@ -11,7 +11,7 @@ extension SwiftPM {
     }
 
     func resetBuildStorage(
-        in storage: BuildStorage,
+        in storage: SwiftPMScratchStorage,
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws {
@@ -25,7 +25,7 @@ extension SwiftPM {
     /// Cleanup deliberately skips package and SDK revalidation so stale state cannot block storage recovery.
     func perform(
         _ cleanup: BuildCleanup,
-        in storage: BuildStorage,
+        in storage: SwiftPMScratchStorage,
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws {
@@ -34,7 +34,8 @@ extension SwiftPM {
 
         let scratchDirectory = try SwiftPMScratchDirectory(
             storage: storage,
-            packageRoot: environment.packageRoot
+            packageRoot: environment.packageRoot,
+            sharedStorage: environment.swiftPMSharedStorage
         )
 
         let operation: SwiftPMError.Operation

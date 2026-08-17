@@ -100,6 +100,57 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("SwiftPM shared and scratch storage compile in staged and fast-track workflows")
+    func swiftPMStorageCompiles() {
+
+        let cacheDirectory = URL(filePath: "/tmp/swiftlykit-cache")
+        let configurationDirectory = URL(filePath: "/tmp/swiftlykit-configuration")
+        let securityDirectory = URL(filePath: "/tmp/swiftlykit-security")
+        let partial = SwiftPMSharedStorage(cacheDirectory: cacheDirectory)
+        let complete = SwiftPMSharedStorage(
+            cacheDirectory: cacheDirectory,
+            configurationDirectory: configurationDirectory,
+            securityDirectory: securityDirectory
+        )
+
+        let staged: @Sendable (EnvironmentAssessment, SwiftPMSharedStorage) async throws -> LocalBuildEnvironment = {
+            assessment, sharedStorage in
+            try await SwiftlyKit().prepare(
+                assessment,
+                swiftPMSharedStorage: sharedStorage
+            )
+        }
+        let resolution: @Sendable (LocalBuildEnvironment, SwiftPMScratchStorage) async throws -> Void = {
+            environment, scratchStorage in
+            try await SwiftlyKit().resolveDependencies(
+                in: scratchStorage,
+                using: environment
+            )
+        }
+        let request: @Sendable (ExecutableProduct) -> BuildRequest = { product in
+            BuildRequest(
+                product,
+                scratchStorage: .directory(URL(filePath: "/tmp/swiftlykit-scratch"))
+            )
+        }
+        let fastTrack: @Sendable (URL, SwiftPMSharedStorage, SwiftPMScratchStorage) async throws -> BuildResult = {
+            packageRoot, sharedStorage, scratchStorage in
+            try await SwiftlyKit.build(
+                packageRoot,
+                scratchStorage: scratchStorage,
+                swiftPMSharedStorage: sharedStorage
+            )
+        }
+
+        _ = SwiftPMSharedStorage.standard
+        _ = partial
+        _ = complete
+        _ = staged
+        _ = resolution
+        _ = request
+        _ = fastTrack
+    }
+
     @Test("Package traits compile in staged and fast-track workflows")
     func swiftPMTraitsCompile() {
 
@@ -200,18 +251,18 @@ struct PublicInterfaceTests {
         let workflow: @Sendable (URL, LocalBuildEnvironment, ExecutableProduct, URL) async throws -> BuildResult = {
             packageRoot, environment, product, destination in
             let kit = SwiftlyKit()
-            let storage = BuildStorage.directory(packageRoot.appending(path: "scratch"))
+            let scratchStorage = SwiftPMScratchStorage.directory(packageRoot.appending(path: "scratch"))
             let request = BuildRequest(
                 product,
-                storage: storage,
+                scratchStorage: scratchStorage,
                 output: .publish(to: destination, cleanup: .reset)
             )
             let result = try await kit.build(request, using: environment)
             _ = result.executable
             _ = result.resourceBundles
             _ = result.directory
-            try await kit.cleanBuildArtifacts(in: storage, using: environment)
-            try await kit.resetBuildStorage(in: storage, using: environment)
+            try await kit.cleanBuildArtifacts(in: scratchStorage, using: environment)
+            try await kit.resetBuildStorage(in: scratchStorage, using: environment)
             return result
         }
         _ = workflow
@@ -240,7 +291,7 @@ private func documentedWorkflow(_ packageRoot: URL) async throws -> BuildResult 
     do {
         return try await kit.build(request, using: environment)
     } catch SwiftlyKitError.dependencyResolutionRequired {
-        try await kit.resolveDependencies(using: environment)
+        try await kit.resolveDependencies(in: request.scratchStorage, using: environment)
         return try await kit.build(request, using: environment)
     }
 }

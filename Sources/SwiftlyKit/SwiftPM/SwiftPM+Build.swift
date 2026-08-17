@@ -12,15 +12,19 @@ extension SwiftPM {
         try validateEnvironment(environment)
 
         let scratchDirectory = try SwiftPMScratchDirectory(
-            storage: request.storage,
-            packageRoot: environment.packageRoot
+            storage: request.scratchStorage,
+            packageRoot: environment.packageRoot,
+            sharedStorage: environment.swiftPMSharedStorage
         )
 
         try Self.validate(request.output, outside: scratchDirectory.url)
         
         await report(.building, detail: "Building \(request.product.name).", to: onEvent)
         
-        let description = try await packageDescription(using: environment)
+        let description = try await packageDescription(
+            using: environment,
+            scratchStorage: request.scratchStorage
+        )
         
         guard description.products.contains(request.product)
         else { throw SwiftPMError.executableNotFound(request.product.name) }
@@ -163,7 +167,7 @@ extension SwiftPM {
                 )
 
                 do {
-                    try await perform(cleanup, in: request.storage, using: environment, onEvent: onEvent)
+                    try await perform(cleanup, in: request.scratchStorage, using: environment, onEvent: onEvent)
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch let error as SwiftPMError {

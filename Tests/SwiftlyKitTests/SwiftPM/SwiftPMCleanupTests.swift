@@ -74,6 +74,53 @@ struct SwiftPMCleanupTests {
         }
     }
 
+    @Test("Cleanup configures shared SwiftPM locations without purging them")
+    func cleanupKeepsSharedStorage() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Cleanup") { directory in
+            let scratch = directory.appending(path: "scratch", directoryHint: .isDirectory)
+            let sharedRoot = directory.deletingLastPathComponent()
+                .appending(path: "SwiftlyKit-cleanup-shared-\(UUID().uuidString)", directoryHint: .isDirectory)
+            let sharedStorage = SwiftPMSharedStorage(
+                cacheDirectory: sharedRoot.appending(path: "cache", directoryHint: .isDirectory),
+                configurationDirectory: sharedRoot.appending(path: "configuration", directoryHint: .isDirectory),
+                securityDirectory: sharedRoot.appending(path: "security", directoryHint: .isDirectory)
+            )
+            defer { try? FileManager.default.removeItem(at: sharedRoot) }
+            let runner = RecordingSubprocessRunner(results: [.success(), .success()])
+            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let environment = cleanupEnvironment(
+                in: directory,
+                swiftPMSharedStorage: sharedStorage
+            )
+
+            try await swiftPM.cleanBuildArtifacts(in: .directory(scratch), using: environment)
+            try await swiftPM.resetBuildStorage(in: .directory(scratch), using: environment)
+
+            let commands = await runner.commands
+            #expect(commands.count == 2)
+            for (command, subcommand) in zip(commands, ["clean", "reset"]) {
+                let arguments = command.arguments
+                let packageIndex = try #require(arguments.firstIndex(of: "package"))
+                let subcommandIndex = try #require(arguments.firstIndex(of: subcommand))
+                #expect(normalizedPath(try argument(after: "--scratch-path", in: arguments))
+                    == normalizedPath(scratch.path(percentEncoded: false)))
+                for (option, path) in [
+                    ("--cache-path", sharedRoot.appending(path: "cache")),
+                    ("--config-path", sharedRoot.appending(path: "configuration")),
+                    ("--security-path", sharedRoot.appending(path: "security"))
+                ] {
+                    let optionIndex = try #require(arguments.firstIndex(of: option))
+                    #expect(packageIndex < optionIndex)
+                    #expect(optionIndex < subcommandIndex)
+                    #expect(normalizedPath(try argument(after: option, in: arguments))
+                        == normalizedPath(path.path(percentEncoded: false)))
+                }
+                #expect(!arguments.contains("purge-cache"))
+            }
+        }
+    }
+
     @Test("Cleanup failures retain their operation and bounded diagnostic")
     func cleanupFailure() async throws {
 
@@ -117,7 +164,7 @@ struct SwiftPMCleanupTests {
             let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
-                storage: .directory(scratch),
+                scratchStorage: .directory(scratch),
                 output: .publish(to: output, replacingExisting: true, cleanup: .reset)
             )
 
@@ -166,7 +213,7 @@ struct SwiftPMCleanupTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        storage: .directory(scratch),
+                        scratchStorage: .directory(scratch),
                         output: .publish(to: output, cleanup: .reset)
                     ),
                     using: cleanupEnvironment(in: directory)
@@ -190,7 +237,7 @@ struct SwiftPMCleanupTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        storage: .directory(scratch),
+                        scratchStorage: .directory(scratch),
                         output: .publish(to: output, cleanup: .clean)
                     ),
                     using: cleanupEnvironment(in: directory)
@@ -215,7 +262,7 @@ struct SwiftPMCleanupTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        storage: .directory(directory)
+                        scratchStorage: .directory(directory)
                     ),
                     using: cleanupEnvironment(in: directory)
                 )
@@ -244,7 +291,8 @@ struct SwiftPMCleanupTests {
 private func cleanupEnvironment(
     in directory: URL,
     swiftPMEnvironment: SwiftPMEnvironment.Snapshot = SwiftPMEnvironment.inherited.snapshot(),
-    swiftPMTraits: SwiftPMTraits = .packageDefaults
+    swiftPMTraits: SwiftPMTraits = .packageDefaults,
+    swiftPMSharedStorage: SwiftPMSharedStorage = .standard
 ) -> LocalBuildEnvironment {
 
     LocalBuildEnvironment(
@@ -258,8 +306,20 @@ private func cleanupEnvironment(
         sdkBundleURL: directory.appending(path: "sdk.artifactbundle"),
         target: .linux(.arm64),
         swiftPMEnvironment: swiftPMEnvironment,
-        swiftPMTraits: swiftPMTraits
+        swiftPMTraits: swiftPMTraits,
+        swiftPMSharedStorage: swiftPMSharedStorage
     )
+}
+
+private func argument(after option: String, in arguments: [String]) throws -> String {
+    let optionIndex = try #require(arguments.firstIndex(of: option))
+    return try #require(arguments.dropFirst(optionIndex + 1).first)
+}
+
+private func normalizedPath(_ path: String) -> String {
+    let normalized = URL(filePath: path).standardizedFileURL.path(percentEncoded: false)
+    guard normalized != "/" else { return normalized }
+    return normalized.hasSuffix("/") ? String(normalized.dropLast()) : normalized
 }
 
 private actor CleanupEventRecorder {

@@ -29,7 +29,10 @@ struct CrossCompilationAcceptanceTests {
                 )
                 try #require(
                     !assessment.requiresInstallation,
-                    "Acceptance does not authorize installation; prepare Swiftly, Swift \(assessment.swiftVersion), and \(assessment.staticLinuxSDK.identifier) first."
+                    """
+                    Acceptance does not authorize installation; prepare Swiftly, Swift \(assessment.swiftVersion), \
+                    and \(assessment.staticLinuxSDK.identifier) first.
+                    """
                 )
 
                 let environment = try await kit.prepare(assessment)
@@ -47,7 +50,7 @@ struct CrossCompilationAcceptanceTests {
                     BuildRequest(
                         product,
                         configuration: .release,
-                        storage: .directory(scratchDirectory),
+                        scratchStorage: .directory(scratchDirectory),
                         output: .publish(to: publication)
                     ),
                     using: environment
@@ -92,7 +95,10 @@ struct CrossCompilationAcceptanceTests {
         let assessment = try await kit.assess(packageRoot, for: .linux(.x86_64))
         try #require(
             !assessment.requiresInstallation,
-            "Acceptance does not authorize installation; prepare Swiftly, Swift \(assessment.swiftVersion), and \(assessment.staticLinuxSDK.identifier) first."
+            """
+            Acceptance does not authorize installation; prepare Swiftly, Swift \(assessment.swiftVersion), \
+            and \(assessment.staticLinuxSDK.identifier) first.
+            """
         )
         let environment = try await kit.prepare(assessment)
         let products = try await kit.executableProducts(using: environment)
@@ -102,7 +108,7 @@ struct CrossCompilationAcceptanceTests {
             let request = BuildRequest(
                 product,
                 configuration: .release,
-                storage: .directory(scratchDirectory)
+                scratchStorage: .directory(scratchDirectory)
             )
             let firstOutput = AcceptanceOutputRecorder()
             let firstResult = try await kit.build(

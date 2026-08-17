@@ -65,6 +65,63 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
+    @Test("Invalid shared storage is rejected before staged or fast-track mutation")
+    func invalidSharedStorage() async throws {
+
+        try await withFastTrackTemporaryDirectory { packageRoot in
+            let runner = RecordingSubprocessRunner(results: [])
+            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner, installed: false)
+            let invalidDirectory = URL(string: "https://example.com/swiftpm-state")!
+            let sharedStorage = SwiftPMSharedStorage(cacheDirectory: invalidDirectory)
+            let assessment = try await kit.assess(packageRoot, for: .linux(.x86_64))
+
+            await #expect(throws: SwiftlyKitError.unsafeSwiftPMSharedStorage(invalidDirectory)) {
+                try await kit.prepare(
+                    assessment,
+                    swiftPMSharedStorage: sharedStorage
+                )
+            }
+            await #expect(throws: SwiftlyKitError.unsafeSwiftPMSharedStorage(invalidDirectory)) {
+                try await kit.build(
+                    packageRoot,
+                    product: nil,
+                    for: .linux(.x86_64),
+                    configuration: .release,
+                    swiftPMSharedStorage: sharedStorage,
+                    onEvent: nil
+                )
+            }
+
+            #expect(await runner.commands.isEmpty)
+        }
+    }
+
+    @Test("The fast track maps scratch and shared-storage overlap to the public error")
+    func overlappingFastTrackStorage() async throws {
+
+        try await withFastTrackTemporaryDirectory { packageRoot in
+            let runner = RecordingSubprocessRunner(results: [])
+            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let scratch = packageRoot.appending(path: "scratch", directoryHint: .isDirectory)
+            let sharedStorage = SwiftPMSharedStorage(cacheDirectory: scratch)
+            let canonicalScratch = try CanonicalFileURL.resolve(scratch)
+
+            await #expect(throws: SwiftlyKitError.unsafeSwiftPMSharedStorage(canonicalScratch)) {
+                try await kit.build(
+                    packageRoot,
+                    product: nil,
+                    for: .linux(.x86_64),
+                    configuration: .release,
+                    scratchStorage: .directory(scratch),
+                    swiftPMSharedStorage: sharedStorage,
+                    onEvent: nil
+                )
+            }
+
+            #expect(await runner.commands.isEmpty)
+        }
+    }
+
     @Test("The fast track binds one SwiftPM environment snapshot to every phase")
     func swiftPMEnvironmentSnapshot() async throws {
 
@@ -170,13 +227,24 @@ struct SwiftlyKitFastTrackTests {
             ])
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
             let traits = try SwiftPMTraits(["RetryFeature"], includingDefaults: true)
+            let scratch = packageRoot.appending(path: "scratch")
+            let cache = packageRoot.appending(path: "cache")
+            let configuration = packageRoot.appending(path: "configuration")
+            let security = packageRoot.appending(path: "security")
+            let sharedStorage = SwiftPMSharedStorage(
+                cacheDirectory: cache,
+                configurationDirectory: configuration,
+                securityDirectory: security
+            )
 
             let result = try await kit.build(
                 packageRoot,
                 product: nil,
                 for: .linux(.x86_64),
                 configuration: .release,
+                scratchStorage: .directory(scratch),
                 swiftPMTraits: traits,
+                swiftPMSharedStorage: sharedStorage,
                 onEvent: nil
             )
 
@@ -187,6 +255,36 @@ struct SwiftlyKitFastTrackTests {
             #expect(commands.count == 7)
             #expect(commands.allSatisfy { $0.arguments.contains("--traits") })
             #expect(commands.allSatisfy { $0.arguments.contains("RetryFeature,default") })
+            for command in commands {
+                #expect(
+                    normalizedPath(URL(filePath: try argument(after: "--cache-path", in: command.arguments)))
+                        == normalizedPath(cache)
+                )
+                #expect(
+                    normalizedPath(URL(filePath: try argument(after: "--config-path", in: command.arguments)))
+                        == normalizedPath(configuration)
+                )
+                #expect(
+                    normalizedPath(URL(filePath: try argument(after: "--security-path", in: command.arguments)))
+                        == normalizedPath(security)
+                )
+            }
+            #expect(
+                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[2].arguments)))
+                    == normalizedPath(scratch)
+            )
+            #expect(
+                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[3].arguments)))
+                    == normalizedPath(scratch)
+            )
+            #expect(
+                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[5].arguments)))
+                    == normalizedPath(scratch)
+            )
+            #expect(
+                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[6].arguments)))
+                    == normalizedPath(scratch)
+            )
         }
     }
 
@@ -215,7 +313,7 @@ struct SwiftlyKitFastTrackTests {
                 for: .linux(.x86_64),
                 configuration: .release,
                 jobs: 2,
-                storage: .directory(scratch),
+                scratchStorage: .directory(scratch),
                 output: .publish(to: output, replacingExisting: true, cleanup: .reset),
                 swiftPMTraits: try SwiftPMTraits(["PublishFeature"], includingDefaults: false),
                 onEvent: nil
@@ -396,6 +494,12 @@ private func sdkIdentifier(for version: SwiftVersion) -> String {
 private func argument(after option: String, in arguments: [String]) throws -> String {
     let optionIndex = try #require(arguments.firstIndex(of: option))
     return try #require(arguments.dropFirst(optionIndex + 1).first)
+}
+
+private func normalizedPath(_ url: URL) -> String {
+    let path = url.standardizedFileURL.path(percentEncoded: false)
+    let normalized = path.hasPrefix("/private/") ? String(path.dropFirst("/private".count)) : path
+    return normalized.hasSuffix("/") ? String(normalized.dropLast()) : normalized
 }
 
 private func withFastTrackTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
