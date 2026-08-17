@@ -27,6 +27,7 @@ struct PackageGraphSourceRootsTests {
             }
             """
             let runner = RecordingSubprocessRunner(results: [.success(output: graph)])
+            let events = PackageGraphEventRecorder()
             let values = try SwiftPMEnvironment(["GRAPH_VALUE": .plain("enabled")])
             let sharedRoot = directory.deletingLastPathComponent()
                 .appending(path: "SwiftlyKit-graph-shared-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -50,7 +51,8 @@ struct PackageGraphSourceRootsTests {
             let roots = try await SwiftPM.packageGraphSourceRoots(
                 using: environment,
                 scratchDirectory: scratch,
-                runner: runner
+                runner: runner,
+                onEvent: { await events.record($0) }
             )
 
             #expect(Set(roots.map(\.pathComponents)) == Set([directory, localDependency, checkout].map(\.pathComponents)))
@@ -79,6 +81,30 @@ struct PackageGraphSourceRootsTests {
                 #expect(normalizedPath(try argument(after: option, in: command.arguments))
                     == normalizedPath(path.path(percentEncoded: false)))
             }
+            let observed = try #require(await events.command)
+            #expect(observed.executable == command.executableURL)
+            #expect(observed.arguments == command.arguments)
+            #expect(observed.workingDirectory == command.workingDirectory)
+            #expect(observed.environment == command.environment)
+            #expect(await events.outputs.isEmpty)
+        }
+    }
+
+}
+
+private actor PackageGraphEventRecorder {
+
+    private(set) var command: CommandInvocation?
+    private(set) var outputs: [CommandOutputChunk] = []
+
+    func record(_ event: SwiftlyKitEvent) {
+        switch event {
+            case .progress:
+                break
+            case .command(let command):
+                self.command = command
+            case .output(let output):
+                outputs.append(output)
         }
     }
 

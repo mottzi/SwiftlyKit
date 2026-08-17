@@ -10,17 +10,19 @@ struct SwiftPM {
     let sourceRoots: @Sendable (
         LocalBuildEnvironment,
         SwiftPMScratchDirectory,
-        any SubprocessRunning
+        any SubprocessRunning,
+        SwiftlyKitEvent.Handler?
     ) async throws -> [URL]
 
     init() {
         runner = LiveSubprocessRunner()
         validateEnvironment = { try SwiftPM.liveValidateEnvironment($0) }
-        sourceRoots = { environment, scratchDirectory, runner in
+        sourceRoots = { environment, scratchDirectory, runner, onEvent in
             try await SwiftPM.packageGraphSourceRoots(
                 using: environment,
                 scratchDirectory: scratchDirectory,
-                runner: runner
+                runner: runner,
+                onEvent: onEvent
             )
         }
     }
@@ -36,7 +38,9 @@ struct SwiftPM {
     ) {
         self.runner = runner
         self.validateEnvironment = validateEnvironment
-        self.sourceRoots = sourceRoots
+        self.sourceRoots = { environment, scratchDirectory, runner, _ in
+            try await sourceRoots(environment, scratchDirectory, runner)
+        }
     }
 
 }

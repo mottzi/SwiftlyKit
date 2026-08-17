@@ -70,7 +70,7 @@ extension SwiftPM {
             swiftArguments: arguments
         )
 
-        let result = try await runner.run(cleanupCommand, onOutput: CommandOutputChunk.handler(for: onEvent))
+        let result = try await runner.run(cleanupCommand, onEvent: onEvent)
 
         guard result.succeeded else {
             throw SwiftPMError.commandFailed(operation: operation, diagnostic: Self.boundedDiagnostic(result))

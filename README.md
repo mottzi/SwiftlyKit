@@ -472,7 +472,7 @@ Reset removes the complete selected scratch directory. Do not select a directory
 that contains unrelated files. SwiftlyKit leaves package sources and
 `Package.resolved` unchanged.
 
-### Progress and command output
+### Progress, commands, and output
 
 Pass one event handler to a mutating operation. SwiftlyKit awaits each handler
 call and does not keep an event log.
@@ -482,6 +482,9 @@ let onEvent: SwiftlyKitEvent.Handler = { event in
     switch event {
     case .progress(let progress):
         print(progress.detail)
+
+    case .command(let command):
+        print(command.executable.path, command.arguments)
 
     case .output(let output):
         let stream = output.stream == .standardError ? "stderr" : "stdout"
@@ -499,9 +502,13 @@ let environment = try await kit.prepare(
 ```
 
 Progress events describe preparation, dependency resolution, builds, removal,
-stripping, publication, and cleanup. Output events contain standard output and
-standard error from delegated commands. SwiftlyKit does not report a percentage
-when the underlying tool cannot supply a reliable value.
+stripping, publication, and cleanup. Command events arrive before SwiftlyKit
+tries to start each delegated command and before its output. Use them for logs
+and diagnostics. SwiftlyKit replaces marked sensitive environment values with
+`<redacted>`. Command details can change between SwiftlyKit versions. Output
+events contain standard output and standard error from delegated commands.
+SwiftlyKit does not report a percentage when the underlying tool cannot supply
+a reliable value.
 
 ## Build result and verification
 
@@ -737,7 +744,7 @@ Common control-flow errors include:
 | `SwiftPMScratchStorage`, `SwiftPMSharedStorage` | Select SwiftPM workflow storage. |
 | `SwiftPMEnvironment`, `SwiftPMTraits` | Configure the complete SwiftPM workflow. |
 | `EnvironmentRemovalPlan` | Describe an exact, persistable toolchain or SDK removal request. |
-| `SwiftlyKitEvent` | Report progress and delegated command output. |
+| `SwiftlyKitEvent`, `CommandInvocation` | Report progress, commands, and output. |
 | `SwiftlyKitError` | Report typed operational failures. |
 
 ## Development

@@ -6,7 +6,8 @@ extension SwiftPM {
     static func packageGraphSourceRoots(
         using environment: LocalBuildEnvironment,
         scratchDirectory: SwiftPMScratchDirectory,
-        runner: any SubprocessRunning
+        runner: any SubprocessRunning,
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> [URL] {
 
         var arguments = [
@@ -27,7 +28,8 @@ extension SwiftPM {
 
         let result = try await runner.run(
             Self.command(environment, swiftArguments: arguments),
-            onOutput: nil
+            onEvent: onEvent,
+            forwardingOutput: false
         )
 
         guard result.succeeded else {

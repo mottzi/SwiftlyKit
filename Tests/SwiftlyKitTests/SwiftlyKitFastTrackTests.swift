@@ -367,6 +367,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: packageRoot.path(percentEncoded: false) + "\n"),
                 .success(output: "reset")
             ])
+            let events = FastTrackEventRecorder()
             let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
 
             let result = try await kit.build(
@@ -378,7 +379,7 @@ struct SwiftlyKitFastTrackTests {
                 scratchStorage: .directory(scratch),
                 output: .publish(to: output, replacingExisting: true, cleanup: .reset),
                 swiftPMTraits: try SwiftPMTraits(["PublishFeature"], includingDefaults: false),
-                onEvent: nil
+                onEvent: { await events.record($0) }
             )
 
             #expect(result.executable == output.appending(path: "Tool"))
@@ -395,6 +396,14 @@ struct SwiftlyKitFastTrackTests {
             let resetScratchOption = try #require(commands[4].arguments.firstIndex(of: "--scratch-path"))
             let resetScratchArgument = try #require(commands[4].arguments.dropFirst(resetScratchOption + 1).first)
             #expect(URL(filePath: resetScratchArgument).pathComponents == scratch.pathComponents)
+            let observed = await events.commands
+            #expect(observed.count == commands.count)
+            for (event, command) in zip(observed, commands) {
+                #expect(event.executable == command.executableURL)
+                #expect(event.arguments == command.arguments)
+                #expect(event.workingDirectory == command.workingDirectory)
+                #expect(event.environment == command.environment)
+            }
         }
     }
 
@@ -594,5 +603,20 @@ private func withFastTrackTemporaryDirectory<T>(_ body: (URL) async throws -> T)
 }
 
 private struct FastTrackRecorderRefusal: Error {
+
+}
+
+private actor FastTrackEventRecorder {
+
+    private(set) var commands: [CommandInvocation] = []
+
+    func record(_ event: SwiftlyKitEvent) {
+        switch event {
+            case .progress, .output:
+                break
+            case .command(let command):
+                commands.append(command)
+        }
+    }
 
 }

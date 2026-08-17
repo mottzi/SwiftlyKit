@@ -122,6 +122,33 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
+    @Test("Structured command observation compiles without testable access")
+    func structuredCommandObservationCompiles() {
+
+        let observer: SwiftlyKitEvent.Handler = { event in
+            switch event {
+                case .progress, .output:
+                    break
+                case .command(let command):
+                    _ = command.executable
+                    _ = command.arguments
+                    _ = command.workingDirectory
+                    _ = command.environment
+                @unknown default:
+                    break
+            }
+        }
+        let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
+            try await SwiftlyKit().prepare(assessment, onEvent: observer)
+        }
+        let fastTrack: @Sendable (URL) async throws -> BuildResult = { packageRoot in
+            try await SwiftlyKit.build(packageRoot, onEvent: observer)
+        }
+
+        _ = staged
+        _ = fastTrack
+    }
+
     @Test("SwiftPM shared and scratch storage compile in staged and fast-track workflows")
     func swiftPMStorageCompiles() {
 

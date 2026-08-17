@@ -184,7 +184,7 @@ extension EnvironmentRemover {
 
         let result: SubprocessResult
         do {
-            result = try await runner.run(command, onOutput: CommandOutputChunk.handler(for: onEvent))
+            result = try await runner.run(command, onEvent: onEvent)
         } catch is CancellationError {
             throw CancellationError()
         } catch {

@@ -54,4 +54,16 @@ extension SubprocessRunning {
         try await run(command, onOutput: nil)
     }
 
+    /// Emits one command event and optionally forwards command output to the event handler.
+    func run(
+        _ command: SubprocessCommand,
+        onEvent: SwiftlyKitEvent.Handler?,
+        forwardingOutput: Bool = true
+    ) async throws -> SubprocessResult {
+
+        await onEvent?(.command(CommandInvocation(command)))
+        let outputHandler = forwardingOutput ? CommandOutputChunk.handler(for: onEvent) : nil
+        return try await run(command, onOutput: outputHandler)
+    }
+
 }

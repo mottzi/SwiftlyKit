@@ -28,13 +28,14 @@ extension SwiftPM {
         
         let description = try await packageDescription(
             using: environment,
-            scratchStorage: request.scratchStorage
+            scratchStorage: request.scratchStorage,
+            onEvent: onEvent
         )
         
         guard description.products.contains(request.product)
         else { throw SwiftPMError.executableNotFound(request.product.name) }
         
-        let roots = try await sourceRoots(environment, scratchDirectory, runner)
+        let roots = try await sourceRoots(environment, scratchDirectory, runner, onEvent)
         let stability = try await Self.startSourceStability(
             roots: roots,
             scratchDirectory: scratchDirectory.url
@@ -70,7 +71,7 @@ extension SwiftPM {
             swiftArguments: ["build"] + commonArguments
         )
 
-        let buildResult = try await runner.run(buildCommand, onOutput: CommandOutputChunk.handler(for: onEvent))
+        let buildResult = try await runner.run(buildCommand, onEvent: onEvent)
 
         guard buildResult.succeeded else {
             let diagnostic = Self.boundedDiagnostic(buildResult)
@@ -83,7 +84,11 @@ extension SwiftPM {
             swiftArguments: ["build"] + commonArguments + ["--show-bin-path"]
         )
 
-        let pathResult = try await runner.run(pathCommand, onOutput: nil)
+        let pathResult = try await runner.run(
+            pathCommand,
+            onEvent: onEvent,
+            forwardingOutput: false
+        )
 
         guard pathResult.succeeded
         else { throw SwiftPMError.commandFailed(operation: .building, diagnostic: Self.boundedDiagnostic(pathResult)) }
@@ -131,7 +136,7 @@ extension SwiftPM {
                             stagedExecutable,
                             for: request,
                             using: environment,
-                            onOutput: CommandOutputChunk.handler(for: onEvent)
+                            onEvent: onEvent
                         )
                     }
                 )
@@ -158,7 +163,7 @@ extension SwiftPM {
                                 stagedExecutable,
                                 for: request,
                                 using: environment,
-                                onOutput: CommandOutputChunk.handler(for: onEvent)
+                                onEvent: onEvent
                             )
                         }
                         try ELFExecutableVerifier.verify(
@@ -199,7 +204,7 @@ extension SwiftPM {
         _ executable: URL,
         for request: BuildRequest,
         using environment: LocalBuildEnvironment,
-        onOutput: SubprocessOutputHandler?
+        onEvent: SwiftlyKitEvent.Handler?
     ) async throws {
 
         let stripCommand = Self.toolCommand(
@@ -208,7 +213,7 @@ extension SwiftPM {
             toolArguments: ["--strip-all", executable.path(percentEncoded: false)]
         )
 
-        let result = try await runner.run(stripCommand, onOutput: onOutput)
+        let result = try await runner.run(stripCommand, onEvent: onEvent)
 
         guard result.succeeded
         else { throw SwiftPMError.commandFailed(operation: .stripping, diagnostic: Self.boundedDiagnostic(result)) }

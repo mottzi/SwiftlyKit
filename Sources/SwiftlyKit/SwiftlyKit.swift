@@ -179,13 +179,15 @@ extension SwiftlyKit {
 
     private func executableProducts(
         using environment: LocalBuildEnvironment,
-        scratchStorage: SwiftPMScratchStorage
+        scratchStorage: SwiftPMScratchStorage,
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> ExecutableProducts {
 
         do {
             return ExecutableProducts(try await swiftPM.executableProducts(
                 using: environment,
-                scratchStorage: scratchStorage
+                scratchStorage: scratchStorage,
+                onEvent: onEvent
             ))
         }
         catch is CancellationError { throw CancellationError() }
@@ -404,7 +406,8 @@ extension SwiftlyKit {
         )
         let products = try await executableProducts(
             using: environment,
-            scratchStorage: scratchStorage
+            scratchStorage: scratchStorage,
+            onEvent: onEvent
         )
         let product = try products.select(productName)
         let request = BuildRequest(

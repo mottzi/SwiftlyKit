@@ -39,6 +39,11 @@ struct SwiftPMCleanupTests {
             #expect(commands[0].environment?["CLEAN_VALUE"] == "enabled")
             #expect(await events.operations == [.cleaningBuildArtifacts])
             #expect(await events.output == ["cleaned", "warning"])
+            let observed = try #require(await events.commands.first)
+            #expect(observed.executable == commands[0].executableURL)
+            #expect(observed.arguments == commands[0].arguments)
+            #expect(observed.workingDirectory == commands[0].workingDirectory)
+            #expect(observed.environment == commands[0].environment)
         }
     }
 
@@ -71,6 +76,11 @@ struct SwiftPMCleanupTests {
             ])
             #expect(commands[0].environment?["RESET_VALUE"] == "enabled")
             #expect(await events.operations == [.resettingBuildStorage])
+            let observed = try #require(await events.commands.first)
+            #expect(observed.executable == commands[0].executableURL)
+            #expect(observed.arguments == commands[0].arguments)
+            #expect(observed.workingDirectory == commands[0].workingDirectory)
+            #expect(observed.environment == commands[0].environment)
         }
     }
 
@@ -364,11 +374,13 @@ private func normalizedPath(_ path: String) -> String {
 private actor CleanupEventRecorder {
 
     private(set) var operations: [OperationProgress.Operation] = []
+    private(set) var commands: [CommandInvocation] = []
     private(set) var output: [String] = []
 
     func record(_ event: SwiftlyKitEvent) {
         switch event {
             case .progress(let progress): operations.append(progress.operation)
+            case .command(let command): commands.append(command)
             case .output(let output): self.output.append(output.text)
         }
     }

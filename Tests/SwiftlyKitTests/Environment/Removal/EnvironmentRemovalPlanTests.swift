@@ -666,6 +666,12 @@ struct EnvironmentRemovalPlanTests {
             guard case .progress(let progress) = $0 else { return false }
             return progress.operation == .removingEnvironment
         })
+        let observed = try #require(await events.commands.first)
+        let command = try #require(await runner.commands.first)
+        #expect(observed.executable == command.executableURL)
+        #expect(observed.arguments == command.arguments)
+        #expect(observed.workingDirectory == command.workingDirectory)
+        #expect(observed.environment == command.environment)
     }
 
     @Test("Cancellation after an SDK prefix leaves a retryable plan")
@@ -901,9 +907,13 @@ private actor RemovalStateSequence {
 private actor EventCollector {
 
     private(set) var values: [SwiftlyKitEvent] = []
+    private(set) var commands: [CommandInvocation] = []
 
     func append(_ event: SwiftlyKitEvent) {
         values.append(event)
+        if case .command(let command) = event {
+            commands.append(command)
+        }
     }
 
 }

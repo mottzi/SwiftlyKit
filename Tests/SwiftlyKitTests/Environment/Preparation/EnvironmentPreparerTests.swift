@@ -63,6 +63,7 @@ struct EnvironmentPreparerTests {
             inventory(includesToolchain: true, includesSDK: false),
             inventory(includesToolchain: true, includesSDK: true)
         ])
+        let events = PreparationEventRecorder()
         let preparer = EnvironmentPreparer(
             runner: commands,
             assessHost: { .ready },
@@ -82,7 +83,8 @@ struct EnvironmentPreparerTests {
         let environment = try await preparer.prepare(
             try assessment(requires: [.toolchain, .staticLinuxSDK]),
             swiftPMEnvironment: snapshot,
-            swiftPMTraits: traits
+            swiftPMTraits: traits,
+            onEvent: { await events.record($0) }
         )
         entries["PREPARATION_SECRET"] = .sensitive("changed")
 
@@ -100,6 +102,14 @@ struct EnvironmentPreparerTests {
             "run", "swift", "sdk", "install", sdkMetadata.downloadURL.absoluteString,
             "--checksum", sdkMetadata.checksum, "+6.2.1"
         ])
+        let observed = await events.commands
+        #expect(observed.count == recorded.count)
+        for (event, command) in zip(observed, recorded) {
+            #expect(event.executable == command.executableURL)
+            #expect(event.arguments == command.arguments)
+            #expect(event.workingDirectory == command.workingDirectory)
+            #expect(event.environment == nil)
+        }
     }
 
     @Test("Custom environment storage reaches toolchain and SDK installation commands")
@@ -634,6 +644,7 @@ struct EnvironmentPreparerTests {
                 .success(),
                 .success()
             ])
+            let events = PreparationEventRecorder()
             let preparer = EnvironmentPreparer(
                 homeDirectory: temporaryDirectory.appending(path: "home"),
                 temporaryDirectory: temporaryDirectory,
@@ -649,7 +660,10 @@ struct EnvironmentPreparerTests {
                 revalidate: { _ in }
             )
 
-            _ = try await preparer.prepare(try assessment(requires: [.swiftly]))
+            _ = try await preparer.prepare(
+                try assessment(requires: [.swiftly]),
+                onEvent: { await events.record($0) }
+            )
 
             let recorded = await commands.commands
             #expect(recorded[0].executableURL.path(percentEncoded: false) == "/usr/sbin/pkgutil")
@@ -659,6 +673,14 @@ struct EnvironmentPreparerTests {
                 "init", "--no-modify-profile", "--skip-install",
                 "--quiet-shell-followup", "--assume-yes"
             ])
+            let observed = await events.commands
+            #expect(observed.count == recorded.count)
+            for (event, command) in zip(observed, recorded) {
+                #expect(event.executable == command.executableURL)
+                #expect(event.arguments == command.arguments)
+                #expect(event.workingDirectory == command.workingDirectory)
+                #expect(event.environment == command.environment)
+            }
         }
     }
 
@@ -893,6 +915,21 @@ private actor PlanRecorder {
 
     func append(_ plan: EnvironmentRemovalPlan) {
         values.append(plan)
+    }
+
+}
+
+private actor PreparationEventRecorder {
+
+    private(set) var commands: [CommandInvocation] = []
+
+    func record(_ event: SwiftlyKitEvent) {
+        switch event {
+            case .progress, .output:
+                break
+            case .command(let command):
+                commands.append(command)
+        }
     }
 
 }

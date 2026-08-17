@@ -8,10 +8,15 @@ extension SwiftPM {
 
     func executableProducts(
         using environment: LocalBuildEnvironment,
-        scratchStorage: SwiftPMScratchStorage
+        scratchStorage: SwiftPMScratchStorage,
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> [ExecutableProduct] {
         try validateEnvironment(environment)
-        let package = try await packageDescription(using: environment, scratchStorage: scratchStorage)
+        let package = try await packageDescription(
+            using: environment,
+            scratchStorage: scratchStorage,
+            onEvent: onEvent
+        )
         return package.products
     }
 
@@ -21,7 +26,8 @@ extension SwiftPM {
 
     func packageDescription(
         using environment: LocalBuildEnvironment,
-        scratchStorage: SwiftPMScratchStorage = .packageDefault
+        scratchStorage: SwiftPMScratchStorage = .packageDefault,
+        onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> PackageDescription {
 
         let scratchDirectory = try SwiftPMScratchDirectory(
@@ -46,7 +52,11 @@ extension SwiftPM {
             swiftArguments: arguments
         )
 
-        let result = try await runner.run(packageCommand, onOutput: nil)
+        let result = try await runner.run(
+            packageCommand,
+            onEvent: onEvent,
+            forwardingOutput: false
+        )
 
         guard result.succeeded
         else { throw SwiftPMError.commandFailed(operation: .inspectingPackage, diagnostic: Self.boundedDiagnostic(result)) }

@@ -36,7 +36,7 @@ extension SwiftPM {
             swiftArguments: arguments
         )
 
-        let result = try await runner.run(resolutionCommand, onOutput: CommandOutputChunk.handler(for: onEvent))
+        let result = try await runner.run(resolutionCommand, onEvent: onEvent)
 
         guard result.succeeded else {
             throw SwiftPMError.commandFailed(

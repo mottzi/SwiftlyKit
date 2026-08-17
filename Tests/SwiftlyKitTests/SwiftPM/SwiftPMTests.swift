@@ -816,6 +816,11 @@ struct SwiftPMTests {
             #expect(!commands[0].arguments.contains("--config-path"))
             #expect(!commands[0].arguments.contains("--security-path"))
             #expect(await events.operations == [.resolvingDependencies])
+            let observedCommand = try #require(await events.commands.first)
+            #expect(observedCommand.executable == commands[0].executableURL)
+            #expect(observedCommand.arguments == commands[0].arguments)
+            #expect(observedCommand.workingDirectory == commands[0].workingDirectory)
+            #expect(observedCommand.environment == commands[0].environment)
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "resolved"),
                 EventOutput(stream: .standardError, text: "warning")
@@ -963,6 +968,23 @@ struct SwiftPMTests {
             #expect(commands[3].sensitiveEnvironmentKeys.isEmpty)
             #expect(!commands[3].arguments.contains("--traits"))
             #expect(!commands[3].arguments.contains("StripFeature"))
+            let observedCommands = await events.commands
+            #expect(observedCommands.count == commands.count)
+            for (observed, command) in zip(observedCommands, commands) {
+                #expect(observed.executable == command.executableURL)
+                #expect(observed.arguments == command.arguments)
+                #expect(observed.workingDirectory == command.workingDirectory)
+            }
+            #expect(observedCommands[0].environment?["BASE"] == "value")
+            #expect(observedCommands[0].environment?["BUILD_SECRET"] == "<redacted>")
+            #expect(observedCommands[1].environment?["BUILD_SECRET"] == "<redacted>")
+            #expect(observedCommands[2].environment?["BUILD_SECRET"] == "<redacted>")
+            #expect(observedCommands[3].environment?["BASE"] == "value")
+            #expect(observedCommands[3].environment?["BUILD_SECRET"] == nil)
+            #expect(observedCommands[0].environment?.values.allSatisfy { $0 != "private" } == true)
+            #expect(observedCommands[1].environment?.values.allSatisfy { $0 != "private" } == true)
+            #expect(observedCommands[2].environment?.values.allSatisfy { $0 != "private" } == true)
+            #expect(observedCommands[3].environment?.values.allSatisfy { $0 != "private" } == true)
             for option in ["--cache-path", "--config-path", "--security-path"] {
                 #expect(commands[0].arguments.contains(option))
                 #expect(commands[1].arguments.contains(option))
@@ -973,6 +995,17 @@ struct SwiftPMTests {
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "built"),
                 EventOutput(stream: .standardOutput, text: "stripped")
+            ])
+            #expect(await events.sequence == [
+                .progress,
+                .command,
+                .command,
+                .output,
+                .command,
+                .progress,
+                .command,
+                .output,
+                .progress
             ])
         }
     }
@@ -1198,18 +1231,34 @@ private struct EventOutput: Equatable {
 
 }
 
+private enum EventKind: Equatable {
+
+    case progress
+    case command
+    case output
+
+}
+
 private actor SwiftPMEventRecorder {
 
     private(set) var operations: [OperationProgress.Operation] = []
     private(set) var details: [String] = []
+    private(set) var commands: [CommandInvocation] = []
     private(set) var outputs: [EventOutput] = []
+    private(set) var sequence: [EventKind] = []
 
     func record(_ event: SwiftlyKitEvent) {
         switch event {
             case .progress(let progress):
                 operations.append(progress.operation)
                 details.append(progress.detail)
-            case .output(let output): outputs.append(EventOutput(stream: output.stream, text: output.text))
+                sequence.append(.progress)
+            case .command(let command):
+                commands.append(command)
+                sequence.append(.command)
+            case .output(let output):
+                outputs.append(EventOutput(stream: output.stream, text: output.text))
+                sequence.append(.output)
         }
     }
 

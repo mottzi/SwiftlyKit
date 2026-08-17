@@ -450,7 +450,7 @@ extension EnvironmentPreparer {
 
     private func execute(_ command: SubprocessCommand, onEvent: SwiftlyKitEvent.Handler?) async throws -> SubprocessResult {
         do {
-            return try await runner.run(command, onOutput: CommandOutputChunk.handler(for: onEvent))
+            return try await runner.run(command, onEvent: onEvent)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
