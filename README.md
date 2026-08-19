@@ -1,42 +1,25 @@
 # SwiftlyKit
 
-SwiftlyKit is a macOS library that cross-compiles a trusted local Swift package
-into a verified, statically linked Linux executable.
+SwiftlyKit cross-compiles a local Swift package on Apple silicon macOS into a
+verified, statically linked ARM64 or x86-64 Linux Musl executable. It selects an
+official Swift toolchain and matching Static Linux SDK, runs SwiftPM, and returns
+the executable with its required resource bundles.
 
-Give SwiftlyKit a package root and select an executable product. SwiftlyKit
-selects an official Swift toolchain and its matching Static Linux SDK, builds
-the product with SwiftPM, and returns a runnable result with its required
-resource bundles.
-
-SwiftlyKit can:
-
-- build for ARM64 or x86-64 Linux Musl from an Apple silicon Mac;
-- install Swiftly, the selected toolchain, and its matching SDK when you
-  authorize the installation;
-- verify that the result is a statically linked ELF64 executable for the
-  selected architecture;
-- publish the executable and its runtime resources as one complete directory;
-  and
-- give apps a staged workflow for approval, product selection, progress, build
-  settings, storage, and cleanup.
+SwiftlyKit is a library for macOS apps and developer tools. If you want a
+terminal command, use [SwiftlyKitCLI](https://github.com/mottzi/SwiftlyKitCLI).
 
 ## Requirements
 
-- Apple silicon Mac
-- macOS 13 or later
-- Swift 6.3 or later for the app or tool that imports SwiftlyKit
-- An active macOS SDK from Xcode or Command Line Tools
+- Apple silicon Mac running macOS 13 or later
+- Xcode or Command Line Tools with Swift 6.3 or later
 - An unsandboxed app or command-line tool
 - A trusted local Swift package to build
 
-Swiftly 1.0 or later is also required. SwiftlyKit can install Swiftly when you
-authorize environment preparation. SwiftlyKit does not install Xcode or select
-the active developer directory. It can explicitly request Apple's interactive
-Command Line Tools installer.
+SwiftlyKit also needs Swiftly 1.0 or later. It can install Swiftly, the selected
+toolchain, and the matching SDK when the caller authorizes preparation. It does
+not install Xcode or change the active developer directory.
 
 ## Installation
-
-Add SwiftlyKit with Swift Package Manager.
 
 In Xcode, select **File > Add Package Dependencies** and enter:
 
@@ -44,8 +27,7 @@ In Xcode, select **File > Add Package Dependencies** and enter:
 https://github.com/mottzi/SwiftlyKit.git
 ```
 
-Select version `0.1.0` or later. Then add the `SwiftlyKit` library to your
-target.
+Select version `0.3.1` or later and add the `SwiftlyKit` library to your target.
 
 For a Swift package, add the package and product dependencies:
 
@@ -56,13 +38,11 @@ import PackageDescription
 
 let package = Package(
     name: "YourPackage",
-    platforms: [
-        .macOS(.v13)
-    ],
+    platforms: [.macOS(.v13)],
     dependencies: [
         .package(
             url: "https://github.com/mottzi/SwiftlyKit.git",
-            from: "0.1.0"
+            from: "0.3.1"
         )
     ],
     targets: [
@@ -78,7 +58,7 @@ let package = Package(
 
 ## Quick start
 
-Import SwiftlyKit and pass the root of a local Swift package to `build(_:)`:
+Pass the exact package root that contains `Package.swift`:
 
 ```swift
 import Foundation
@@ -90,25 +70,18 @@ let result = try await SwiftlyKit.build(packageRoot)
 print(result.executable.path)
 ```
 
-This convenience API:
+The default call selects the package's only executable product and builds it for
+x86-64 Linux in release mode. It uses the package's `.build` directory, keeps
+default package traits, and does not strip the executable.
 
-- selects the package's only executable product;
-- targets x86-64 Linux;
-- creates a release build with the package's default traits;
-- selects the toolchain automatically;
-- uses standard environment and SwiftPM workflow storage;
-- keeps the executable and its runtime resources in SwiftPM build storage; and
-- does not strip the executable.
-
-Specify the product, target, toolchain, or build settings when you need a
-different result:
+Select a product, target, or toolchain when the defaults do not fit:
 
 ```swift
 let result = try await SwiftlyKit.build(
     packageRoot,
     product: "MyTool",
     for: .linux(.arm64),
-    toolchain: .exact(SwiftVersion(major: 6, minor: 2, patch: 1)),
+    toolchain: .exact(SwiftVersion(major: 6, minor: 3, patch: 3)),
     configuration: .debug,
     jobs: 4
 )
@@ -116,63 +89,49 @@ let result = try await SwiftlyKit.build(
 
 ### Publish a runnable directory
 
-Use `.publish` when you need a stable output outside SwiftPM build storage:
+Use `.publish` to copy the verified executable and its resource bundles out of
+SwiftPM build storage:
 
 ```swift
-let publicationDirectory = URL(filePath: "/path/to/output/MyTool")
+let destination = URL(filePath: "/path/to/output/MyTool")
 let result = try await SwiftlyKit.build(
     packageRoot,
     product: "MyTool",
-    scratchStorage: .directory(URL(filePath: "/path/to/scratch")),
-    output: .publish(to: publicationDirectory, cleanup: .reset),
+    output: .publish(to: destination),
     strip: true
 )
 ```
 
-The executable is now `/path/to/output/MyTool/MyTool`.
-`result.resourceBundles` contains the resource bundles that the product needs.
-Keep the complete published directory together when you move, upload, or
-deploy it.
+The destination's parent directory must exist. SwiftlyKit publishes the complete
+directory only after the build, optional stripping, and verification succeed.
+It refuses to replace an existing destination unless you pass
+`replacingExisting: true`.
 
-SwiftlyKit does not replace an existing destination by default. Opt in when a
-stable URL must point to the new complete output:
-
-```swift
-let result = try await SwiftlyKit.build(
-    packageRoot,
-    output: .publish(to: publicationDirectory, replacingExisting: true)
-)
-```
+Keep `result.executable` and every URL in `result.resourceBundles` together. A
+published `result.directory` contains only those runnable files. A result in
+SwiftPM build storage can share its directory with unrelated build output.
 
 > [!IMPORTANT]
-> The convenience API authorizes SwiftlyKit to install Swiftly, the selected
-> toolchain, and its SDK when required. It can also resolve dependencies and
-> update `Package.resolved`. Use the staged workflow when your app must show or
-> approve these changes first.
+> `SwiftlyKit.build(_:)` authorizes SwiftlyKit to install missing environment
+> components. It may also resolve package dependencies and update
+> `Package.resolved`. Use the staged workflow when your app must inspect or
+> approve those changes first.
 
 ## Choose a workflow
 
-SwiftlyKit provides two workflows. Both use the same build pipeline.
+Both workflows use the same build and verification pipeline.
 
 | Workflow | Use it when |
 | --- | --- |
-| Convenience API | The caller can authorize the complete operation with one `async` call. |
-| Staged workflow | The caller must inspect requirements, ask for approval, select a product, or control dependency resolution. |
-
-The convenience API performs assessment, preparation, product discovery, dependency
-resolution when required, and the build. The staged workflow exposes these
-operations separately.
+| `SwiftlyKit.build(_:)` | One call may prepare the environment, resolve dependencies, and build. |
+| Staged API | The caller must inspect requirements, ask for approval, select a product, or control dependency resolution. |
 
 ## Staged workflow
 
-One `LocalBuildEnvironment` binds the later operations to the assessed package,
-target, toolchain, SDK, SwiftPM environment, package traits, and storage choices.
+A `LocalBuildEnvironment` binds later operations to one package, target,
+toolchain, SDK, SwiftPM configuration, and storage selection.
 
-### 1. Assess the environment
-
-Assessment validates the host and package. It selects an exact official Swift
-release and matching Static Linux SDK. It does not install components or
-resolve package dependencies.
+### 1. Assess without changing the system
 
 ```swift
 let kit = SwiftlyKit()
@@ -181,82 +140,64 @@ let assessment = try await kit.assess(
     for: .linux(.arm64)
 )
 
-print("Swift tools version: \(assessment.toolsVersion)")
-print("Selected Swift version: \(assessment.swiftVersion)")
-print("Selected SDK: \(assessment.staticLinuxSDK.identifier)")
-
-if assessment.requiresInstallation {
-    print("Required components: \(assessment.requiredComponents)")
-}
+print("Swift \(assessment.swiftVersion)")
+print("SDK \(assessment.staticLinuxSDK.identifier)")
+print("Required components: \(assessment.requiredComponents)")
 ```
 
-Use `EnvironmentAssessment` to show the proposed changes to the user. It
-reports whether Swiftly, the toolchain, and the SDK are available.
+Assessment checks the host and package, then selects an exact official Swift
+release and matching SDK. It does not install anything or resolve dependencies.
 
-If the user must choose a toolchain, request all compatible environments in one
-read-only discovery pass:
+To present every compatible choice, use one read-only discovery pass:
 
 ```swift
 let choices = try await kit.compatibleEnvironments(
     packageRoot,
     for: .linux(.arm64)
 )
-
-for choice in choices {
-    print("Swift \(choice.swiftVersion): \(choice.requiredComponents)")
-}
-
-let selection: ToolchainSelection = .automatic
-let assessment = try choices.select(selection)
+let assessment = try choices.select(.automatic)
 ```
 
-`EnvironmentChoices` lists each compatible environment once, newest first.
-`select(_:)` uses the captured results and does not inspect the system again.
+`EnvironmentChoices` lists each compatible Swift version once, newest first.
+The selected version must support the package's `swift-tools-version` and target
+architecture.
 
-### 2. Prepare the environment
-
-Pass the accepted assessment to `prepare(_:)`:
+### 2. Prepare the accepted environment
 
 ```swift
 let environment = try await kit.prepare(assessment)
 ```
 
-This call authorizes only the items in `requiredComponents`. You must call
-`prepare(_:)` even when no installation is required. Later staged operations
-need the returned `LocalBuildEnvironment`.
-
-If `Package.swift` or the applicable `.swift-version` file changes after
-assessment, preparation throws `SwiftlyKitError.staleAssessment`. Assess the
-package again before you continue.
-
-You can bind SwiftPM environment values, package traits, and shared storage at
-this step. See [SwiftPM configuration](#swiftpm-configuration).
+Call `prepare(_:)` even when `assessment.requiresInstallation` is `false`.
+Preparation returns the environment required by later staged operations. If
+`Package.swift` or the applicable `.swift-version` file changed after
+assessment, assess again.
 
 ### 3. Select an executable product
-
-Ask SwiftPM for the executable products in the prepared package:
 
 ```swift
 let products = try await kit.executableProducts(using: environment)
 let product = try products.select("MyTool")
 ```
 
-Product discovery does not resolve package dependencies. The returned
-`ExecutableProducts` value is iterable and indexable. If you call `select()`
-without a name, the package must contain exactly one executable product.
+Pass no name to `select()` only when the package has one executable product.
+Product discovery does not resolve dependencies.
 
-### 4. Build the product
-
-Create a `BuildRequest` and use the prepared environment:
+### 4. Build
 
 ```swift
-let publicationDirectory = URL(filePath: "/path/to/output/MyTool")
+let scratch = SwiftPMScratchStorage.directory(
+    URL(filePath: "/path/to/scratch")
+)
 let request = BuildRequest(
     product,
     configuration: .release,
     jobs: 4,
-    scratchStorage: .directory(URL(filePath: "/path/to/scratch")),
-    output: .publish(to: publicationDirectory, cleanup: .reset),
+    scratchStorage: scratch,
+    output: .publish(
+        to: URL(filePath: "/path/to/output/MyTool"),
+        cleanup: .reset
+    ),
     strip: true
 )
 
@@ -265,130 +206,57 @@ let result: BuildResult
 do {
     result = try await kit.build(request, using: environment)
 } catch SwiftlyKitError.dependencyResolutionRequired {
-    try await kit.resolveDependencies(
-        in: request.scratchStorage,
-        using: environment
-    )
+    try await kit.resolveDependencies(in: scratch, using: environment)
     result = try await kit.build(request, using: environment)
 }
 ```
 
-A staged build never resolves dependencies automatically.
+A staged build never resolves dependencies on its own.
 `resolveDependencies(in:using:)` can access the network and update
 `Package.resolved`.
 
-SwiftlyKit monitors the root package and its resolved dependencies during
-compilation. It withholds the result if relevant package state changes. See
-[Source stability](#source-stability) for the scope of this check.
+## Configuration
 
-## Build and environment configuration
+The convenience call and `BuildRequest` share these build choices:
 
-The defaults support the common convenience build. Use the following options
-when the consumer needs more control.
-
-### Build request options
-
-| Option | Default | Behavior |
+| Option | Default | Effect |
 | --- | --- | --- |
+| `product` | `nil` | Selects the only executable product or requires an explicit name. |
+| `for` | `.linux(.x86_64)` | Selects ARM64 or x86-64 Linux Musl. |
+| `toolchain` | `.automatic` | Selects an official stable Swift toolchain and matching SDK. |
 | `configuration` | `.release` | Selects a SwiftPM debug or release build. |
-| `jobs` | `nil` | Uses the SwiftPM default. A positive value limits concurrent build jobs. |
-| `scratchStorage` | `.packageDefault` | Uses the package `.build` directory. `.directory(URL)` selects an explicit SwiftPM scratch directory. |
-| `output` | `.buildStorage` | Returns output in SwiftPM build storage. `.publish(...)` publishes a complete runnable directory. |
-| `strip` | `false` | Strips a SwiftlyKit-owned executable with the selected toolchain and verifies it again. |
+| `jobs` | `nil` | Uses SwiftPM's default concurrency. A positive value sets a limit. |
+| `scratchStorage` | `.packageDefault` | Uses `.build` or an explicit SwiftPM scratch directory. |
+| `output` | `.buildStorage` | Keeps output in build storage or publishes a runnable directory. |
+| `strip` | `false` | Strips a SwiftlyKit-owned copy, then verifies it again. |
 
-SwiftlyKit validates `jobs` before it starts a subprocess. Zero and negative
-values produce `SwiftlyKitError.invalidBuildJobCount`.
-
-Stripping never changes the executable that SwiftPM produced. With
-`.buildStorage`, SwiftlyKit creates a deterministic stripped executable beside
-the required resources. With `.publish`, SwiftlyKit strips and verifies only
-the staged executable. A strip failure publishes nothing.
-
-The parent of a publication directory must exist. SwiftlyKit publishes only
-after stripping and verification succeed. Cleanup starts only after publication
-succeeds.
+The convenience call also accepts SwiftPM environment values, package traits,
+shared SwiftPM directories, separate environment storage, a removal-plan
+recorder, and an event handler.
 
 ### Toolchain selection
 
-The default `.automatic` policy selects a toolchain in this order:
+`.automatic` selects the first available choice in this order:
 
 1. The compatible official stable version in the nearest `.swift-version` file.
-2. The newest compatible installed toolchain and matching SDK.
-3. The newest compatible official stable toolchain and matching SDK.
+2. The newest compatible installed toolchain and SDK pair.
+3. The newest compatible official stable toolchain and SDK pair.
 
-The selected version must support the package's `swift-tools-version` and the
-requested architecture.
-
-Use `.exact` when the consumer must select one official stable release:
-
-```swift
-let result = try await SwiftlyKit.build(
-    packageRoot,
-    toolchain: .exact(
-        SwiftVersion(major: 6, minor: 2, patch: 1)
-    )
-)
-```
-
-Use the lossless text initializer for command-line input or a stored preference:
-
-```swift
-if let version = SwiftVersion("6.2.1") {
-    let assessment = try choices.select(.exact(version))
-    print("Selected Swift \(assessment.swiftVersion).")
-}
-```
-
-The initializer accepts two or three ASCII decimal components. It normalizes
-`"6.2"` to `"6.2.0"`. SwiftlyKit does not use snapshot toolchains, development
+`.exact(SwiftVersion(...))` selects one official stable release. `SwiftVersion`
+also accepts `"6.3"` or `"6.3.3"` and normalizes a two-component version to a
+patch version of zero. SwiftlyKit does not select snapshots, development
 branches, custom SDKs, or arbitrary Swiftly selectors.
 
-### Environment storage
+### SwiftPM environment and traits
 
-SwiftlyKit uses the standard per-user locations for Swiftly, toolchains, and
-Static Linux SDKs by default. It ignores inherited `SWIFTLY_*` environment
-variables. Select a caller-owned root when the workflow must keep its durable
-cross-compilation environment in a separate location:
-
-```swift
-let kit = SwiftlyKit(
-    environmentStorage: .directory(URL(filePath: "/path/to/environment"))
-)
-let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))
-let environment = try await kit.prepare(assessment)
-```
-
-The convenience API accepts the same option:
-
-```swift
-let result = try await SwiftlyKit.build(
-    packageRoot,
-    environmentStorage: .directory(URL(filePath: "/path/to/environment"))
-)
-```
-
-SwiftlyKit uses `root` for the Swiftly home. It derives `root/bin`,
-`root/toolchains`, and `root/swift-sdks` for the Swiftly binary, toolchains, and
-SDK registry. The custom root must be an absolute, dedicated local directory.
-It must not overlap the package root, SwiftPM workflow storage, or a publication
-destination.
-
-SwiftlyKit can create and populate the custom root. It does not delete the root
-or remove Swiftly. This option does not create a private `HOME` or isolate
-SwiftPM scratch, cache, configuration, or security storage.
-
-### SwiftPM configuration
-
-Bind environment values and package traits during preparation:
+Bind environment values and traits to the complete SwiftPM workflow:
 
 ```swift
 let values = try SwiftPMEnvironment([
     "PACKAGE_FLAVOR": .plain("production"),
-    "PKG_CONFIG_PATH": .plain("/opt/linux/lib/pkgconfig"),
     "SWIFTPM_REGISTRY_TOKEN": .sensitive(token),
     "UNWANTED_PARENT_VALUE": .unset
 ])
-
 let traits = try SwiftPMTraits(
     ["Production"],
     includingDefaults: true
@@ -401,81 +269,39 @@ let environment = try await kit.prepare(
 )
 ```
 
-`SwiftPMTraits.packageDefaults` keeps the package's declared default traits.
-Use `.none` to disable all traits, `.all` to enable all traits, or
-`SwiftPMTraits(_:includingDefaults:)` to select named traits.
+`.sensitive` values are redacted from events produced by SwiftlyKit. A package
+manifest, plugin, cache, or external tool can still read or store them. Keep
+long-lived secrets in a credential store.
 
-For environment values, `.plain` sets a nonsecret value, `.sensitive` sets a
-value that SwiftlyKit redacts from its output, and `.unset` removes an inherited
-value. SwiftlyKit also treats known SwiftPM credential variables as sensitive.
-It rejects values that could replace the prepared toolchain, SDK, Swiftly
-storage, or protected host state.
+Use `.packageDefaults`, `.none`, or `.all` for common trait policies.
 
-> [!WARNING]
-> SwiftlyKit redacts sensitive values only in output that it returns or streams.
-> A trusted manifest, plugin, SwiftPM cache, or external tool can still read or
-> store them. Use a credential store for long-lived secrets.
+### Storage and cleanup
 
-### SwiftPM storage and cleanup
+| Type | Purpose |
+| --- | --- |
+| `EnvironmentStorage` | Stores Swiftly, toolchains, and SDKs in standard locations or one caller-owned root. |
+| `SwiftPMScratchStorage` | Stores build files and dependency state for one package. |
+| `SwiftPMSharedStorage` | Selects SwiftPM cache, configuration, and security directories shared across packages. |
 
-SwiftPM uses scratch storage for one package and shared storage across packages:
+Custom directories must be absolute local paths. An environment root must not
+overlap the package, scratch storage, or publication destination. SwiftlyKit can
+create a custom environment root but never deletes the root or Swiftly itself.
+It ignores inherited `SWIFTLY_*` variables. A custom root does not create a
+private `HOME` or move SwiftPM scratch, cache, configuration, or security files.
 
-| Type | Contents | SwiftlyKit cleanup |
-| --- | --- | --- |
-| `SwiftPMScratchStorage` | Build files and package dependency state for one package. | `clean` or `reset` can remove files. |
-| `SwiftPMSharedStorage` | Cache, configuration, and security files. | SwiftlyKit never removes them. |
+Publication can run `.retain`, `.clean`, or `.reset` after success. `.clean`
+removes compiled output and keeps dependency state. `.reset` removes the complete
+effective scratch directory. SwiftlyKit starts cleanup only after it publishes
+the runnable directory. If cleanup then fails, SwiftlyKit throws
+`postBuildCleanupFailed` and leaves the published directory available.
 
-Most consumers can use the standard shared directories. A CI job can select a
-reusable cache. A host app can select app-owned locations:
+For cleanup outside a build, use `cleanBuildArtifacts(in:using:)` or
+`resetBuildStorage(in:using:)`. Never select a scratch directory that contains
+unrelated files.
 
-```swift
-let sharedStorage = SwiftPMSharedStorage(
-    cacheDirectory: URL(filePath: "/path/to/swiftpm-cache"),
-    configurationDirectory: URL(filePath: "/path/to/swiftpm-configuration"),
-    securityDirectory: URL(filePath: "/path/to/swiftpm-security")
-)
+## Progress and command output
 
-let environment = try await kit.prepare(
-    assessment,
-    swiftPMSharedStorage: sharedStorage
-)
-```
-
-A `nil` shared directory keeps the standard SwiftPM location. The consumer owns
-each explicit directory and must coordinate access from multiple processes.
-
-`BuildCleanup.retain` keeps scratch storage and is the default.
-`BuildCleanup.clean` runs `swift package clean`. It removes compiled output but
-keeps dependency state. `BuildCleanup.reset` runs `swift package reset` and
-removes the complete effective scratch directory.
-
-Automatic `.clean` or `.reset` requires the publication directory to be outside
-the effective scratch directory. If publication succeeds but cleanup fails,
-SwiftlyKit throws `postBuildCleanupFailed`. The published directory remains
-available.
-
-Use the staged cleanup operations when cleanup is not part of a build:
-
-```swift
-try await kit.cleanBuildArtifacts(
-    in: request.scratchStorage,
-    using: environment
-)
-
-try await kit.resetBuildStorage(
-    in: request.scratchStorage,
-    using: environment
-)
-```
-
-Reset removes the complete selected scratch directory. Do not select a directory
-that contains unrelated files. SwiftlyKit leaves package sources and
-`Package.resolved` unchanged.
-
-### Progress, commands, and output
-
-Pass one event handler to a mutating operation. SwiftlyKit awaits each handler
-call and does not keep an event log.
+Pass one asynchronous event handler to any mutating operation:
 
 ```swift
 let onEvent: SwiftlyKitEvent.Handler = { event in
@@ -501,246 +327,92 @@ let environment = try await kit.prepare(
 )
 ```
 
-Progress events describe preparation, dependency resolution, builds, removal,
-stripping, publication, and cleanup. Command events arrive before SwiftlyKit
-tries to start each delegated command and before its output. Use them for logs
-and diagnostics. SwiftlyKit replaces marked sensitive environment values with
-`<redacted>`. Command details can change between SwiftlyKit versions. Output
-events contain standard output and standard error from delegated commands.
-SwiftlyKit does not report a percentage when the underlying tool cannot supply
-a reliable value.
+SwiftlyKit awaits the handler for each event and does not retain an event log.
+Use `progress.operation` for application state. `progress.detail` and command
+details are diagnostic text and can change between releases. Do not start
+another mutating SwiftlyKit operation from an event handler.
 
-Environment preparation progress contains a semantic component and step. Use
-these values for application state and localization. Use `detail` only as
-human-readable diagnostic text:
+A command event arrives before SwiftlyKit tries to start that command. Output
+events preserve their standard output or standard error stream. A progress event
+announces an attempted activity, not its completion. The operation's return or
+error is the terminal result. SwiftlyKit reports no percentage when the delegated
+tool cannot supply one.
 
-```swift
-if case .progress(let progress) = event {
-    switch progress.operation {
-    case .preparingEnvironment(let component, let step):
-        model.currentPreparation = (component, step)
+## Verification and runtime output
 
-    default:
-        model.diagnostic = progress.detail
-    }
-}
-```
+Before returning a `BuildResult`, SwiftlyKit checks that the executable:
 
-A progress event announces an activity before SwiftlyKit attempts it. It does
-not report that the activity started or completed. The operation's return or
-thrown error reports the terminal outcome.
+- is a regular executable file
+- is a little-endian ELF64 file for the requested architecture
+- has a loadable segment
+- has no dynamic interpreter
+- declares no required dynamic libraries
 
-## Build result and verification
+SwiftlyKit also identifies and validates the product's required `.resources`
+directories. Resource trees may contain regular files and directories. They may
+not contain links, sockets, devices, FIFOs, or other special entries. The package
+and all resolved dependencies must support the selected Linux Musl target.
 
-SwiftlyKit supports these Linux Musl targets:
+During compilation, SwiftlyKit monitors the root package and resolved dependency
+sources. It withholds the result if relevant files change. This check detects a
+change during one build. It does not build from an immutable copy or produce
+durable provenance.
 
-- ARM64: `.linux(.arm64)`
-- x86-64: `.linux(.x86_64)`
+Monitoring excludes top-level `.build`, `.git`, and `.swiftpm` directories and
+the selected scratch directory. It accepts at most 200,000 files and symbolic
+links and 8 GiB of regular-file contents. SwiftlyKit throws
+`packageSourceStabilityUnavailable` when it cannot establish or repeat the
+observation. Monitoring ends before stripping, publication, and cleanup.
 
-Before SwiftlyKit returns a `BuildResult`, it checks that the executable:
+## Host recovery and environment removal
 
-- is a regular file with executable permissions;
-- is a little-endian ELF64 executable for the requested architecture;
-- has a loadable segment;
-- has no dynamic interpreter; and
-- declares no required dynamic libraries.
-
-`BuildResult.executable` is the executable URL. `BuildResult.resourceBundles`
-contains the verified `.resources` directories that the selected product needs.
-`BuildResult.directory` contains both.
-
-With `.buildStorage`, that directory can also contain output from other SwiftPM
-builds. Use `result.resourceBundles` instead of searching the directory. With
-`.publish`, the directory contains the executable and its required resource
-bundles.
-
-SwiftlyKit rejects missing or ambiguous resource metadata and unsafe resource
-trees. Resource trees can contain regular files and directories. They cannot
-contain symbolic links, hard links, sockets, devices, FIFOs, or other special
-entries.
-
-SwiftPM does not provide a stable interface that lists a product's runtime
-resources. SwiftlyKit checks the current link output and generated resource
-accessors when the binary directory contains `.resources` candidates. It fails
-closed when it cannot identify the required bundles. See
-[Architecture](Documentation/Architecture.md) for implementation details.
-
-The package and all its dependencies must support the selected Linux Musl
-target.
-
-## Lifecycle and operational behavior
-
-The following sections cover approval recovery, host recovery, and runtime
-safety. Most convenience API consumers do not need these interfaces.
-
-### Removal plans
-
-An installation can fail or stop after SwiftlyKit creates a toolchain or SDK.
-Supply `recordRemovalPlan` when the consumer must retain an exact removal request
-before installation starts:
-
-```swift
-let recorder: EnvironmentRemovalPlan.Recorder = { plan in
-    try await removalPlanStore.replace(with: plan)
-}
-
-let environment = try await kit.prepare(
-    assessment,
-    recordRemovalPlan: recorder
-)
-```
-
-The convenience API accepts the same recorder. SwiftlyKit awaits the recorder before
-each toolchain or SDK installation command. Store each call as the latest plan.
-If the recorder throws, SwiftlyKit does not start that installation command.
-
-A plan can name a resource that the installation did not create. It is a
-conservative recovery request, not proof of ownership. SwiftlyKit does not store
-plans or remove resources automatically.
-
-Start a fresh operation to remove a stored plan:
-
-```swift
-let plan = try await removalPlanStore.load()
-try await SwiftlyKit.remove(plan)
-```
-
-Removal reads live Swiftly state again. It treats an observable absent target as
-success. It refuses active or default toolchains and uninspectable SDK state. A
-full environment plan removes the exact SDK before its toolchain.
-
-Plans are `Codable`. You can also create plans for exact known resources:
-
-```swift
-let toolchainPlan = EnvironmentRemovalPlan.toolchain(
-    SwiftVersion(major: 6, minor: 3, patch: 3)
-)
-
-let sdkPlan = try EnvironmentRemovalPlan.staticLinuxSDK(
-    identifier: "swift-6.3.3-RELEASE_static-linux-0.1.0"
-)
-```
-
-Each plan records its `EnvironmentStorage`. Manual factories use `.standard` by
-default and accept custom storage with `in:`. A stored plan therefore remains
-self-contained.
-
-Inspect a received plan through its semantic resources without decoding its
-versioned payload:
-
-```swift
-for resource in plan.resources {
-    switch resource {
-        case .toolchain(let version):
-            print("Swift \(version)")
-
-        case .staticLinuxSDK(let identifier):
-            print("Static Linux SDK \(identifier)")
-
-        @unknown default:
-            break
-    }
-}
-
-let storage = plan.storage
-```
-
-Resource membership does not confirm that installation created a resource or
-that the resource still exists. The set does not specify removal order.
-
-### Host readiness
-
-An interactive app can inspect the host before it asks for a package:
+An interactive app can check the host before asking for a package:
 
 ```swift
 switch try await SwiftlyKit.hostReadiness() {
 case .ready:
-    print("The host is ready.")
+    break
 
 case .developerToolsUnavailable:
     try await SwiftlyKit.requestCommandLineToolsInstallation()
-    print("Finish the installation in the macOS dialog, then try again.")
 
 case .unsupportedHost:
     print("SwiftlyKit requires Apple silicon and macOS 13 or later.")
 }
 ```
 
-This check is optional. Assessment and building also check the host.
-`requestCommandLineToolsInstallation()` requests Apple's interactive installer
-and returns before the installation finishes. It does not install Xcode or
-change the active developer directory.
+The Command Line Tools request returns after macOS accepts it, not after the
+installation finishes.
 
-### Catalog availability
+If an app must recover from an interrupted environment installation, pass
+`recordRemovalPlan` to `prepare(_:)` or the convenience build. Store the latest
+plan before installation starts, then remove its exact resources in a later
+operation:
 
-SwiftlyKit keeps a validated Swift.org release catalog in memory for one hour.
-It also keeps a disposable cache snapshot. During a network failure, SwiftlyKit
-can use the snapshot only to select a toolchain and matching SDK that are already
-installed. Cached data never authorizes installation.
+```swift
+let environment = try await kit.prepare(
+    assessment,
+    recordRemovalPlan: { plan in
+        try await removalPlanStore.replace(with: plan)
+    }
+)
 
-`compatibleEnvironments(_:for:)` does not use the persistent fallback because a
-cached snapshot cannot represent the complete current catalog. The cache
-contains only public Swift.org metadata.
+let plan = try await removalPlanStore.load()
+try await SwiftlyKit.remove(plan)
+```
 
-### Source stability
+`EnvironmentRemovalPlan` is `Codable`. Removal checks current Swiftly state,
+treats an absent target as success, and refuses active or default toolchains.
+SwiftlyKit does not store plans or remove installed components automatically.
+It awaits the recorder before each toolchain or SDK installation command. If the
+recorder throws, that installation does not start. A plan can name a component
+that the failed installation never created, so treat it as a recovery request,
+not proof of ownership.
 
-During compilation, SwiftlyKit observes the root package and the resolved
-dependency graph. It checks paths, file contents, executable permissions, safe
-symbolic-link destinations, `Package.swift`, and `Package.resolved`.
+## Errors, cancellation, and trust
 
-SwiftlyKit excludes top-level `.build`, `.git`, and `.swiftpm` directories and
-the selected scratch directory. Observation is limited to 200,000 files and
-symbolic links and 8 GiB of regular-file contents. If SwiftlyKit cannot establish
-or repeat the observation, it throws `packageSourceStabilityUnavailable`.
-
-This check detects changes during compilation. It does not build from an
-immutable source copy or create durable build provenance. Observation stops
-before stripping, publication, and cleanup.
-
-### Concurrency and cancellation
-
-All long operations are `async throws` functions. Across cooperating SwiftlyKit
-processes for one macOS user, only one preparation, removal, dependency
-resolution, build, or cleanup operation runs at a time. The convenience API holds
-this coordination for its complete workflow. Assessment and product discovery
-remain concurrent and read-only.
-
-Do not start another mutating SwiftlyKit operation from an event handler or
-removal-plan recorder. SwiftlyKit rejects the operation with
-`mutationCoordinationFailed`.
-
-Direct `swift` and `swiftly` commands do not participate in this coordination.
-Do not use them to modify the same installation, package, build storage, SDK, or
-output while SwiftlyKit is working.
-
-Cancel the calling task to cancel the complete subprocess group. SwiftlyKit
-removes transient publication staging directories and throws Swift's standard
-`CancellationError`. If a process ends abruptly, a tool that it launched can
-survive. Stop that process or wait for it before you retry.
-
-### Environment boundaries
-
-SwiftlyKit does not:
-
-- modify a shell profile or change the default Swift toolchain;
-- run `swiftly use`;
-- update or replace an existing Swiftly installation;
-- remove Swiftly or remove toolchains and SDKs automatically;
-- remove scratch storage unless the consumer requests cleanup;
-- install Xcode or select Apple developer tools;
-- run package tests;
-- sign, archive, deploy, or run the Linux executable; or
-- keep build history, logs, or artifacts.
-
-SwiftlyKit is not a package sandbox. SwiftPM evaluates `Package.swift` and can
-run package plugins with the current user's permissions. Build only packages
-that you trust.
-
-### Error handling
-
-SwiftlyKit reports operational failures as `SwiftlyKitError`. This type conforms
-to `LocalizedError` and provides a user-facing description. Handle cancellation
-separately when the app must show a different status:
+SwiftlyKit reports operational failures as `SwiftlyKitError`, which conforms to
+`LocalizedError`. Handle task cancellation separately:
 
 ```swift
 do {
@@ -753,42 +425,41 @@ do {
 }
 ```
 
-Common control-flow errors include:
+Errors such as `dependencyResolutionRequired`,
+`executableProductSelectionRequired`, `outputAlreadyExists`, and
+`staleAssessment` are expected control flow in staged apps. Source, storage,
+verification, network, and subprocess failures also use typed error cases.
 
-- `dependencyResolutionRequired`
-- `developerToolsUnavailable`
-- `executableProductSelectionRequired`
-- `mutationCoordinationFailed`
-- `networkFailure`
-- `outputAlreadyExists`
-- `packageChangedDuringBuild`
-- `packageSourceStabilityUnavailable`
-- `postBuildCleanupFailed`
-- `runtimeResourceVerificationFailed`
-- `staleAssessment`
-- `unsafeBuildStorage`
-- `unsafeEnvironmentStorage`
-- `unsafeEnvironmentRemoval`
-- `unsupportedHost`
+Other errors that commonly need a distinct response include
+`developerToolsUnavailable`, `mutationCoordinationFailed`, `networkFailure`,
+`packageChangedDuringBuild`, `packageSourceStabilityUnavailable`,
+`postBuildCleanupFailed`, `runtimeResourceVerificationFailed`,
+`unsafeBuildStorage`, `unsafeEnvironmentStorage`, `unsafeEnvironmentRemoval`,
+and `unsupportedHost`.
 
-## Interface overview
+Only one preparation, removal, dependency resolution, build, or cleanup runs at
+a time for cooperating SwiftlyKit processes owned by one macOS user. Cancel the
+calling task to terminate its subprocess group and discard transient publication
+files. Direct `swift` and `swiftly` commands do not join this coordination. Do
+not use them to modify the same installation, package, storage, SDK, or output
+while SwiftlyKit is working. A tool launched by SwiftlyKit can survive if its
+parent process ends abruptly. Stop that tool or wait for it before retrying.
 
-| Type | Purpose |
+SwiftlyKit is not a package sandbox. SwiftPM evaluates `Package.swift` and may
+run plugins with the current user's permissions. Build only packages you trust.
+SwiftlyKit does not run tests, sign or deploy the executable, modify shell
+profiles, select a default toolchain, or keep build history.
+
+## Main types
+
+| Area | Types |
 | --- | --- |
-| `SwiftlyKit` | Provides host inspection, the convenience API, staged operations, and explicit removal. |
-| `EnvironmentChoices`, `EnvironmentAssessment` | Describe compatible environments, the selected environment, and required installations. |
-| `LocalBuildEnvironment` | Binds later operations to one prepared package and environment. |
-| `ExecutableProducts`, `ExecutableProduct` | List executable products and select one product. |
-| `BuildRequest`, `BuildResult` | Describe one build and its verified runnable result. |
-| `BuildOutput`, `BuildCleanup` | Control publication and scratch-storage cleanup. |
-| `BuildTarget`, `LinuxArchitecture` | Select the Linux Musl architecture. |
-| `ToolchainSelection`, `SwiftVersion` | Select an official stable Swift release. |
-| `EnvironmentStorage` | Select standard environment storage or one caller-owned root for Swiftly, toolchains, and SDKs. |
-| `SwiftPMScratchStorage`, `SwiftPMSharedStorage` | Select SwiftPM workflow storage. |
-| `SwiftPMEnvironment`, `SwiftPMTraits` | Configure the complete SwiftPM workflow. |
-| `EnvironmentRemovalPlan` | Describe an exact, persistable toolchain or SDK removal request. |
-| `SwiftlyKitEvent`, `CommandInvocation` | Report progress, commands, and output. |
-| `SwiftlyKitError` | Report typed operational failures. |
+| Workflow | `SwiftlyKit`, `EnvironmentChoices`, `EnvironmentAssessment`, `LocalBuildEnvironment` |
+| Products and builds | `ExecutableProducts`, `ExecutableProduct`, `BuildRequest`, `BuildResult` |
+| Build choices | `BuildOutput`, `BuildCleanup`, `BuildTarget`, `LinuxArchitecture` |
+| Toolchains and storage | `ToolchainSelection`, `SwiftVersion`, `EnvironmentStorage`, `SwiftPMScratchStorage`, `SwiftPMSharedStorage` |
+| SwiftPM configuration | `SwiftPMEnvironment`, `SwiftPMTraits` |
+| Events and recovery | `SwiftlyKitEvent`, `CommandInvocation`, `EnvironmentRemovalPlan`, `SwiftlyKitError` |
 
 ## Development
 
@@ -804,12 +475,10 @@ Run the real-system acceptance tests on a prepared host:
 SWIFTLYKIT_RUN_ACCEPTANCE=1 swift test --filter AcceptanceTests
 ```
 
-The traits check runs against the host SwiftPM. The cross-compilation checks
-never authorize installation; they require compatible Swiftly, Swift 6.3.3,
-and its matching Static Linux SDK. They build and verify both supported
-architectures and their published runnable directories.
+Acceptance tests never authorize installation. They require compatible Swiftly,
+Swift 6.3.3, and its matching Static Linux SDK.
 
-For the internal design, see [Architecture](Documentation/Architecture.md).
+See [Architecture](Documentation/Architecture.md) for the internal design.
 
 ## License
 
