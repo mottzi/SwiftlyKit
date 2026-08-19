@@ -625,6 +625,29 @@ Each plan records its `EnvironmentStorage`. Manual factories use `.standard` by
 default and accept custom storage with `in:`. A stored plan therefore remains
 self-contained.
 
+Inspect a received plan through its semantic resources without decoding its
+versioned payload:
+
+```swift
+for resource in plan.resources {
+    switch resource {
+        case .toolchain(let version):
+            print("Swift \(version)")
+
+        case .staticLinuxSDK(let identifier):
+            print("Static Linux SDK \(identifier)")
+
+        @unknown default:
+            break
+    }
+}
+
+let storage = plan.storage
+```
+
+Resource membership does not confirm that installation created a resource or
+that the resource still exists. The set does not specify removal order.
+
 ### Host readiness
 
 An interactive app can inspect the host before it asks for a package:

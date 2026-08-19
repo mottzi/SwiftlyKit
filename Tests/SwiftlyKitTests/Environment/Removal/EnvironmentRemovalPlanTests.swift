@@ -55,6 +55,29 @@ struct EnvironmentRemovalPlanTests {
         ) == zeroVersionPlan)
     }
 
+    @Test("Plans expose their exact resources and recorded storage")
+    func plansExposeResourcesAndStorage() throws {
+
+        let storage = EnvironmentStorage.directory(URL(filePath: "/tmp/swiftlykit-environment"))
+        let toolchainPlan = EnvironmentRemovalPlan.toolchain(version, in: storage)
+        let sdkPlan = try EnvironmentRemovalPlan.staticLinuxSDK(identifier: sdk.identifier, in: storage)
+        let environmentPlan = try EnvironmentRemovalPlan.environment(
+            toolchain: version,
+            staticLinuxSDKIdentifier: sdk.identifier,
+            in: storage
+        )
+
+        #expect(toolchainPlan.resources == [.toolchain(version)])
+        #expect(sdkPlan.resources == [.staticLinuxSDK(identifier: sdk.identifier)])
+        #expect(environmentPlan.resources == [
+            .toolchain(version),
+            .staticLinuxSDK(identifier: sdk.identifier)
+        ])
+        #expect(toolchainPlan.storage == storage)
+        #expect(sdkPlan.storage == storage)
+        #expect(environmentPlan.storage == storage)
+    }
+
     @Test("Plans reject unsupported and malformed storage")
     func malformedPlansFail() {
 

@@ -56,6 +56,45 @@ public struct EnvironmentRemovalPlan: Codable, Sendable, Hashable {
 
 extension EnvironmentRemovalPlan {
 
+    /// An exact environment resource named by a removal plan.
+    public enum Resource: Hashable, Sendable {
+
+        /// One exact stable Swift toolchain.
+        case toolchain(SwiftVersion)
+
+        /// One exact Static Linux SDK identifier.
+        case staticLinuxSDK(identifier: String)
+
+    }
+
+    /// The exact resources named by this plan.
+    /// Membership does not confirm resource existence or ownership and does not specify removal order.
+    public var resources: Set<Resource> {
+
+        switch target {
+            case .toolchain(let version):
+                [.toolchain(version)]
+
+            case .staticLinuxSDK(let identifier):
+                [.staticLinuxSDK(identifier: identifier)]
+
+            case .environment(let version, let identifier):
+                [
+                    .toolchain(version),
+                    .staticLinuxSDK(identifier: identifier)
+                ]
+        }
+    }
+
+    /// The environment storage selection recorded by this plan.
+    public var storage: EnvironmentStorage {
+        environmentStorage
+    }
+
+}
+
+extension EnvironmentRemovalPlan {
+
     /// Decodes a versioned exact removal request and validates its SDK identifier.
     public init(from decoder: Decoder) throws {
 

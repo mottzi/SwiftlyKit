@@ -107,6 +107,29 @@ struct PublicInterfaceTests {
         _ = fastTrack
     }
 
+    @Test("Removal-plan inspection compiles without testable access")
+    func removalPlanInspectionCompiles() throws {
+
+        let plan = try EnvironmentRemovalPlan.environment(
+            toolchain: SwiftVersion(major: 6, minor: 3, patch: 3),
+            staticLinuxSDKIdentifier: "swift-6.3.3-RELEASE_static-linux-0.1.0"
+        )
+        for resource in plan.resources {
+            switch resource {
+                case .toolchain(let version):
+                    _ = version
+
+                case .staticLinuxSDK(let identifier):
+                    _ = identifier
+
+                @unknown default:
+                    break
+            }
+        }
+
+        _ = plan.storage
+    }
+
     @Test("The fast-track SwiftPM environment workflow compiles without testable access")
     func fastTrackSwiftPMEnvironmentCompiles() {
 
