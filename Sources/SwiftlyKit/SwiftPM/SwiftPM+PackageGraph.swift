@@ -15,12 +15,7 @@ extension SwiftPM {
             "--disable-automatic-resolution"
         ]
         arguments += environment.swiftPMTraits.arguments
-        if scratchDirectory.isExplicit {
-            arguments += [
-                "--scratch-path",
-                scratchDirectory.url.path(percentEncoded: false)
-            ]
-        }
+        arguments += scratchDirectory.commandArguments
         arguments += [
             "show-dependencies",
             "--format", "json"

@@ -134,7 +134,6 @@ extension SwiftPM {
                     prepare: { stagedExecutable in
                         try await strip(
                             stagedExecutable,
-                            for: request,
                             using: environment,
                             onEvent: onEvent
                         )
@@ -161,7 +160,6 @@ extension SwiftPM {
                         if request.strip {
                             try await strip(
                                 stagedExecutable,
-                                for: request,
                                 using: environment,
                                 onEvent: onEvent
                             )
@@ -202,7 +200,6 @@ extension SwiftPM {
 
     private func strip(
         _ executable: URL,
-        for request: BuildRequest,
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws {
@@ -280,9 +277,7 @@ extension SwiftPM {
             "--configuration", configurationArgument
         ]
 
-        if scratchDirectory.isExplicit {
-            arguments += ["--scratch-path", scratchDirectory.url.path(percentEncoded: false)]
-        }
+        arguments += scratchDirectory.commandArguments
 
         if let jobs = request.jobs {
             arguments += ["--jobs", String(jobs)]

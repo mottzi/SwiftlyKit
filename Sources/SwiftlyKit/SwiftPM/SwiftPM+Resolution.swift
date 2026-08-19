@@ -24,12 +24,7 @@ extension SwiftPM {
         )
 
         var arguments = ["package"] + environment.swiftPMTraits.arguments
-        if scratchDirectory.isExplicit {
-            arguments += [
-                "--scratch-path",
-                scratchDirectory.url.path(percentEncoded: false)
-            ]
-        }
+        arguments += scratchDirectory.commandArguments
         arguments += ["resolve"]
         let resolutionCommand = Self.command(
             environment,

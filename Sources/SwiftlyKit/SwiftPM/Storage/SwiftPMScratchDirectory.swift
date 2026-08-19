@@ -4,7 +4,13 @@ import Foundation
 struct SwiftPMScratchDirectory {
 
     let url: URL
-    let isExplicit: Bool
+    private let isExplicit: Bool
+
+    /// The SwiftPM arguments for an explicitly selected scratch directory.
+    var commandArguments: [String] {
+        guard isExplicit else { return [] }
+        return ["--scratch-path", url.path(percentEncoded: false)]
+    }
 
     init(
         storage: SwiftPMScratchStorage,

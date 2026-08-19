@@ -41,12 +41,7 @@ extension SwiftPM {
             "package",
             "--disable-automatic-resolution"
         ] + environment.swiftPMTraits.arguments + ["dump-package"]
-        if scratchDirectory.isExplicit {
-            arguments.insert(contentsOf: [
-                "--scratch-path",
-                scratchDirectory.url.path(percentEncoded: false)
-            ], at: arguments.count - 1)
-        }
+        arguments.insert(contentsOf: scratchDirectory.commandArguments, at: arguments.count - 1)
         let packageCommand = Self.command(
             environment,
             swiftArguments: arguments
