@@ -120,7 +120,12 @@ struct EnvironmentStorageLocation: Sendable, Hashable {
 
     /// Inherited process values with Swiftly location variables bound to this namespace.
     var processEnvironment: [String: String] {
-        var values = ProcessInfo.processInfo.environment
+        rebindingSwiftlyVariables(in: ProcessInfo.processInfo.environment)
+    }
+
+    /// Replaces inherited Swiftly locations with this namespace's locations.
+    func rebindingSwiftlyVariables(in inheritedEnvironment: [String: String]) -> [String: String] {
+        var values = inheritedEnvironment
         for name in values.keys.filter({ $0.hasPrefix("SWIFTLY_") }) {
             values[name] = nil
         }

@@ -71,23 +71,15 @@ extension SwiftPM {
 
         var processEnvironment = processEnvironment
 
-        let hasCustomStorage: Bool
-        if case .directory = environment.environmentStorage,
-           let location = try? environment.environmentStorage.resolved() {
-            hasCustomStorage = true
-            for name in processEnvironment.keys.filter({ $0.hasPrefix("SWIFTLY_") }) {
-                processEnvironment[name] = nil
+        if environment.swiftly.location == nil {
+            if case .directory = environment.environmentStorage,
+               let location = try? environment.environmentStorage.resolved() {
+                processEnvironment = location.rebindingSwiftlyVariables(in: processEnvironment)
+            } else {
+                processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftly.executableURL
+                    .deletingLastPathComponent()
+                    .path(percentEncoded: false)
             }
-            for (name, value) in location.environment {
-                processEnvironment[name] = value
-            }
-        } else {
-            hasCustomStorage = false
-        }
-        if !hasCustomStorage {
-            processEnvironment["SWIFTLY_BIN_DIR"] = environment.swiftly.executableURL
-                .deletingLastPathComponent()
-                .path(percentEncoded: false)
         }
 
         return environment.swiftly.command(

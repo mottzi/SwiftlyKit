@@ -22,35 +22,6 @@ struct SwiftlyInstallation: Equatable {
         self.location = location
     }
 
-    static func detect(
-        environment: [String: String] = ProcessInfo.processInfo.environment,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        versionProbe: @Sendable (URL) async throws -> String = {
-            try await SwiftlyInstallation.liveVersionProbe(at: $0)
-        }
-    ) async throws -> SwiftlyInstallation? {
-
-        try Task.checkCancellation()
-
-        let candidates = candidateURLs(environment: environment, homeDirectory: homeDirectory)
-        guard let executableURL = candidates.first(where: isExecutableRegularFile(at:)) else { return nil }
-
-        let versionOutput: String
-        do {
-            versionOutput = try await versionProbe(executableURL)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            if Task.isCancelled { throw CancellationError() }
-            throw SwiftlyKitError.incompatibleSwiftly
-        }
-
-        try Task.checkCancellation()
-        guard isCompatibleVersion(versionOutput) else { throw SwiftlyKitError.incompatibleSwiftly }
-
-        return SwiftlyInstallation(executableURL: executableURL)
-    }
-
     /// Detects a compatible Swiftly executable in one deterministic namespace.
     static func detect(
         storage: EnvironmentStorage,
@@ -113,14 +84,9 @@ extension SwiftlyInstallation {
 
         var processEnvironment = environment
         if let location {
-            var values = processEnvironment ?? ProcessInfo.processInfo.environment
-            for name in values.keys.filter({ $0.hasPrefix("SWIFTLY_") }) {
-                values[name] = nil
-            }
-            for (name, value) in location.environment {
-                values[name] = value
-            }
-            processEnvironment = values
+            processEnvironment = location.rebindingSwiftlyVariables(
+                in: processEnvironment ?? ProcessInfo.processInfo.environment
+            )
         }
 
         return SubprocessCommand(
@@ -135,25 +101,6 @@ extension SwiftlyInstallation {
 }
 
 extension SwiftlyInstallation {
-
-    private static func candidateURLs(environment: [String: String], homeDirectory: URL) -> [URL] {
-
-        var candidates: [URL] = []
-        if let binDirectory = environment["SWIFTLY_BIN_DIR"], binDirectory.hasPrefix("/") {
-            let binDirectoryURL = URL(filePath: binDirectory)
-            candidates.append(binDirectoryURL.appending(path: "swiftly"))
-        }
-        candidates.append(homeDirectory.appending(path: ".swiftly/bin/swiftly"))
-
-        var canonicalCandidates: [URL] = []
-        for candidate in candidates {
-            let canonicalCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL
-            guard !canonicalCandidates.contains(canonicalCandidate) else { continue }
-            canonicalCandidates.append(canonicalCandidate)
-        }
-
-        return canonicalCandidates
-    }
 
     private static func isExecutableRegularFile(at url: URL) -> Bool {
 
