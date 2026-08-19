@@ -126,7 +126,7 @@ extension EnvironmentRemovalPlan {
                 guard payload.toolchain == nil, let identifier = payload.sdkIdentifier else {
                     throw Self.malformedPayload()
                 }
-                guard Self.isSafeSDKIdentifier(identifier) else {
+                guard isSafeSDKIdentifier(identifier) else {
                     throw Self.malformedPayload()
                 }
                 self.init(target: .staticLinuxSDK(identifier), environmentStorage: environmentStorage)
@@ -135,7 +135,7 @@ extension EnvironmentRemovalPlan {
                 guard let toolchain = payload.toolchain, let identifier = payload.sdkIdentifier else {
                     throw Self.malformedPayload()
                 }
-                guard Self.isSafeSDKIdentifier(identifier) else {
+                guard isSafeSDKIdentifier(identifier) else {
                     throw Self.malformedPayload()
                 }
                 self.init(
@@ -153,15 +153,6 @@ extension EnvironmentRemovalPlan {
 }
 
 extension EnvironmentRemovalPlan {
-
-    private static func isSafeSDKIdentifier(_ identifier: String) -> Bool {
-
-        !identifier.isEmpty
-            && !identifier.hasPrefix("-")
-            && !identifier.contains("/")
-            && !identifier.contains("\\")
-            && identifier.unicodeScalars.allSatisfy { (0x21...0x7E).contains($0.value) }
-    }
 
     private static func malformedPayload() -> DecodingError {
         .dataCorrupted(.init(codingPath: [], debugDescription: "Malformed environment removal plan."))

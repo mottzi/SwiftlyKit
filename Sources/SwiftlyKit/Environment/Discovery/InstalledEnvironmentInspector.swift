@@ -103,18 +103,7 @@ extension InstalledEnvironmentInspector {
 
     private func installedToolchains(swiftly: SwiftlyInstallation) async throws -> [SwiftVersion] {
 
-        try Task.checkCancellation()
-
-        let command = SubprocessCommand(
-            executableURL: swiftly.executableURL,
-            arguments: ["list", "--format", "json"],
-            environment: swiftly.processEnvironment
-        )
-
-        let result = try await run(command)
-
-        guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
-        guard let data = result.standardOutput.data(using: .utf8) else { throw InstalledEnvironmentError.invalidOutput }
+        let data = try await swiftlyListData(swiftly: swiftly)
 
         let usability: @Sendable (SwiftVersion) -> Bool
         if let location = swiftly.location {
@@ -128,18 +117,7 @@ extension InstalledEnvironmentInspector {
 
     private func rawToolchains(swiftly: SwiftlyInstallation) async throws -> [ToolchainPayload] {
 
-        let command = SubprocessCommand(
-            executableURL: swiftly.executableURL,
-            arguments: ["list", "--format", "json"],
-            environment: swiftly.processEnvironment
-        )
-
-        let result = try await run(command)
-
-        guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
-        guard let data = result.standardOutput.data(using: .utf8) else {
-            throw InstalledEnvironmentError.invalidOutput
-        }
+        let data = try await swiftlyListData(swiftly: swiftly)
 
         do { return try JSONDecoder().decode(ToolchainListPayload.self, from: data).toolchains }
         catch { throw InstalledEnvironmentError.invalidOutput }
@@ -152,34 +130,50 @@ extension InstalledEnvironmentInspector {
 
         guard !customSDKRegistryIsAbsent(swiftly) else { return [] }
 
-        let command = swiftly.command(
-            tool: "swift",
-            toolchain: toolchain,
-            arguments: swiftly.sdkCommandArguments(["sdk", "list"])
-        )
-        
-        let result = try await run(command)
-
-        guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
-
-        return Self.parseSDKList(result.standardOutput, toolchainVersion: toolchain)
+        let output = try await sdkListOutput(swiftly: swiftly, toolchain: toolchain)
+        return Self.parseSDKList(output, toolchainVersion: toolchain)
     }
 
     private func registeredSDKs(swiftly: SwiftlyInstallation, manager: SwiftVersion) async throws -> [RegisteredSDK] {
 
         guard !customSDKRegistryIsAbsent(swiftly) else { return [] }
 
-        let command = swiftly.command(
-            tool: "swift",
-            toolchain: manager,
-            arguments: swiftly.sdkCommandArguments(["sdk", "list"])
-        )
+        let output = try await sdkListOutput(swiftly: swiftly, toolchain: manager)
+        return try Self.parseRegisteredSDKList(output)
+    }
 
+    private func swiftlyListData(swiftly: SwiftlyInstallation) async throws -> Data {
+
+        try Task.checkCancellation()
+
+        let command = SubprocessCommand(
+            executableURL: swiftly.executableURL,
+            arguments: ["list", "--format", "json"],
+            environment: swiftly.processEnvironment
+        )
         let result = try await run(command)
 
         guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
+        guard let data = result.standardOutput.data(using: .utf8) else {
+            throw InstalledEnvironmentError.invalidOutput
+        }
+        return data
+    }
 
-        return try Self.parseRegisteredSDKList(result.standardOutput)
+    private func sdkListOutput(
+        swiftly: SwiftlyInstallation,
+        toolchain: SwiftVersion
+    ) async throws -> String {
+
+        let command = swiftly.command(
+            tool: "swift",
+            toolchain: toolchain,
+            arguments: swiftly.sdkCommandArguments(["sdk", "list"])
+        )
+        let result = try await run(command)
+
+        guard result.succeeded else { throw InstalledEnvironmentError.commandFailed(result.combinedOutput) }
+        return result.standardOutput
     }
 
     private func customSDKRegistryIsAbsent(_ swiftly: SwiftlyInstallation) -> Bool {
@@ -297,19 +291,6 @@ extension InstalledEnvironmentInspector {
             return [preferred] + others
         }
         return others
-    }
-
-    private static func isSafeSDKIdentifier(_ identifier: String) -> Bool {
-
-        guard !identifier.isEmpty,
-              !identifier.hasPrefix("-"),
-              !identifier.contains("/"),
-              !identifier.contains("\\")
-        else { return false }
-
-        return identifier.unicodeScalars.allSatisfy {
-            $0.value >= 0x21 && $0.value <= 0x7E && !CharacterSet.whitespacesAndNewlines.contains($0)
-        }
     }
 
 }
