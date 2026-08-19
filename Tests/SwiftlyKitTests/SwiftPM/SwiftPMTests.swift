@@ -104,7 +104,7 @@ struct SwiftPMTests {
             )
 
             let swiftPM = SwiftPM(
-                runner: runner,
+                testRunner: runner,
                 validateEnvironment: { _ in }
             )
 
@@ -177,7 +177,7 @@ struct SwiftPMTests {
                 .success(output: "built"),
                 .success(output: directory.path(percentEncoded: false) + "\n")
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             let result = try await swiftPM.build(
                 BuildRequest(ExecutableProduct(name: "Tool")),
@@ -226,7 +226,7 @@ struct SwiftPMTests {
                 environmentStorage: .directory(swiftlyRoot)
             )
 
-            _ = try await SwiftPM(runner: runner, validateEnvironment: { _ in }).build(
+            _ = try await SwiftPM(testRunner: runner, validateEnvironment: { _ in }).build(
                 BuildRequest(
                     ExecutableProduct(name: "Tool"),
                     scratchStorage: .directory(scratch)
@@ -277,7 +277,7 @@ struct SwiftPMTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             _ = try await swiftPM.executableProducts(using: buildEnvironment(in: directory))
 
@@ -299,7 +299,7 @@ struct SwiftPMTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
             let environment = buildEnvironment(
                 in: directory,
                 swiftPMSharedStorage: SwiftPMSharedStorage(cacheDirectory: cache)
@@ -332,7 +332,7 @@ struct SwiftPMTests {
                 .success(output: "built"),
                 .success(output: directory.path(percentEncoded: false) + "\n")
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             _ = try await swiftPM.build(
                 BuildRequest(ExecutableProduct(name: "Tool")),
@@ -358,7 +358,7 @@ struct SwiftPMTests {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let runner = RecordingSubprocessRunner(results: [])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             await #expect(throws: SwiftlyKitError.invalidBuildJobCount(jobs)) {
                 try await swiftPM.build(
@@ -377,7 +377,7 @@ struct SwiftPMTests {
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let scratch = directory.appending(path: "scratch", directoryHint: .isDirectory)
             let runner = RecordingSubprocessRunner(results: [])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
             let sharedStorage = try SwiftPMSharedStorage(cacheDirectory: scratch).validated()
             let environment = buildEnvironment(
                 in: directory,
@@ -432,7 +432,7 @@ struct SwiftPMTests {
                 .success(output: "built"),
                 .success(output: directory.path(percentEncoded: false) + "\n")
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
             let environment = buildEnvironment(
                 in: packageRoot,
                 swiftPMSharedStorage: shared,
@@ -477,7 +477,7 @@ struct SwiftPMTests {
                 scratchStorage: .directory(scratch)
             )
             let swiftPM = SwiftPM(
-                runner: runner,
+                testRunner: runner,
                 validateEnvironment: { _ in }
             )
             let environment = buildEnvironment(in: directory)
@@ -512,7 +512,7 @@ struct SwiftPMTests {
                 ]
             )
             let swiftPM = SwiftPM(
-                runner: runner,
+                testRunner: runner,
                 validateEnvironment: { _ in }
             )
 
@@ -541,7 +541,7 @@ struct SwiftPMTests {
             let environment = buildEnvironment(in: directory)
             let request = BuildRequest(ExecutableProduct(name: "Tool"))
             let swiftPM = SwiftPM(
-                runner: runner,
+                testRunner: runner,
                 validateEnvironment: { _ in }
             )
 
@@ -577,7 +577,7 @@ struct SwiftPMTests {
                     try Data("print(2)\n".utf8).write(to: source)
                 }
             )
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             await #expect(throws: SwiftPMError.packageChangedDuringBuild) {
                 try await swiftPM.build(
@@ -607,7 +607,7 @@ struct SwiftPMTests {
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             await #expect(throws: SwiftPMError.packageSourceStabilityUnavailable(
                 "A package-source symbolic link resolves outside the observed package roots."
@@ -650,9 +650,9 @@ struct SwiftPMTests {
                 }
             )
             let swiftPM = SwiftPM(
-                runner: runner,
+                testRunner: runner,
                 validateEnvironment: { _ in },
-                sourceRoots: { environment, _, _ in [environment.packageRoot, dependency] }
+                sourceRoots: { environment, _ in [environment.packageRoot, dependency] }
             )
 
             await #expect(throws: SwiftPMError.packageChangedDuringBuild) {
@@ -689,7 +689,7 @@ struct SwiftPMTests {
             let environment = buildEnvironment(in: directory)
             let request = BuildRequest(ExecutableProduct(name: "Tool"))
             let swiftPM = SwiftPM(
-                runner: runner,
+                testRunner: runner,
                 validateEnvironment: { _ in }
             )
 
@@ -722,7 +722,7 @@ struct SwiftPMTests {
                 .success(output: directory.path(percentEncoded: false) + "\n")
             ])
             let swiftPM = SwiftPM(
-                runner: runner,
+                testRunner: runner,
                 validateEnvironment: { _ in }
             )
 
@@ -757,7 +757,7 @@ struct SwiftPMTests {
                 .success(output: "built"),
                 .success(output: directory.path(percentEncoded: false) + "\n")
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             let result = try await swiftPM.build(
                 BuildRequest(
@@ -794,7 +794,7 @@ struct SwiftPMTests {
                 swiftPMTraits: .all
             )
             let swiftPM = SwiftPM(
-                runner: runner,
+                testRunner: runner,
                 validateEnvironment: { _ in }
             )
 
@@ -842,7 +842,7 @@ struct SwiftPMTests {
             )
             defer { try? FileManager.default.removeItem(at: sharedRoot) }
             let runner = RecordingSubprocessRunner(results: [.success(output: "resolved")])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
             let environment = buildEnvironment(
                 in: directory,
                 swiftPMTraits: .none,
@@ -882,7 +882,7 @@ struct SwiftPMTests {
                 .failure(output: "context", standardError: "resolution failed")
             ])
             let swiftPM = SwiftPM(
-                runner: runner,
+                testRunner: runner,
                 validateEnvironment: { _ in }
             )
 
@@ -938,7 +938,7 @@ struct SwiftPMTests {
                 swiftPMSharedStorage: sharedStorage
             )
             let swiftPM = SwiftPM(
-                runner: runner,
+                testRunner: runner,
                 validateEnvironment: { _ in }
             )
 
@@ -1024,7 +1024,7 @@ struct SwiftPMTests {
                 .success(output: "built"),
                 .success(output: directory.path(percentEncoded: false) + "\n")
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             await #expect(throws: SwiftPMError.outputAlreadyExists(output)) {
                 try await swiftPM.build(
@@ -1067,7 +1067,7 @@ struct SwiftPMTests {
                 .success(output: "stripped")
             ])
             let events = SwiftPMEventRecorder()
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             let result = try await swiftPM.build(
                 BuildRequest(ExecutableProduct(name: "Tool"), strip: true),
@@ -1103,7 +1103,7 @@ struct SwiftPMTests {
                 .success(output: directory.path(percentEncoded: false) + "\n"),
                 .failure(standardError: "strip failed")
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             await #expect(throws: SwiftPMError.commandFailed(
                 operation: .stripping,

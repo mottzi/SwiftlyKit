@@ -15,6 +15,7 @@ public struct SwiftlyKit: Sendable {
     /// preparation, selected-tool commands, and removal plans.
     public init(environmentStorage: EnvironmentStorage = .standard) {
         self.init(
+            mutationGate: .shared,
             assessor: EnvironmentAssessor(environmentStorage: environmentStorage),
             preparer: EnvironmentPreparer(),
             swiftPM: SwiftPM(),
@@ -23,11 +24,11 @@ public struct SwiftlyKit: Sendable {
     }
 
     init(
-        mutationGate: MutationGate = .shared,
+        mutationGate: MutationGate,
         assessor: EnvironmentAssessor,
         preparer: EnvironmentPreparer,
         swiftPM: SwiftPM,
-        remover: EnvironmentRemover = EnvironmentRemover()
+        remover: EnvironmentRemover
     ) {
         self.mutationGate = mutationGate
         self.assessor = assessor
@@ -51,6 +52,53 @@ public struct SwiftlyKit: Sendable {
     }
 
 }
+
+// MARK: - Convenience API
+
+extension SwiftlyKit {
+
+    /// Runs the complete convenience workflow with one SwiftPM workflow and selected environment storage.
+    /// Applies build choices, can record removal plans before installations, and
+    /// returns one verified runnable result.
+    public static func build(
+        _ packageRoot: URL,
+        product: String? = nil,
+        for target: BuildTarget = .linux(.x86_64),
+        toolchain: ToolchainSelection = .automatic,
+        configuration: BuildConfiguration = .release,
+        jobs: Int? = nil,
+        scratchStorage: SwiftPMScratchStorage = .packageDefault,
+        output: BuildOutput = .buildStorage,
+        strip: Bool = false,
+        swiftPMEnvironment: SwiftPMEnvironment = .inherited,
+        swiftPMTraits: SwiftPMTraits = .packageDefaults,
+        swiftPMSharedStorage: SwiftPMSharedStorage = .standard,
+        environmentStorage: EnvironmentStorage = .standard,
+        recordRemovalPlan: EnvironmentRemovalPlan.Recorder? = nil,
+        onEvent: SwiftlyKitEvent.Handler? = nil
+    ) async throws -> BuildResult {
+
+        try await SwiftlyKit(environmentStorage: environmentStorage).build(
+            packageRoot,
+            product: product,
+            for: target,
+            toolchain: toolchain,
+            configuration: configuration,
+            jobs: jobs,
+            scratchStorage: scratchStorage,
+            output: output,
+            strip: strip,
+            swiftPMEnvironment: swiftPMEnvironment,
+            swiftPMTraits: swiftPMTraits,
+            swiftPMSharedStorage: swiftPMSharedStorage,
+            recordRemovalPlan: recordRemovalPlan,
+            onEvent: onEvent
+        )
+    }
+
+}
+
+// MARK: - Staged API
 
 extension SwiftlyKit {
 
@@ -175,26 +223,142 @@ extension SwiftlyKit {
 
 }
 
+// MARK: - Environment Removal
+
 extension SwiftlyKit {
 
-    private func executableProducts(
-        using environment: LocalBuildEnvironment,
+    /// Removes exact Swift toolchain and Static Linux SDK resources without retaining state.
+    /// Rechecks live state, treats observable absent targets as success, and refuses unsafe requests.
+    /// Removes an SDK before its paired toolchain for a full environment plan.
+    public static func remove(_ plan: EnvironmentRemovalPlan, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
+
+        try await SwiftlyKit().removeEnvironment(plan, onEvent: onEvent)
+    }
+
+}
+
+// MARK: - Internal Composition
+
+extension SwiftlyKit {
+
+    /// Runs the convenience workflow with this facade's dependencies under one mutation lease.
+    func build(
+        _ packageRoot: URL,
+        product productName: String?,
+        for target: BuildTarget,
+        toolchain: ToolchainSelection = .automatic,
+        configuration: BuildConfiguration,
+        jobs: Int? = nil,
+        scratchStorage: SwiftPMScratchStorage = .packageDefault,
+        output: BuildOutput = .buildStorage,
+        strip: Bool = false,
+        swiftPMEnvironment: SwiftPMEnvironment = .inherited,
+        swiftPMTraits: SwiftPMTraits = .packageDefaults,
+        swiftPMSharedStorage: SwiftPMSharedStorage = .standard,
+        recordRemovalPlan: EnvironmentRemovalPlan.Recorder? = nil,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws -> BuildResult {
+
+        try BuildRequest.validate(jobs: jobs)
+        let snapshot = swiftPMEnvironment.snapshot()
+        do {
+            return try await mutationGate.withAccess {
+                try await buildUnderLease(
+                    packageRoot,
+                    product: productName,
+                    for: target,
+                    toolchain: toolchain,
+                    configuration: configuration,
+                    jobs: jobs,
+                    scratchStorage: scratchStorage,
+                    output: output,
+                    strip: strip,
+                    swiftPMEnvironment: snapshot,
+                    swiftPMTraits: swiftPMTraits,
+                    swiftPMSharedStorage: swiftPMSharedStorage,
+                    recordRemovalPlan: recordRemovalPlan,
+                    onEvent: onEvent
+                )
+            }
+        } catch let error as EnvironmentPlanRecordingError {
+            throw error.underlying
+        }
+    }
+
+}
+
+extension SwiftlyKit {
+
+    /// Removes one exact environment plan with this facade's dependencies under one mutation lease.
+    func removeEnvironment(_ plan: EnvironmentRemovalPlan, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
+
+        try await mutationGate.withAccess {
+            try await remover.remove(plan, onEvent: onEvent)
+        }
+    }
+
+}
+
+// MARK: - Private Mechanics
+
+extension SwiftlyKit {
+
+    private func buildUnderLease(
+        _ packageRoot: URL,
+        product productName: String?,
+        for target: BuildTarget,
+        toolchain: ToolchainSelection,
+        configuration: BuildConfiguration,
+        jobs: Int?,
         scratchStorage: SwiftPMScratchStorage,
-        onEvent: SwiftlyKitEvent.Handler? = nil
-    ) async throws -> ExecutableProducts {
+        output: BuildOutput,
+        strip: Bool,
+        swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
+        swiftPMTraits: SwiftPMTraits,
+        swiftPMSharedStorage: SwiftPMSharedStorage,
+        recordRemovalPlan: EnvironmentRemovalPlan.Recorder?,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws -> BuildResult {
+
+        let assessment = try await assess(packageRoot, for: target, toolchain: toolchain)
+        let environment = try await prepareUnderLease(
+            assessment,
+            swiftPMEnvironment: swiftPMEnvironment,
+            swiftPMTraits: swiftPMTraits,
+            swiftPMSharedStorage: swiftPMSharedStorage,
+            recordRemovalPlan: recordRemovalPlan,
+            onEvent: onEvent
+        )
+        let products = try await executableProducts(
+            using: environment,
+            scratchStorage: scratchStorage,
+            onEvent: onEvent
+        )
+        let product = try products.select(productName)
+        let request = BuildRequest(
+            product,
+            configuration: configuration,
+            jobs: jobs,
+            scratchStorage: scratchStorage,
+            output: output,
+            strip: strip
+        )
 
         do {
-            return ExecutableProducts(try await swiftPM.executableProducts(
+            return try await buildUnderLease(request, using: environment, onEvent: onEvent)
+        } catch SwiftlyKitError.dependencyResolutionRequired {
+            try await resolveDependenciesUnderLease(
+                in: scratchStorage,
                 using: environment,
-                scratchStorage: scratchStorage,
                 onEvent: onEvent
-            ))
+            )
+            return try await buildUnderLease(request, using: environment, onEvent: onEvent)
         }
-        catch is CancellationError { throw CancellationError() }
-        catch let error as SwiftlyKitError { throw error }
-        catch let error as SwiftPMError { throw error.swiftlyKitError }
-        catch { throw SwiftlyKitError.packageInspectionFailed("An unexpected package error occurred.") }
     }
+
+}
+
+extension SwiftlyKit {
 
     private func prepareUnderLease(
         _ assessment: EnvironmentAssessment,
@@ -213,6 +377,25 @@ extension SwiftlyKit {
             recordRemovalPlan: recordRemovalPlan,
             onEvent: onEvent
         )
+    }
+
+    private func executableProducts(
+        using environment: LocalBuildEnvironment,
+        scratchStorage: SwiftPMScratchStorage,
+        onEvent: SwiftlyKitEvent.Handler? = nil
+    ) async throws -> ExecutableProducts {
+
+        do {
+            return ExecutableProducts(try await swiftPM.executableProducts(
+                using: environment,
+                scratchStorage: scratchStorage,
+                onEvent: onEvent
+            ))
+        }
+        catch is CancellationError { throw CancellationError() }
+        catch let error as SwiftlyKitError { throw error }
+        catch let error as SwiftPMError { throw error.swiftlyKitError }
+        catch { throw SwiftlyKitError.packageInspectionFailed("An unexpected package error occurred.") }
     }
 
     private func resolveDependenciesUnderLease(
@@ -269,166 +452,6 @@ extension SwiftlyKit {
         catch is CancellationError { throw CancellationError() }
         catch let error as SwiftPMError { throw error.swiftlyKitError }
         catch { throw SwiftlyKitError.buildStorageResetFailed("An unexpected cleanup error occurred.") }
-    }
-
-}
-
-extension SwiftlyKit {
-
-    /// Removes one exact environment plan with this facade's dependencies under one mutation lease.
-    func removeEnvironment(_ plan: EnvironmentRemovalPlan, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
-
-        try await mutationGate.withAccess {
-            try await remover.remove(plan, onEvent: onEvent)
-        }
-    }
-
-}
-
-extension SwiftlyKit {
-    
-    /// Removes exact Swift toolchain and Static Linux SDK resources without retaining state.
-    /// Rechecks live state, treats observable absent targets as success, and refuses unsafe requests.
-    /// Removes an SDK before its paired toolchain for a full environment plan.
-    public static func remove(_ plan: EnvironmentRemovalPlan, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
-
-        try await SwiftlyKit().removeEnvironment(plan, onEvent: onEvent)
-    }
-
-    /// Runs the complete fast track with one SwiftPM workflow and selected environment storage.
-    /// Applies build choices, can record removal plans before installations, and
-    /// returns one verified runnable result.
-    public static func build(
-        _ packageRoot: URL,
-        product: String? = nil,
-        for target: BuildTarget = .linux(.x86_64),
-        toolchain: ToolchainSelection = .automatic,
-        configuration: BuildConfiguration = .release,
-        jobs: Int? = nil,
-        scratchStorage: SwiftPMScratchStorage = .packageDefault,
-        output: BuildOutput = .buildStorage,
-        strip: Bool = false,
-        swiftPMEnvironment: SwiftPMEnvironment = .inherited,
-        swiftPMTraits: SwiftPMTraits = .packageDefaults,
-        swiftPMSharedStorage: SwiftPMSharedStorage = .standard,
-        environmentStorage: EnvironmentStorage = .standard,
-        recordRemovalPlan: EnvironmentRemovalPlan.Recorder? = nil,
-        onEvent: SwiftlyKitEvent.Handler? = nil
-    ) async throws -> BuildResult {
-
-        try await SwiftlyKit(environmentStorage: environmentStorage).build(
-            packageRoot,
-            product: product,
-            for: target,
-            toolchain: toolchain,
-            configuration: configuration,
-            jobs: jobs,
-            scratchStorage: scratchStorage,
-            output: output,
-            strip: strip,
-            swiftPMEnvironment: swiftPMEnvironment,
-            swiftPMTraits: swiftPMTraits,
-            swiftPMSharedStorage: swiftPMSharedStorage,
-            recordRemovalPlan: recordRemovalPlan,
-            onEvent: onEvent
-        )
-    }
-    
-    /// Runs the fast-track workflow with this facade's dependencies under one mutation lease.
-    func build(
-        _ packageRoot: URL,
-        product productName: String?,
-        for target: BuildTarget,
-        toolchain: ToolchainSelection = .automatic,
-        configuration: BuildConfiguration,
-        jobs: Int? = nil,
-        scratchStorage: SwiftPMScratchStorage = .packageDefault,
-        output: BuildOutput = .buildStorage,
-        strip: Bool = false,
-        swiftPMEnvironment: SwiftPMEnvironment = .inherited,
-        swiftPMTraits: SwiftPMTraits = .packageDefaults,
-        swiftPMSharedStorage: SwiftPMSharedStorage = .standard,
-        recordRemovalPlan: EnvironmentRemovalPlan.Recorder? = nil,
-        onEvent: SwiftlyKitEvent.Handler?
-    ) async throws -> BuildResult {
-
-        try BuildRequest.validate(jobs: jobs)
-        let snapshot = swiftPMEnvironment.snapshot()
-        do {
-            return try await mutationGate.withAccess {
-                try await buildUnderLease(
-                    packageRoot,
-                    product: productName,
-                    for: target,
-                    toolchain: toolchain,
-                    configuration: configuration,
-                    jobs: jobs,
-                    scratchStorage: scratchStorage,
-                    output: output,
-                    strip: strip,
-                    swiftPMEnvironment: snapshot,
-                    swiftPMTraits: swiftPMTraits,
-                    swiftPMSharedStorage: swiftPMSharedStorage,
-                    recordRemovalPlan: recordRemovalPlan,
-                    onEvent: onEvent
-                )
-            }
-        } catch let error as EnvironmentPlanRecordingError {
-            throw error.underlying
-        }
-    }
-
-    private func buildUnderLease(
-        _ packageRoot: URL,
-        product productName: String?,
-        for target: BuildTarget,
-        toolchain: ToolchainSelection,
-        configuration: BuildConfiguration,
-        jobs: Int?,
-        scratchStorage: SwiftPMScratchStorage,
-        output: BuildOutput,
-        strip: Bool,
-        swiftPMEnvironment: SwiftPMEnvironment.Snapshot,
-        swiftPMTraits: SwiftPMTraits,
-        swiftPMSharedStorage: SwiftPMSharedStorage,
-        recordRemovalPlan: EnvironmentRemovalPlan.Recorder?,
-        onEvent: SwiftlyKitEvent.Handler?
-    ) async throws -> BuildResult {
-
-        let assessment = try await assess(packageRoot, for: target, toolchain: toolchain)
-        let environment = try await prepareUnderLease(
-            assessment,
-            swiftPMEnvironment: swiftPMEnvironment,
-            swiftPMTraits: swiftPMTraits,
-            swiftPMSharedStorage: swiftPMSharedStorage,
-            recordRemovalPlan: recordRemovalPlan,
-            onEvent: onEvent
-        )
-        let products = try await executableProducts(
-            using: environment,
-            scratchStorage: scratchStorage,
-            onEvent: onEvent
-        )
-        let product = try products.select(productName)
-        let request = BuildRequest(
-            product,
-            configuration: configuration,
-            jobs: jobs,
-            scratchStorage: scratchStorage,
-            output: output,
-            strip: strip
-        )
-
-        do {
-            return try await buildUnderLease(request, using: environment, onEvent: onEvent)
-        } catch SwiftlyKitError.dependencyResolutionRequired {
-            try await resolveDependenciesUnderLease(
-                in: scratchStorage,
-                using: environment,
-                onEvent: onEvent
-            )
-            return try await buildUnderLease(request, using: environment, onEvent: onEvent)
-        }
     }
 
 }

@@ -31,12 +31,14 @@ struct SwiftlyKitWorkflowTests {
                 target: .linux(.arm64)
             )
             let kit = SwiftlyKit(
+                mutationGate: .shared,
                 assessor: EnvironmentAssessor(),
                 preparer: EnvironmentPreparer(
                     assessHost: { .ready },
                     detectSwiftly: { Issue.record("detection must follow revalidation"); return nil }
                 ),
-                swiftPM: SwiftPM()
+                swiftPM: SwiftPM(),
+                remover: EnvironmentRemover()
             )
             try Data("// swift-tools-version: 6.0\n// changed\n".utf8).write(to: manifestURL)
 
@@ -80,6 +82,7 @@ struct SwiftlyKitWorkflowTests {
             let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
             let runner = RecordingSubprocessRunner(results: [.success()])
             let kit = SwiftlyKit(
+                mutationGate: .shared,
                 assessor: EnvironmentAssessor(),
                 preparer: EnvironmentPreparer(
                     runner: runner,
@@ -88,7 +91,8 @@ struct SwiftlyKitWorkflowTests {
                     inspect: { _, _ in InstalledEnvironmentInventory(toolchains: [], sdks: []) },
                     revalidate: { _ in }
                 ),
-                swiftPM: SwiftPM()
+                swiftPM: SwiftPM(),
+                remover: EnvironmentRemover()
             )
 
             await #expect(throws: WorkflowRecorderRefusal.self) {
@@ -137,12 +141,12 @@ struct SwiftlyKitWorkflowTests {
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
             ])
             let kit = SwiftlyKit(
-                assessor: EnvironmentAssessor(
-                    assessHost: { .ready },
-                    detectSwiftly: { swiftly },
-                    loadReleases: { [release] },
-                    inspectInventory: { _ in inventory },
-                    locateSDK: { _ in sdkBundle }
+                mutationGate: .shared,
+                assessor: testEnvironmentAssessor(
+                    inventory: inventory,
+                    isSwiftlyAvailable: true,
+                    sdkBundleIdentifiers: [release.staticLinuxSDK.identifier],
+                    releaseCatalog: TestAssessmentReleaseCatalog.current([release])
                 ),
                 preparer: EnvironmentPreparer(
                     runner: runner,
@@ -153,9 +157,10 @@ struct SwiftlyKitWorkflowTests {
                     locateSDK: { _ in sdkBundle }
                 ),
                 swiftPM: SwiftPM(
-                    runner: runner,
+                    testRunner: runner,
                     validateEnvironment: { _ in }
-                )
+                ),
+                remover: EnvironmentRemover()
             )
 
             let choices = try await kit.compatibleEnvironments(packageRoot, for: .linux(.arm64))
@@ -192,7 +197,7 @@ struct SwiftlyKitWorkflowTests {
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
             let gate = MutationGate(lockFile: packageRoot.appending(path: "mutation.lock"))
-            let kit = fastTrackWorkflowKit(packageRoot: packageRoot, gate: gate, runner: runner)
+            let kit = convenienceWorkflowKit(packageRoot: packageRoot, gate: gate, runner: runner)
             let cache = packageRoot.appending(path: "cache")
             let configuration = packageRoot.appending(path: "configuration")
             let security = packageRoot.appending(path: "security")
@@ -306,8 +311,8 @@ struct SwiftlyKitWorkflowTests {
         }
     }
 
-    @Test("The fast track holds one mutation lease for its complete workflow")
-    func fastTrackMutationLease() async throws {
+    @Test("The convenience API holds one mutation lease for its complete workflow")
+    func convenienceMutationLease() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in
             try Data("// swift-tools-version: 6.0\n".utf8).write(
@@ -317,10 +322,10 @@ struct SwiftlyKitWorkflowTests {
             try writeELF(to: executable, architecture: .arm64)
             let runner = WorkflowMutationRunner(binaryDirectory: packageRoot)
             let gate = MutationGate(lockFile: packageRoot.appending(path: "mutation.lock"))
-            let kit = fastTrackWorkflowKit(packageRoot: packageRoot, gate: gate, runner: runner)
+            let kit = convenienceWorkflowKit(packageRoot: packageRoot, gate: gate, runner: runner)
             let environment = workflowEnvironment(packageRoot: packageRoot)
 
-            let fastTrack = Task {
+            let convenience = Task {
                 try await kit.build(
                     packageRoot,
                     product: "Tool",
@@ -339,7 +344,7 @@ struct SwiftlyKitWorkflowTests {
             #expect(!overlapped)
 
             await runner.releaseCommands()
-            #expect(try await fastTrack.value.executable == executable)
+            #expect(try await convenience.value.executable == executable)
             try await resolution.value
             #expect(await runner.maximumConcurrentCommands == 1)
         }
@@ -410,16 +415,18 @@ private actor WorkflowMutationRunner: SubprocessRunning {
 private func workflowKit(runner: WorkflowMutationRunner) -> SwiftlyKit {
 
     SwiftlyKit(
+        mutationGate: .shared,
         assessor: EnvironmentAssessor(),
         preparer: EnvironmentPreparer(),
         swiftPM: SwiftPM(
-            runner: runner,
+            testRunner: runner,
             validateEnvironment: { _ in }
-        )
+        ),
+        remover: EnvironmentRemover()
     )
 }
 
-private func fastTrackWorkflowKit<Runner: SubprocessRunning>(
+private func convenienceWorkflowKit<Runner: SubprocessRunning>(
     packageRoot: URL,
     gate: MutationGate,
     runner: Runner
@@ -447,12 +454,11 @@ private func fastTrackWorkflowKit<Runner: SubprocessRunning>(
 
     return SwiftlyKit(
         mutationGate: gate,
-        assessor: EnvironmentAssessor(
-            assessHost: { .ready },
-            detectSwiftly: { swiftly },
-            loadReleases: { [release] },
-            inspectInventory: { _ in inventory },
-            locateSDK: { _ in packageRoot.appending(path: "sdk.artifactbundle") }
+        assessor: testEnvironmentAssessor(
+            inventory: inventory,
+            isSwiftlyAvailable: true,
+            sdkBundleIdentifiers: [release.staticLinuxSDK.identifier],
+            releaseCatalog: TestAssessmentReleaseCatalog.current([release])
         ),
         preparer: EnvironmentPreparer(
             runner: runner,
@@ -463,9 +469,10 @@ private func fastTrackWorkflowKit<Runner: SubprocessRunning>(
             locateSDK: { _ in packageRoot.appending(path: "sdk.artifactbundle") }
         ),
         swiftPM: SwiftPM(
-            runner: runner,
+            testRunner: runner,
             validateEnvironment: { _ in }
-        )
+        ),
+        remover: EnvironmentRemover()
     )
 }
 

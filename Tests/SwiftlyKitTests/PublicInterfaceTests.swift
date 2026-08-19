@@ -11,8 +11,8 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
-    @Test("The fast-track workflow compiles with every default")
-    func fastTrackWorkflowCompiles() {
+    @Test("The convenience workflow compiles with every default")
+    func convenienceWorkflowCompiles() {
 
         let workflow: @Sendable (URL) async throws -> BuildResult = { packageRoot in
             try await SwiftlyKit.build(packageRoot)
@@ -20,7 +20,7 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
-    @Test("Environment storage compiles in staged, fast-track, and removal workflows")
+    @Test("Environment storage compiles in staged, convenience, and removal workflows")
     func environmentStorageCompiles() {
 
         let storage = EnvironmentStorage.directory(URL(filePath: "/tmp/swiftlykit-swiftly"))
@@ -28,7 +28,7 @@ struct PublicInterfaceTests {
         let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
             try await kit.prepare(assessment)
         }
-        let fastTrack: @Sendable (URL) async throws -> BuildResult = { packageRoot in
+        let convenience: @Sendable (URL) async throws -> BuildResult = { packageRoot in
             try await SwiftlyKit.build(packageRoot, environmentStorage: storage)
         }
         let removal = EnvironmentRemovalPlan.toolchain(
@@ -38,7 +38,7 @@ struct PublicInterfaceTests {
 
         _ = EnvironmentStorage.standard
         _ = staged
-        _ = fastTrack
+        _ = convenience
         _ = removal
     }
 
@@ -90,7 +90,7 @@ struct PublicInterfaceTests {
         _ = remove
     }
 
-    @Test("Removal-plan recording compiles in staged and fast-track workflows")
+    @Test("Removal-plan recording compiles in staged and convenience workflows")
     func removalPlanRecordingCompiles() {
 
         let recorder: EnvironmentRemovalPlan.Recorder = { plan in
@@ -99,12 +99,12 @@ struct PublicInterfaceTests {
         let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
             try await SwiftlyKit().prepare(assessment, recordRemovalPlan: recorder)
         }
-        let fastTrack: @Sendable (URL) async throws -> BuildResult = { packageRoot in
+        let convenience: @Sendable (URL) async throws -> BuildResult = { packageRoot in
             try await SwiftlyKit.build(packageRoot, recordRemovalPlan: recorder)
         }
 
         _ = staged
-        _ = fastTrack
+        _ = convenience
     }
 
     @Test("Removal-plan inspection compiles without testable access")
@@ -130,8 +130,8 @@ struct PublicInterfaceTests {
         _ = plan.storage
     }
 
-    @Test("The fast-track SwiftPM environment workflow compiles without testable access")
-    func fastTrackSwiftPMEnvironmentCompiles() {
+    @Test("The convenience SwiftPM environment workflow compiles without testable access")
+    func convenienceSwiftPMEnvironmentCompiles() {
 
         let workflow: @Sendable (URL, String) async throws -> BuildResult = { packageRoot, token in
             try await SwiftlyKit.build(
@@ -164,12 +164,12 @@ struct PublicInterfaceTests {
         let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
             try await SwiftlyKit().prepare(assessment, onEvent: observer)
         }
-        let fastTrack: @Sendable (URL) async throws -> BuildResult = { packageRoot in
+        let convenience: @Sendable (URL) async throws -> BuildResult = { packageRoot in
             try await SwiftlyKit.build(packageRoot, onEvent: observer)
         }
 
         _ = staged
-        _ = fastTrack
+        _ = convenience
     }
 
     @Test("Semantic preparation progress compiles without testable access")
@@ -195,7 +195,7 @@ struct PublicInterfaceTests {
         _ = observer
     }
 
-    @Test("SwiftPM shared and scratch storage compile in staged and fast-track workflows")
+    @Test("SwiftPM shared and scratch storage compile in staged and convenience workflows")
     func swiftPMStorageCompiles() {
 
         let cacheDirectory = URL(filePath: "/tmp/swiftlykit-cache")
@@ -228,7 +228,7 @@ struct PublicInterfaceTests {
                 scratchStorage: .directory(URL(filePath: "/tmp/swiftlykit-scratch"))
             )
         }
-        let fastTrack: @Sendable (URL, SwiftPMSharedStorage, SwiftPMScratchStorage) async throws -> BuildResult = {
+        let convenience: @Sendable (URL, SwiftPMSharedStorage, SwiftPMScratchStorage) async throws -> BuildResult = {
             packageRoot, sharedStorage, scratchStorage in
             try await SwiftlyKit.build(
                 packageRoot,
@@ -243,10 +243,10 @@ struct PublicInterfaceTests {
         _ = staged
         _ = resolution
         _ = request
-        _ = fastTrack
+        _ = convenience
     }
 
-    @Test("Package traits compile in staged and fast-track workflows")
+    @Test("Package traits compile in staged and convenience workflows")
     func swiftPMTraitsCompile() {
 
         let selection: ([String], Bool) throws(SwiftlyKitError) -> SwiftPMTraits = { names, includingDefaults in
@@ -256,7 +256,7 @@ struct PublicInterfaceTests {
             let traits = try SwiftPMTraits(["Production"], includingDefaults: true)
             return try await SwiftlyKit().prepare(assessment, swiftPMTraits: traits)
         }
-        let fastTrack: @Sendable (URL) async throws -> BuildResult = { packageRoot in
+        let convenience: @Sendable (URL) async throws -> BuildResult = { packageRoot in
             try await SwiftlyKit.build(
                 packageRoot,
                 swiftPMTraits: try SwiftPMTraits(["Production"], includingDefaults: false)
@@ -265,14 +265,14 @@ struct PublicInterfaceTests {
 
         _ = selection
         _ = staged
-        _ = fastTrack
+        _ = convenience
         _ = SwiftPMTraits.packageDefaults
         _ = SwiftPMTraits.none
         _ = SwiftPMTraits.all
     }
 
-    @Test("The fast track exposes exact toolchain selection and stripping")
-    func fastTrackToolchainAndStrippingCompile() {
+    @Test("The convenience API exposes exact toolchain selection and stripping")
+    func convenienceToolchainAndStrippingCompile() {
 
         let workflow: @Sendable (URL, URL) async throws -> BuildResult = { packageRoot, destination in
             try await SwiftlyKit.build(
@@ -285,18 +285,18 @@ struct PublicInterfaceTests {
         _ = workflow
     }
 
-    @Test("Concurrent build job limits compile in staged and fast-track workflows")
+    @Test("Concurrent build job limits compile in staged and convenience workflows")
     func buildJobsCompile() {
 
         let staged: @Sendable (ExecutableProduct) -> BuildRequest = { product in
             BuildRequest(product, jobs: 2)
         }
-        let fastTrack: @Sendable (URL) async throws -> BuildResult = { packageRoot in
+        let convenience: @Sendable (URL) async throws -> BuildResult = { packageRoot in
             try await SwiftlyKit.build(packageRoot, jobs: 2)
         }
 
         _ = staged
-        _ = fastTrack
+        _ = convenience
     }
 
     @Test("Compatible environment discovery compiles without testable access")

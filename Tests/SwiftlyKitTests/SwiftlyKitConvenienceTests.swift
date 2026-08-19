@@ -2,13 +2,13 @@ import Foundation
 import Testing
 @testable import SwiftlyKit
 
-@Suite("SwiftlyKit fast track")
-struct SwiftlyKitFastTrackTests {
+@Suite("SwiftlyKit convenience API")
+struct SwiftlyKitConvenienceTests {
 
     @Test("An unspecified product selects the sole executable")
     func soleProduct() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let executable = packageRoot.appending(path: "Tool")
             try writeELF(to: executable, architecture: .x86_64)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
@@ -18,7 +18,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner)
 
             let result = try await kit.build(
                 packageRoot,
@@ -41,14 +41,14 @@ struct SwiftlyKitFastTrackTests {
     }
 
     @Test(
-        "A nonpositive build job count fails before the fast track runs commands",
+        "A nonpositive build job count fails before the convenience API runs commands",
         arguments: [0, -1]
     )
     func invalidBuildJobs(jobs: Int) async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let runner = RecordingSubprocessRunner(results: [])
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner)
 
             await #expect(throws: SwiftlyKitError.invalidBuildJobCount(jobs)) {
                 try await kit.build(
@@ -65,12 +65,12 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
-    @Test("Invalid shared storage is rejected before staged or fast-track mutation")
+    @Test("Invalid shared storage is rejected before staged or convenience mutation")
     func invalidSharedStorage() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let runner = RecordingSubprocessRunner(results: [])
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner, installed: false)
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner, installed: false)
             let invalidDirectory = URL(string: "https://example.com/swiftpm-state")!
             let sharedStorage = SwiftPMSharedStorage(cacheDirectory: invalidDirectory)
             let assessment = try await kit.assess(packageRoot, for: .linux(.x86_64))
@@ -96,12 +96,12 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
-    @Test("The fast track maps scratch and shared-storage overlap to the public error")
-    func overlappingFastTrackStorage() async throws {
+    @Test("The convenience API maps scratch and shared-storage overlap to the public error")
+    func overlappingConvenienceStorage() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let runner = RecordingSubprocessRunner(results: [])
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner)
             let scratch = packageRoot.appending(path: "scratch", directoryHint: .isDirectory)
             let sharedStorage = SwiftPMSharedStorage(cacheDirectory: scratch)
             let canonicalScratch = try CanonicalFileURL.resolve(scratch)
@@ -122,10 +122,10 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
-    @Test("The fast track binds one SwiftPM environment snapshot to every phase")
+    @Test("The convenience API binds one SwiftPM environment snapshot to every phase")
     func swiftPMEnvironmentSnapshot() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let executable = packageRoot.appending(path: "Tool")
             try writeELF(to: executable, architecture: .x86_64)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
@@ -135,7 +135,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner)
             let values = try SwiftPMEnvironment([
                 "BUILD_MODE": .plain("production"),
                 "BUILD_TOKEN": .sensitive("private")
@@ -158,13 +158,13 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
-    @Test("The fast track carries custom environment storage through every selected-tool command")
+    @Test("The convenience API carries custom environment storage through every selected-tool command")
     func customEnvironmentStorageEnvironment() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let swiftlyRoot = packageRoot.deletingLastPathComponent().appending(path: "swiftly")
             let swiftlyExecutable = swiftlyRoot.appending(path: "bin/swiftly")
-            try makeFastTrackExecutable(at: swiftlyExecutable)
+            try makeConvenienceExecutable(at: swiftlyExecutable)
             let sdkIdentifier = sdkIdentifier(
                 for: SwiftVersion(major: 6, minor: 2, patch: 1)
             )
@@ -183,7 +183,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
-            let kit = fastTrackKit(
+            let kit = convenienceKit(
                 packageRoot: packageRoot,
                 runner: runner,
                 environmentStorage: storage
@@ -223,12 +223,12 @@ struct SwiftlyKitFastTrackTests {
     @Test("An unspecified product rejects an ambiguous package")
     func ambiguousProduct() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let packageJSON = try packageDescriptionJSON(executableProducts: ["First", "Second"])
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON)
             ])
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner)
 
             await #expect(throws: SwiftlyKitError.executableProductSelectionRequired(["First", "Second"])) {
                 try await kit.build(
@@ -245,7 +245,7 @@ struct SwiftlyKitFastTrackTests {
     @Test("A specified product selects that executable from an ambiguous package")
     func namedProduct() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let executable = packageRoot.appending(path: "Second")
             try writeELF(to: executable, architecture: .x86_64)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["First", "Second"])
@@ -255,7 +255,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner)
 
             let result = try await kit.build(
                 packageRoot,
@@ -271,10 +271,10 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
-    @Test("The fast track resolves dependencies and retries the build")
+    @Test("The convenience API resolves dependencies and retries the build")
     func dependencyResolution() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let executable = packageRoot.appending(path: "Tool")
             try writeELF(to: executable, architecture: .x86_64)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
@@ -287,7 +287,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner)
             let traits = try SwiftPMTraits(["RetryFeature"], includingDefaults: true)
             let scratch = packageRoot.appending(path: "scratch")
             let cache = packageRoot.appending(path: "cache")
@@ -350,10 +350,10 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
-    @Test("The fast track forwards custom storage, published output, and cleanup")
+    @Test("The convenience API forwards custom storage, published output, and cleanup")
     func outputAndCleanup() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let executable = packageRoot.appending(path: "Tool")
             let scratch = packageRoot.appending(path: "scratch")
             let output = packageRoot.appending(path: "OutputTool")
@@ -367,8 +367,8 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: packageRoot.path(percentEncoded: false) + "\n"),
                 .success(output: "reset")
             ])
-            let events = FastTrackEventRecorder()
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let events = ConvenienceEventRecorder()
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner)
 
             let result = try await kit.build(
                 packageRoot,
@@ -407,10 +407,10 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
-    @Test("The fast track selects an exact toolchain")
+    @Test("The convenience API selects an exact toolchain")
     func exactToolchain() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let selectedVersion = SwiftVersion(major: 6, minor: 2, patch: 1)
             let newerVersion = SwiftVersion(major: 6, minor: 3, patch: 0)
             let executable = packageRoot.appending(path: "Tool")
@@ -422,7 +422,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
-            let kit = fastTrackKit(
+            let kit = convenienceKit(
                 packageRoot: packageRoot,
                 runner: runner,
                 versions: [selectedVersion, newerVersion]
@@ -442,10 +442,10 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
-    @Test("The fast track forwards stripping without changing the SwiftPM executable")
+    @Test("The convenience API forwards stripping without changing the SwiftPM executable")
     func strip() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let executable = packageRoot.appending(path: "Tool")
             let output = packageRoot.appending(path: "StrippedTool")
             try writeELF(to: executable, architecture: .x86_64)
@@ -458,7 +458,7 @@ struct SwiftlyKitFastTrackTests {
                 .success(output: packageRoot.path(percentEncoded: false) + "\n"),
                 .success(output: "stripped")
             ])
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner)
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner)
 
             let result = try await kit.build(
                 packageRoot,
@@ -480,20 +480,20 @@ struct SwiftlyKitFastTrackTests {
         }
     }
 
-    @Test("The fast track propagates recorder errors unchanged")
+    @Test("The convenience API propagates recorder errors unchanged")
     func recorderRefusalIsUnchanged() async throws {
 
-        try await withFastTrackTemporaryDirectory { packageRoot in
+        try await withConvenienceTemporaryDirectory { packageRoot in
             let runner = RecordingSubprocessRunner(results: [])
-            let kit = fastTrackKit(packageRoot: packageRoot, runner: runner, installed: false)
+            let kit = convenienceKit(packageRoot: packageRoot, runner: runner, installed: false)
 
-            await #expect(throws: FastTrackRecorderRefusal.self) {
+            await #expect(throws: ConvenienceRecorderRefusal.self) {
                 try await kit.build(
                     packageRoot,
                     product: nil,
                     for: .linux(.x86_64),
                     configuration: .release,
-                    recordRemovalPlan: { _ in throw FastTrackRecorderRefusal() },
+                    recordRemovalPlan: { _ in throw ConvenienceRecorderRefusal() },
                     onEvent: nil
                 )
             }
@@ -503,7 +503,7 @@ struct SwiftlyKitFastTrackTests {
 
 }
 
-private func fastTrackKit(
+private func convenienceKit(
     packageRoot: URL,
     runner: RecordingSubprocessRunner,
     versions: [SwiftVersion] = [SwiftVersion(major: 6, minor: 2, patch: 1)],
@@ -543,13 +543,13 @@ private func fastTrackKit(
     }
 
     return SwiftlyKit(
-        assessor: EnvironmentAssessor(
+        mutationGate: .shared,
+        assessor: testEnvironmentAssessor(
             environmentStorage: environmentStorage,
-            assessHost: { .ready },
-            detectSwiftly: { swiftly },
-            loadReleases: { releases },
-            inspectInventory: { _ in inventory },
-            locateSDK: { _ in packageRoot.appending(path: "sdk.artifactbundle") }
+            inventory: inventory,
+            isSwiftlyAvailable: true,
+            sdkBundleIdentifiers: Set(releases.map(\.staticLinuxSDK.identifier)),
+            releaseCatalog: TestAssessmentReleaseCatalog.current(releases)
         ),
         preparer: EnvironmentPreparer(
             runner: runner,
@@ -560,13 +560,14 @@ private func fastTrackKit(
             locateSDK: { _ in packageRoot.appending(path: "sdk.artifactbundle") }
         ),
         swiftPM: SwiftPM(
-            runner: runner,
+            testRunner: runner,
             validateEnvironment: { _ in }
-        )
+        ),
+        remover: EnvironmentRemover()
     )
 }
 
-private func makeFastTrackExecutable(at url: URL) throws {
+private func makeConvenienceExecutable(at url: URL) throws {
 
     try FileManager.default.createDirectory(
         at: url.deletingLastPathComponent(),
@@ -594,19 +595,19 @@ private func normalizedPath(_ url: URL) -> String {
     return normalized.hasSuffix("/") ? String(normalized.dropLast()) : normalized
 }
 
-private func withFastTrackTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
+private func withConvenienceTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
 
-    try await withTemporaryDirectory(prefix: "SwiftlyKit-FastTrack") { directory in
+    try await withTemporaryDirectory(prefix: "SwiftlyKit-Convenience") { directory in
         try Data("// swift-tools-version: 6.0\n".utf8).write(to: directory.appending(path: "Package.swift"))
         return try await body(directory)
     }
 }
 
-private struct FastTrackRecorderRefusal: Error {
+private struct ConvenienceRecorderRefusal: Error {
 
 }
 
-private actor FastTrackEventRecorder {
+private actor ConvenienceEventRecorder {
 
     private(set) var commands: [CommandInvocation] = []
 

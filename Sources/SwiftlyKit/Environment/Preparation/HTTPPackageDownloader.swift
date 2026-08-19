@@ -1,6 +1,12 @@
 import Foundation
 
-struct HTTPPackageDownloader {
+protocol PackageDownloading: Sendable {
+
+    func download(from source: URL, to destination: URL) async throws
+
+}
+
+struct HTTPPackageDownloader: PackageDownloading {
 
     private(set) var transfer: @Sendable (URL) async throws -> (temporaryURL: URL, statusCode: Int?) = { source in
         try await HTTPPackageDownloader.liveTransfer(source)

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Exact SwiftPM command workflows and their internal test seams.
+/// Executes exact SwiftPM command workflows.
 struct SwiftPM {
 
     let runner: any SubprocessRunning
@@ -10,14 +10,14 @@ struct SwiftPM {
     let sourceRoots: @Sendable (
         LocalBuildEnvironment,
         SwiftPMScratchDirectory,
-        any SubprocessRunning,
         SwiftlyKitEvent.Handler?
     ) async throws -> [URL]
 
     init() {
-        runner = LiveSubprocessRunner()
+        let runner = LiveSubprocessRunner()
+        self.runner = runner
         validateEnvironment = { try SwiftPM.liveValidateEnvironment($0) }
-        sourceRoots = { environment, scratchDirectory, runner, onEvent in
+        sourceRoots = { environment, scratchDirectory, onEvent in
             try await SwiftPM.packageGraphSourceRoots(
                 using: environment,
                 scratchDirectory: scratchDirectory,
@@ -32,14 +32,13 @@ struct SwiftPM {
         validateEnvironment: @escaping @Sendable (LocalBuildEnvironment) throws -> Void,
         sourceRoots: @escaping @Sendable (
             LocalBuildEnvironment,
-            SwiftPMScratchDirectory,
-            any SubprocessRunning
-        ) async throws -> [URL] = { environment, _, _ in [environment.packageRoot] }
+            SwiftPMScratchDirectory
+        ) async throws -> [URL]
     ) {
         self.runner = runner
         self.validateEnvironment = validateEnvironment
-        self.sourceRoots = { environment, scratchDirectory, runner, _ in
-            try await sourceRoots(environment, scratchDirectory, runner)
+        self.sourceRoots = { environment, scratchDirectory, _ in
+            try await sourceRoots(environment, scratchDirectory)
         }
     }
 

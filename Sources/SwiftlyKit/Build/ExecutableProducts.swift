@@ -1,11 +1,17 @@
+// MARK: - ExecutableProduct
+
+/// An executable product discovered from SwiftPM package metadata.
+public struct ExecutableProduct: Sendable, Hashable {
+
+    /// The product name reported by SwiftPM and passed to `swift build --product`.
+    public let name: String
+
+}
+
+// MARK: - ExecutableProducts
+
 /// Executable products discovered from one prepared package in name order.
-public struct ExecutableProducts: Sendable, RandomAccessCollection {
-
-    /// The product stored at each collection position.
-    public typealias Element = ExecutableProduct
-
-    /// The integer position of a product.
-    public typealias Index = Int
+public struct ExecutableProducts: Sendable {
 
     private let products: [ExecutableProduct]
 
@@ -28,6 +34,18 @@ public struct ExecutableProducts: Sendable, RandomAccessCollection {
 
         return product
     }
+
+}
+
+// MARK: - RandomAccessCollection
+
+extension ExecutableProducts: RandomAccessCollection {
+
+    /// The product stored at each collection position.
+    public typealias Element = ExecutableProduct
+
+    /// The integer position of a product.
+    public typealias Index = Int
 
     /// The position of the first product.
     public var startIndex: Index {

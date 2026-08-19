@@ -13,7 +13,7 @@ struct SwiftPMCleanupTests {
                 .success(output: "cleaned", standardError: "warning")
             ])
             let events = CleanupEventRecorder()
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in
                 Issue.record("cleanup must not require build environment validation")
             })
             let values = try SwiftPMEnvironment(["CLEAN_VALUE": .plain("enabled")])
@@ -54,7 +54,7 @@ struct SwiftPMCleanupTests {
             let scratch = directory.appending(path: "custom-scratch")
             let runner = RecordingSubprocessRunner(results: [.success()])
             let events = CleanupEventRecorder()
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
             let values = try SwiftPMEnvironment(["RESET_VALUE": .plain("enabled")])
             let environment = cleanupEnvironment(
                 in: directory,
@@ -98,7 +98,7 @@ struct SwiftPMCleanupTests {
             )
             defer { try? FileManager.default.removeItem(at: sharedRoot) }
             let runner = RecordingSubprocessRunner(results: [.success(), .success()])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
             let environment = cleanupEnvironment(
                 in: directory,
                 swiftPMSharedStorage: sharedStorage
@@ -138,7 +138,7 @@ struct SwiftPMCleanupTests {
             let storageRoot = directory.deletingLastPathComponent().appending(path: "swiftly")
             let scratch = directory.deletingLastPathComponent().appending(path: "scratch")
             let runner = RecordingSubprocessRunner(results: [.success(), .success()])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
             let environment = cleanupEnvironment(
                 in: directory,
                 environmentStorage: .directory(storageRoot)
@@ -168,7 +168,7 @@ struct SwiftPMCleanupTests {
             let runner = RecordingSubprocessRunner(results: [
                 .failure(output: "context", standardError: "reset failed")
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             await #expect(throws: SwiftPMError.commandFailed(
                 operation: .resettingBuildStorage,
@@ -201,7 +201,7 @@ struct SwiftPMCleanupTests {
                 .success(output: "reset")
             ])
             let events = CleanupEventRecorder()
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 scratchStorage: .directory(scratch),
@@ -244,7 +244,7 @@ struct SwiftPMCleanupTests {
                 .success(output: binaryDirectory.path(percentEncoded: false) + "\n"),
                 .failure(standardError: "could not reset")
             ])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             await #expect(throws: SwiftPMError.postBuildCleanupFailed(
                 output: output,
@@ -271,7 +271,7 @@ struct SwiftPMCleanupTests {
             let scratch = directory.appending(path: "scratch")
             let output = scratch.appending(path: "OutputTool")
             let runner = RecordingSubprocessRunner(results: [])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             await #expect(throws: SwiftPMError.outputInsideBuildStorage(output)) {
                 try await swiftPM.build(
@@ -296,7 +296,7 @@ struct SwiftPMCleanupTests {
             let resolvedDirectory = directory.resolvingSymlinksInPath().standardizedFileURL
             let resolvedParent = parent.resolvingSymlinksInPath().standardizedFileURL
             let runner = RecordingSubprocessRunner(results: [])
-            let swiftPM = SwiftPM(runner: runner, validateEnvironment: { _ in })
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
 
             await #expect(throws: SwiftPMError.unsafeBuildStorage(resolvedDirectory)) {
                 try await swiftPM.build(

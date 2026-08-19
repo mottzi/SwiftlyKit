@@ -419,6 +419,29 @@ struct EnvironmentRemovalPlanTests {
         #expect(await runner.commands.isEmpty)
     }
 
+    @Test("A missing Swiftly installation remains incompatible")
+    func missingSwiftlyInstallationIsIncompatible() async throws {
+
+        let runner = RecordingSubprocessRunner(results: [])
+        let remover = EnvironmentRemover(
+            runner: runner,
+            detectSwiftly: { nil },
+            inspect: { _, _, _ in
+                Issue.record("Inspection should not begin without a Swiftly installation.")
+                return EnvironmentRemovalInventory(
+                    toolchains: [],
+                    sdks: [],
+                    sdkInspection: .notRequested
+                )
+            }
+        )
+
+        await #expect(throws: SwiftlyKitError.incompatibleSwiftly) {
+            try await remover.remove(.toolchain(version))
+        }
+        #expect(await runner.commands.isEmpty)
+    }
+
     @Test("Unrelated SDKs do not block exact toolchain or full-environment removal")
     func unrelatedSDKsDoNotBlockRemoval() async throws {
 

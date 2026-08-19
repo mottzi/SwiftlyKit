@@ -3,43 +3,42 @@ import Foundation
 /// Removes exact Swiftly-managed environment resources after a complete safety preflight.
 struct EnvironmentRemover {
 
-    private(set) var temporaryDirectory: URL = FileManager.default.temporaryDirectory
-    private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
+    private let temporaryDirectory: URL
+    private let runner: any SubprocessRunning
+    private let openSession: SessionOpening
 
-    private(set) var detectSwiftlyInStorage: @Sendable (EnvironmentStorage) async throws -> SwiftlyInstallation?
+    /// Creates a remover using Swiftly's live discovery and subprocess adapters.
+    init() {
+        let inspector = InstalledEnvironmentInspector()
+        self.init(
+            temporaryDirectory: FileManager.default.temporaryDirectory,
+            runner: LiveSubprocessRunner(),
+            openSession: { storage in
+                guard let swiftly = try await SwiftlyInstallation.detect(storage: storage)
+                else { return nil }
 
-    private(set) var inspect:
-        @Sendable (SwiftlyInstallation, SwiftVersion?, Bool) async throws -> EnvironmentRemovalInventory = {
-        try await InstalledEnvironmentInspector().inspectForRemoval(
-            swiftly: $0,
-            toolchain: $1,
-            includeSDKs: $2
+                return EnvironmentRemovalSession(
+                    swiftly: swiftly,
+                    inspect: { preferredToolchain, includeSDKs in
+                        try await inspector.inspectForRemoval(
+                            swiftly: swiftly,
+                            toolchain: preferredToolchain,
+                            includeSDKs: includeSDKs
+                        )
+                    }
+                )
+            }
         )
     }
 
     init(
-        temporaryDirectory: URL = FileManager.default.temporaryDirectory,
-        runner: any SubprocessRunning = LiveSubprocessRunner(),
-        detectSwiftly: (@Sendable () async throws -> SwiftlyInstallation?)? = nil,
-        inspect:
-            @escaping @Sendable (SwiftlyInstallation, SwiftVersion?, Bool) async throws -> EnvironmentRemovalInventory = {
-            try await InstalledEnvironmentInspector().inspectForRemoval(
-                swiftly: $0,
-                toolchain: $1,
-                includeSDKs: $2
-            )
-        }
+        temporaryDirectory: URL,
+        runner: any SubprocessRunning,
+        openSession: @escaping SessionOpening
     ) {
         self.temporaryDirectory = temporaryDirectory
         self.runner = runner
-        if let detectSwiftly {
-            self.detectSwiftlyInStorage = { _ in try await detectSwiftly() }
-        } else {
-            self.detectSwiftlyInStorage = { storage in
-                try await SwiftlyInstallation.detect(storage: storage)
-            }
-        }
-        self.inspect = inspect
+        self.openSession = openSession
     }
 
     func remove(_ plan: EnvironmentRemovalPlan, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
@@ -47,12 +46,12 @@ struct EnvironmentRemover {
         let environmentStorage = plan.environmentStorage
         _ = try environmentStorage.resolved()
 
-        let swiftly: SwiftlyInstallation
+        let session: EnvironmentRemovalSession
         do {
-            guard let detected = try await detectSwiftlyInStorage(environmentStorage) else {
+            guard let opened = try await openSession(environmentStorage) else {
                 throw SwiftlyKitError.incompatibleSwiftly
             }
-            swiftly = detected
+            session = opened
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as SwiftlyKitError {
@@ -62,11 +61,12 @@ struct EnvironmentRemover {
             throw SwiftlyKitError.environmentRemovalFailed("Could not detect a compatible Swiftly installation.")
         }
 
+        let swiftly = session.swiftly
         let preferredToolchain = plan.preferredToolchain
         let includeSDKs = plan.requiresSDKState
         var state: EnvironmentRemovalInventory
         do {
-            state = try await inspect(swiftly, preferredToolchain, includeSDKs)
+            state = try await session.inspect(preferredToolchain, includeSDKs)
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as SwiftlyKitError {
@@ -97,8 +97,7 @@ struct EnvironmentRemover {
             try await run(operation.command(swiftly: swiftly, temporaryDirectory: temporaryDirectory), onEvent: onEvent)
 
             do {
-                state = try await inspect(
-                    swiftly,
+                state = try await session.inspect(
                     preferredToolchain,
                     operation.requiresSDKState
                 )
@@ -128,6 +127,10 @@ struct EnvironmentRemover {
             }
         }
     }
+
+    typealias SessionOpening = @Sendable (
+        EnvironmentStorage
+    ) async throws -> EnvironmentRemovalSession?
 
 }
 
@@ -167,35 +170,6 @@ extension EnvironmentRemover {
                     operations.append(.toolchain(toolchainVersion))
                 }
                 return operations
-        }
-    }
-
-    private func report(_ operation: Operation, to handler: SwiftlyKitEvent.Handler?) async {
-
-        let detail: String
-        switch operation {
-            case .sdk(let managedSDK): detail = "Removing Static Linux SDK \(managedSDK.identifier)."
-            case .toolchain(let version): detail = "Removing Swift \(version)."
-        }
-        await handler?(.progress(OperationProgress(operation: .removingEnvironment, detail: detail)))
-    }
-
-    private func run(_ command: SubprocessCommand, onEvent: SwiftlyKitEvent.Handler?) async throws {
-
-        let result: SubprocessResult
-        do {
-            result = try await runner.run(command, onEvent: onEvent)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            if Task.isCancelled { throw CancellationError() }
-            throw SwiftlyKitError.environmentRemovalFailed(
-                "Could not run \(command.executableURL.lastPathComponent)."
-            )
-        }
-
-        guard result.succeeded else {
-            throw SwiftlyKitError.environmentRemovalFailed(Self.bounded(result.combinedOutput))
         }
     }
 
@@ -242,6 +216,39 @@ extension EnvironmentRemover {
 
 extension EnvironmentRemover {
 
+    private func report(_ operation: Operation, to handler: SwiftlyKitEvent.Handler?) async {
+
+        let detail: String
+        switch operation {
+            case .sdk(let managedSDK): detail = "Removing Static Linux SDK \(managedSDK.identifier)."
+            case .toolchain(let version): detail = "Removing Swift \(version)."
+        }
+        await handler?(.progress(OperationProgress(operation: .removingEnvironment, detail: detail)))
+    }
+
+    private func run(_ command: SubprocessCommand, onEvent: SwiftlyKitEvent.Handler?) async throws {
+
+        let result: SubprocessResult
+        do {
+            result = try await runner.run(command, onEvent: onEvent)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw SwiftlyKitError.environmentRemovalFailed(
+                "Could not run \(command.executableURL.lastPathComponent)."
+            )
+        }
+
+        guard result.succeeded else {
+            throw SwiftlyKitError.environmentRemovalFailed(Self.bounded(result.combinedOutput))
+        }
+    }
+
+}
+
+extension EnvironmentRemover {
+
     private static func inspectionDiagnostic(for error: InstalledEnvironmentError) -> String {
 
         switch error {
@@ -254,6 +261,17 @@ extension EnvironmentRemover {
     private static func bounded(_ value: String) -> String {
         String(value.prefix(8 * 1024))
     }
+
+}
+
+/// One discovered Swiftly installation and its bound inventory observation.
+struct EnvironmentRemovalSession: Sendable {
+
+    let swiftly: SwiftlyInstallation
+    let inspect: @Sendable (
+        SwiftVersion?,
+        Bool
+    ) async throws -> EnvironmentRemovalInventory
 
 }
 

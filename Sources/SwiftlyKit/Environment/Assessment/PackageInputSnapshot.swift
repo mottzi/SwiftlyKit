@@ -1,7 +1,7 @@
 import Foundation
 
 /// Byte-for-byte package inputs that authorize environment preparation.
-struct PackageInputSnapshot: Equatable {
+struct PackageInputSnapshot: Equatable, Sendable {
 
     let packageRoot: URL
     let toolsVersion: SwiftVersion
@@ -27,14 +27,11 @@ extension PackageInputSnapshot {
         guard packageRoot.isFileURL else { throw .invalidPackageRoot(packageRoot) }
 
         let canonicalRoot = packageRoot.resolvingSymlinksInPath().standardizedFileURL
-
         guard isDirectory(at: canonicalRoot) else { throw .invalidPackageRoot(packageRoot) }
 
         let manifestURL = canonicalRoot.appending(path: "Package.swift")
-
         guard FileManager.default.fileExists(atPath: manifestURL.path(percentEncoded: false))
         else { throw .invalidPackageRoot(packageRoot) }
-
         guard isRegularReadableFile(at: manifestURL)
         else { throw .invalidPackageRoot(manifestURL.deletingLastPathComponent()) }
 
@@ -44,8 +41,8 @@ extension PackageInputSnapshot {
 
         guard let manifestText = String(data: manifest, encoding: .utf8)
         else { throw .invalidPackageRoot(manifestURL.deletingLastPathComponent()) }
-
         let toolsVersion = try parseToolsVersion(from: manifestText)
+
         let swiftVersionInput = try nearestSwiftVersionFile(startingAt: canonicalRoot)
 
         return PackageInputSnapshot(
@@ -103,7 +100,6 @@ extension PackageInputSnapshot {
         } else {
             valueBeforeTerminator = valueStart
         }
-
         let value = valueBeforeTerminator
             .drop(while: isHorizontalWhitespace)
             .reversed()

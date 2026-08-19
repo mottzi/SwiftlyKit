@@ -35,7 +35,7 @@ extension SwiftPM {
         guard description.products.contains(request.product)
         else { throw SwiftPMError.executableNotFound(request.product.name) }
         
-        let roots = try await sourceRoots(environment, scratchDirectory, runner, onEvent)
+        let roots = try await sourceRoots(environment, scratchDirectory, onEvent)
         let stability = try await Self.startSourceStability(
             roots: roots,
             scratchDirectory: scratchDirectory.url
