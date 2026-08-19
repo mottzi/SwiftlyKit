@@ -798,15 +798,16 @@ Run the test suite from the repository root:
 swift test
 ```
 
-Run the real-system cross-compilation acceptance test on a prepared host:
+Run the real-system acceptance tests on a prepared host:
 
 ```sh
-SWIFTLYKIT_RUN_ACCEPTANCE=1 swift test --filter CrossCompilationAcceptanceTests
+SWIFTLYKIT_RUN_ACCEPTANCE=1 swift test --filter AcceptanceTests
 ```
 
-The acceptance test never authorizes installation. It requires compatible
-Swiftly, Swift 6.3.3, and its matching Static Linux SDK. It builds and verifies
-both supported architectures and their published runnable directories.
+The traits check runs against the host SwiftPM. The cross-compilation checks
+never authorize installation; they require compatible Swiftly, Swift 6.3.3,
+and its matching Static Linux SDK. They build and verify both supported
+architectures and their published runnable directories.
 
 For the internal design, see [Architecture](Documentation/Architecture.md).
 

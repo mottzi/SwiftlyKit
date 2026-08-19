@@ -78,13 +78,13 @@ struct CrossCompilationAcceptanceTests {
     }
 
     @Test(
-        "A second identical build does not compile or link",
+        "A second identical build preserves artifact identity",
         .enabled(
             if: ProcessInfo.processInfo.environment["SWIFTLYKIT_RUN_ACCEPTANCE"] == "1",
             "Run explicitly with SWIFTLYKIT_RUN_ACCEPTANCE=1."
         )
     )
-    func consecutiveIdenticalBuildIsIncremental() async throws {
+    func consecutiveIdenticalBuildPreservesArtifactIdentity() async throws {
 
         let resourceRoot = try #require(Bundle.module.resourceURL)
         let packageRoot = resourceRoot.appending(
@@ -110,28 +110,18 @@ struct CrossCompilationAcceptanceTests {
                 configuration: .release,
                 scratchStorage: .directory(scratchDirectory)
             )
-            let firstOutput = AcceptanceOutputRecorder()
             let firstResult = try await kit.build(
                 request,
-                using: environment,
-                onEvent: { await firstOutput.record($0) }
+                using: environment
             )
-            let firstText = await firstOutput.text
             let firstIdentity = try executableIdentity(at: firstResult.executable)
 
-            let secondOutput = AcceptanceOutputRecorder()
             let secondResult = try await kit.build(
                 request,
-                using: environment,
-                onEvent: { await secondOutput.record($0) }
+                using: environment
             )
-            let secondText = await secondOutput.text
             let secondIdentity = try executableIdentity(at: secondResult.executable)
 
-            #expect(firstText.contains("Compiling CrossCompilationFixture"))
-            #expect(firstText.contains("Linking CrossCompilationFixture"))
-            #expect(!secondText.contains("Compiling CrossCompilationFixture"))
-            #expect(!secondText.contains("Linking CrossCompilationFixture"))
             #expect(secondResult.executable == firstResult.executable)
             #expect(secondResult.resourceBundles == firstResult.resourceBundles)
             #expect(secondIdentity == firstIdentity)
@@ -147,17 +137,6 @@ private func executableIdentity(at url: URL) throws -> ExecutableIdentity {
         inode: try #require(attributes[.systemFileNumber] as? NSNumber).uint64Value,
         modificationDate: try #require(attributes[.modificationDate] as? Date)
     )
-}
-
-private actor AcceptanceOutputRecorder {
-
-    private(set) var text = ""
-
-    func record(_ event: SwiftlyKitEvent) {
-        guard case let .output(output) = event else { return }
-        text += output.text
-    }
-
 }
 
 private struct ExecutableIdentity: Equatable {

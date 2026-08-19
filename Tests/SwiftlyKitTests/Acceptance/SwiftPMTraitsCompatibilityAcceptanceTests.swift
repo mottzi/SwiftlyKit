@@ -2,10 +2,16 @@ import Foundation
 import Testing
 @testable import SwiftlyKit
 
-@Suite("SwiftPM trait fixtures")
-struct SwiftPMTraitsFixtureTests {
+@Suite("SwiftPM traits compatibility acceptance")
+struct SwiftPMTraitsCompatibilityAcceptanceTests {
 
-    @Test("Inspection, graph discovery, resolution, and build use one trait configuration")
+    @Test(
+        "SwiftPM accepts one trait configuration for inspection, graph discovery, resolution, and build",
+        .enabled(
+            if: ProcessInfo.processInfo.environment["SWIFTLYKIT_RUN_ACCEPTANCE"] == "1",
+            "Run explicitly with SWIFTLYKIT_RUN_ACCEPTANCE=1."
+        )
+    )
     func conditionalTraitWorkflow() async throws {
 
         try await withFixtureCopy { packageRoot in
@@ -59,7 +65,7 @@ struct SwiftPMTraitsFixtureTests {
 
 }
 
-extension SwiftPMTraitsFixtureTests {
+extension SwiftPMTraitsCompatibilityAcceptanceTests {
 
     private func command(_ arguments: [String], in packageRoot: URL) -> SubprocessCommand {
         SubprocessCommand(
