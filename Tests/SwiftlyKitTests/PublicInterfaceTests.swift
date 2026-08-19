@@ -2,391 +2,191 @@ import Foundation
 import SwiftlyKit
 import Testing
 
-@Suite("Public interface")
+@Suite("Public client compile checks")
 struct PublicInterfaceTests {
 
-    @Test("The documented workflow compiles without testable access")
-    func documentedWorkflowCompiles() {
-        let workflow: @Sendable (URL) async throws -> BuildResult = documentedWorkflow
-        _ = workflow
-    }
+    @Test("Convenience and staged workflows compile without testable access")
+    func workflowsCompile() {
 
-    @Test("The convenience workflow compiles with every default")
-    func convenienceWorkflowCompiles() {
-
-        let workflow: @Sendable (URL) async throws -> BuildResult = { packageRoot in
-            try await SwiftlyKit.build(packageRoot)
+        let convenienceDefaults: @Sendable (URL) async throws -> BuildResult = {
+            try await SwiftlyKit.build($0)
         }
-        _ = workflow
-    }
-
-    @Test("Environment storage compiles in staged, convenience, and removal workflows")
-    func environmentStorageCompiles() {
-
-        let storage = EnvironmentStorage.directory(URL(filePath: "/tmp/swiftlykit-swiftly"))
-        let kit = SwiftlyKit(environmentStorage: storage)
-        let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
-            try await kit.prepare(assessment)
+        let configured: @Sendable (URL, URL, String) async throws -> BuildResult = configuredWorkflow
+        let staged: @Sendable (URL, URL) async throws -> BuildResult = stagedWorkflow
+        let assessment: @Sendable (URL) async throws -> EnvironmentAssessment = {
+            try await SwiftlyKit().assess($0, for: .linux(.arm64))
         }
-        let convenience: @Sendable (URL) async throws -> BuildResult = { packageRoot in
-            try await SwiftlyKit.build(packageRoot, environmentStorage: storage)
+        let hostRecovery: @Sendable () async throws -> Void = {
+            _ = try await SwiftlyKit.hostReadiness()
+            try await SwiftlyKit.requestCommandLineToolsInstallation()
         }
-        let removal = EnvironmentRemovalPlan.toolchain(
-            SwiftVersion(major: 6, minor: 3, patch: 3),
-            in: storage
-        )
 
-        _ = EnvironmentStorage.standard
+        _ = convenienceDefaults
+        _ = configured
         _ = staged
-        _ = convenience
-        _ = removal
+        _ = assessment
+        _ = hostRecovery
     }
 
-    @Test("The staged SwiftPM environment workflow compiles without testable access")
-    func stagedSwiftPMEnvironmentCompiles() {
+    @Test("Public build and removal values compile without testable access")
+    func valuesCompile() throws {
 
-        let workflow: @Sendable (EnvironmentAssessment, String) async throws -> LocalBuildEnvironment = {
-            assessment, token in
-            let values = try SwiftPMEnvironment([
-                "PACKAGE_FLAVOR": .plain("production"),
-                "SWIFTPM_REGISTRY_TOKEN": .sensitive(token),
-                "UNWANTED_PARENT_VALUE": .unset
-            ])
-            return try await SwiftlyKit().prepare(
-                assessment,
-                swiftPMEnvironment: values
+        let version = try #require(SwiftVersion("6.3.3"))
+        let losslessVersion: any LosslessStringConvertible = version
+        let storage = EnvironmentStorage.directory(URL(filePath: "/tmp/swiftlykit-environment"))
+        let plans = [
+            EnvironmentRemovalPlan.toolchain(version, in: storage),
+            try EnvironmentRemovalPlan.staticLinuxSDK(
+                identifier: "swift-6.3.3-RELEASE_static-linux-0.1.0",
+                in: storage
+            ),
+            try EnvironmentRemovalPlan.environment(
+                toolchain: version,
+                staticLinuxSDKIdentifier: "swift-6.3.3-RELEASE_static-linux-0.1.0",
+                in: storage
             )
-        }
-        _ = workflow
-    }
-
-    @Test("Environment preparation and removal plans compile without testable access")
-    func environmentLifecycleCompiles() {
-
-        let plans: @Sendable (EnvironmentAssessment) throws -> [EnvironmentRemovalPlan] = { assessment in
-            let plans = [
-                EnvironmentRemovalPlan.toolchain(assessment.swiftVersion),
-                try EnvironmentRemovalPlan.staticLinuxSDK(identifier: assessment.staticLinuxSDK.identifier),
-                try EnvironmentRemovalPlan.environment(
-                    toolchain: assessment.swiftVersion,
-                    staticLinuxSDKIdentifier: assessment.staticLinuxSDK.identifier
-                )
-            ]
-            let data = try JSONEncoder().encode(plans[2])
-            _ = try JSONDecoder().decode(EnvironmentRemovalPlan.self, from: data)
-            return plans
-        }
-
-        let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
-            try await SwiftlyKit().prepare(assessment)
-        }
-
-        let remove: @Sendable (EnvironmentRemovalPlan) async throws -> Void = { plan in
-            try await SwiftlyKit.remove(plan)
-        }
-
-        _ = plans
-        _ = staged
-        _ = remove
-    }
-
-    @Test("Removal-plan recording compiles in staged and convenience workflows")
-    func removalPlanRecordingCompiles() {
-
-        let recorder: EnvironmentRemovalPlan.Recorder = { plan in
-            _ = plan
-        }
-        let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
-            try await SwiftlyKit().prepare(assessment, recordRemovalPlan: recorder)
-        }
-        let convenience: @Sendable (URL) async throws -> BuildResult = { packageRoot in
-            try await SwiftlyKit.build(packageRoot, recordRemovalPlan: recorder)
-        }
-
-        _ = staged
-        _ = convenience
-    }
-
-    @Test("Removal-plan inspection compiles without testable access")
-    func removalPlanInspectionCompiles() throws {
-
-        let plan = try EnvironmentRemovalPlan.environment(
-            toolchain: SwiftVersion(major: 6, minor: 3, patch: 3),
-            staticLinuxSDKIdentifier: "swift-6.3.3-RELEASE_static-linux-0.1.0"
-        )
-        for resource in plan.resources {
+        ]
+        let encoded = try JSONEncoder().encode(plans[2])
+        let decoded = try JSONDecoder().decode(EnvironmentRemovalPlan.self, from: encoded)
+        for resource in decoded.resources {
             switch resource {
-                case .toolchain(let version):
-                    _ = version
-
-                case .staticLinuxSDK(let identifier):
-                    _ = identifier
-
-                @unknown default:
-                    break
+                case .toolchain(let toolchain): _ = toolchain
+                case .staticLinuxSDK(let identifier): _ = identifier
+                @unknown default: break
             }
         }
 
-        _ = plan.storage
-    }
-
-    @Test("The convenience SwiftPM environment workflow compiles without testable access")
-    func convenienceSwiftPMEnvironmentCompiles() {
-
-        let workflow: @Sendable (URL, String) async throws -> BuildResult = { packageRoot, token in
-            try await SwiftlyKit.build(
-                packageRoot,
-                swiftPMEnvironment: try SwiftPMEnvironment([
-                    "PKG_CONFIG_PATH": .plain("/opt/linux/lib/pkgconfig"),
-                    "SWIFTPM_REGISTRY_TOKEN": .sensitive(token)
-                ])
-            )
-        }
-        _ = workflow
-    }
-
-    @Test("Structured command observation compiles without testable access")
-    func structuredCommandObservationCompiles() {
-
-        let observer: SwiftlyKitEvent.Handler = { event in
-            switch event {
-                case .progress, .output:
-                    break
-                case .command(let command):
-                    _ = command.executable
-                    _ = command.arguments
-                    _ = command.workingDirectory
-                    _ = command.environment
-                @unknown default:
-                    break
-            }
-        }
-        let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
-            try await SwiftlyKit().prepare(assessment, onEvent: observer)
-        }
-        let convenience: @Sendable (URL) async throws -> BuildResult = { packageRoot in
-            try await SwiftlyKit.build(packageRoot, onEvent: observer)
-        }
-
-        _ = staged
-        _ = convenience
-    }
-
-    @Test("Semantic preparation progress compiles without testable access")
-    func semanticPreparationProgressCompiles() {
-
-        let observer: SwiftlyKitEvent.Handler = { event in
-            switch event {
-                case .progress(let progress):
-                    if case let .preparingEnvironment(component, step) = progress.operation {
-                        _ = component
-                        _ = step
-                    }
-                    _ = progress.detail
-
-                case .command, .output:
-                    break
-
-                @unknown default:
-                    break
-            }
-        }
-
-        _ = observer
-    }
-
-    @Test("SwiftPM shared and scratch storage compile in staged and convenience workflows")
-    func swiftPMStorageCompiles() {
-
-        let cacheDirectory = URL(filePath: "/tmp/swiftlykit-cache")
-        let configurationDirectory = URL(filePath: "/tmp/swiftlykit-configuration")
-        let securityDirectory = URL(filePath: "/tmp/swiftlykit-security")
-        let partial = SwiftPMSharedStorage(cacheDirectory: cacheDirectory)
-        let complete = SwiftPMSharedStorage(
-            cacheDirectory: cacheDirectory,
-            configurationDirectory: configurationDirectory,
-            securityDirectory: securityDirectory
-        )
-
-        let staged: @Sendable (EnvironmentAssessment, SwiftPMSharedStorage) async throws -> LocalBuildEnvironment = {
-            assessment, sharedStorage in
-            try await SwiftlyKit().prepare(
-                assessment,
-                swiftPMSharedStorage: sharedStorage
-            )
-        }
-        let resolution: @Sendable (LocalBuildEnvironment, SwiftPMScratchStorage) async throws -> Void = {
-            environment, scratchStorage in
-            try await SwiftlyKit().resolveDependencies(
-                in: scratchStorage,
-                using: environment
-            )
-        }
-        let request: @Sendable (ExecutableProduct) -> BuildRequest = { product in
+        let request: @Sendable (ExecutableProduct, URL) -> BuildRequest = { product, destination in
             BuildRequest(
                 product,
-                scratchStorage: .directory(URL(filePath: "/tmp/swiftlykit-scratch"))
+                configuration: .release,
+                jobs: 2,
+                scratchStorage: .directory(
+                    destination.deletingLastPathComponent().appending(path: "scratch")
+                ),
+                output: .publish(to: destination, replacingExisting: true, cleanup: .reset),
+                strip: true
             )
         }
-        let convenience: @Sendable (URL, SwiftPMSharedStorage, SwiftPMScratchStorage) async throws -> BuildResult = {
-            packageRoot, sharedStorage, scratchStorage in
-            try await SwiftlyKit.build(
-                packageRoot,
-                scratchStorage: scratchStorage,
-                swiftPMSharedStorage: sharedStorage
-            )
+        let remove: @Sendable (EnvironmentRemovalPlan) async throws -> Void = {
+            try await SwiftlyKit.remove($0, onEvent: observe)
         }
 
-        _ = SwiftPMSharedStorage.standard
-        _ = partial
-        _ = complete
-        _ = staged
-        _ = resolution
+        _ = losslessVersion
+        _ = decoded.storage
         _ = request
-        _ = convenience
-    }
-
-    @Test("Package traits compile in staged and convenience workflows")
-    func swiftPMTraitsCompile() {
-
-        let selection: ([String], Bool) throws(SwiftlyKitError) -> SwiftPMTraits = { names, includingDefaults in
-            try SwiftPMTraits(names, includingDefaults: includingDefaults)
-        }
-        let staged: @Sendable (EnvironmentAssessment) async throws -> LocalBuildEnvironment = { assessment in
-            let traits = try SwiftPMTraits(["Production"], includingDefaults: true)
-            return try await SwiftlyKit().prepare(assessment, swiftPMTraits: traits)
-        }
-        let convenience: @Sendable (URL) async throws -> BuildResult = { packageRoot in
-            try await SwiftlyKit.build(
-                packageRoot,
-                swiftPMTraits: try SwiftPMTraits(["Production"], includingDefaults: false)
-            )
-        }
-
-        _ = selection
-        _ = staged
-        _ = convenience
+        _ = remove
+        _ = SwiftPMSharedStorage.standard
+        _ = SwiftPMScratchStorage.packageDefault
         _ = SwiftPMTraits.packageDefaults
         _ = SwiftPMTraits.none
         _ = SwiftPMTraits.all
     }
 
-    @Test("The convenience API exposes exact toolchain selection and stripping")
-    func convenienceToolchainAndStrippingCompile() {
-
-        let workflow: @Sendable (URL, URL) async throws -> BuildResult = { packageRoot, destination in
-            try await SwiftlyKit.build(
-                packageRoot,
-                toolchain: .exact(SwiftVersion(major: 6, minor: 2, patch: 1)),
-                output: .publish(to: destination),
-                strip: true
-            )
-        }
-        _ = workflow
-    }
-
-    @Test("Concurrent build job limits compile in staged and convenience workflows")
-    func buildJobsCompile() {
-
-        let staged: @Sendable (ExecutableProduct) -> BuildRequest = { product in
-            BuildRequest(product, jobs: 2)
-        }
-        let convenience: @Sendable (URL) async throws -> BuildResult = { packageRoot in
-            try await SwiftlyKit.build(packageRoot, jobs: 2)
-        }
-
-        _ = staged
-        _ = convenience
-    }
-
-    @Test("Compatible environment discovery compiles without testable access")
-    func compatibleEnvironmentDiscoveryCompiles() {
-
-        let workflow: @Sendable (URL, ToolchainSelection) async throws -> EnvironmentAssessment = {
-            packageRoot, selection in
-            let choices = try await SwiftlyKit().compatibleEnvironments(
-                packageRoot,
-                for: .linux(.arm64)
-            )
-            _ = choices.map(\.swiftVersion)
-            return try choices.select(selection)
-        }
-        _ = workflow
-    }
-
-    @Test("Host readiness inspection compiles without testable access")
-    func hostReadinessInspectionCompiles() {
-
-        let inspection: @Sendable () async throws -> HostReadiness = {
-            try await SwiftlyKit.hostReadiness()
-        }
-        _ = inspection
-    }
-
-    @Test("Swift version text conversion compiles without testable access")
-    func swiftVersionTextConversionCompiles() {
-
-        let version = SwiftVersion("6.3.3")
-        let losslessVersion: (any LosslessStringConvertible)? = version
-        _ = losslessVersion
-    }
-
-    @Test("The documented Command Line Tools recovery compiles without testable access")
-    func commandLineToolsRecoveryCompiles() {
-
-        let recovery: @Sendable () async throws -> Void = {
-            try await SwiftlyKit.requestCommandLineToolsInstallation()
-        }
-        _ = recovery
-    }
-
-    @Test("Build output publication and cleanup compile without testable access")
-    func buildStorageLifecycleCompiles() {
-
-        let workflow: @Sendable (URL, LocalBuildEnvironment, ExecutableProduct, URL) async throws -> BuildResult = {
-            packageRoot, environment, product, destination in
-            let kit = SwiftlyKit()
-            let scratchStorage = SwiftPMScratchStorage.directory(packageRoot.appending(path: "scratch"))
-            let request = BuildRequest(
-                product,
-                scratchStorage: scratchStorage,
-                output: .publish(to: destination, cleanup: .reset)
-            )
-            let result = try await kit.build(request, using: environment)
-            _ = result.executable
-            _ = result.resourceBundles
-            _ = result.directory
-            try await kit.cleanBuildArtifacts(in: scratchStorage, using: environment)
-            try await kit.resetBuildStorage(in: scratchStorage, using: environment)
-            return result
-        }
-        _ = workflow
-    }
-
-    @Test("Atomic output replacement compiles without testable access")
-    func outputReplacementCompiles() {
-
-        let output: @Sendable (URL) -> BuildOutput = { destination in
-            .publish(to: destination, replacingExisting: true, cleanup: .reset)
-        }
-        _ = output
-    }
-
 }
 
-private func documentedWorkflow(_ packageRoot: URL) async throws -> BuildResult {
+private func configuredWorkflow(packageRoot: URL, destination: URL, token: String) async throws -> BuildResult {
 
-    let kit = SwiftlyKit()
-    let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))
+    let stateRoot = destination.deletingLastPathComponent().appending(path: "SwiftlyKitState")
+    let storageRoot = stateRoot.appending(path: "swiftly")
+    let sharedRoot = stateRoot.appending(path: "shared")
+    return try await SwiftlyKit.build(
+        packageRoot,
+        product: "Tool",
+        for: .linux(.arm64),
+        toolchain: .exact(SwiftVersion(major: 6, minor: 3, patch: 3)),
+        configuration: .release,
+        jobs: 2,
+        scratchStorage: .directory(stateRoot.appending(path: "scratch")),
+        output: .publish(to: destination, replacingExisting: true, cleanup: .reset),
+        strip: true,
+        swiftPMEnvironment: try SwiftPMEnvironment([
+            "PACKAGE_FLAVOR": .plain("production"),
+            "SWIFTPM_REGISTRY_TOKEN": .sensitive(token),
+            "UNWANTED_PARENT_VALUE": .unset
+        ]),
+        swiftPMTraits: try SwiftPMTraits(["Production"], includingDefaults: true),
+        swiftPMSharedStorage: SwiftPMSharedStorage(
+            cacheDirectory: sharedRoot.appending(path: "cache"),
+            configurationDirectory: sharedRoot.appending(path: "configuration"),
+            securityDirectory: sharedRoot.appending(path: "security")
+        ),
+        environmentStorage: .directory(storageRoot),
+        recordRemovalPlan: { _ in },
+        onEvent: observe
+    )
+}
+
+private func stagedWorkflow(packageRoot: URL, destination: URL) async throws -> BuildResult {
+
+    let kit = SwiftlyKit(environmentStorage: .standard)
+    let choices = try await kit.compatibleEnvironments(packageRoot, for: .linux(.x86_64))
+    _ = choices.map(\.swiftVersion)
+    let assessment = try choices.select(.automatic)
+    _ = assessment.packageRoot
+    _ = assessment.toolsVersion
+    _ = assessment.staticLinuxSDK
+    _ = assessment.isSwiftlyAvailable
+    _ = assessment.isToolchainAvailable
+    _ = assessment.isStaticLinuxSDKAvailable
     _ = assessment.requiresInstallation
-    let environment = try await kit.prepare(assessment)
+
+    let environment = try await kit.prepare(
+        assessment,
+        swiftPMEnvironment: try SwiftPMEnvironment(),
+        swiftPMTraits: .packageDefaults,
+        swiftPMSharedStorage: .standard,
+        recordRemovalPlan: { _ in },
+        onEvent: observe
+    )
     let products = try await kit.executableProducts(using: environment)
     let product = try products.select()
-    let request = BuildRequest(product, configuration: .release)
+    let scratch: SwiftPMScratchStorage = .directory(
+        destination.deletingLastPathComponent().appending(path: "scratch")
+    )
+    let request = BuildRequest(
+        product,
+        scratchStorage: scratch,
+        output: .publish(to: destination)
+    )
+
+    let result: BuildResult
     do {
-        return try await kit.build(request, using: environment)
+        result = try await kit.build(request, using: environment, onEvent: observe)
     } catch SwiftlyKitError.dependencyResolutionRequired {
-        try await kit.resolveDependencies(in: request.scratchStorage, using: environment)
-        return try await kit.build(request, using: environment)
+        try await kit.resolveDependencies(in: scratch, using: environment, onEvent: observe)
+        result = try await kit.build(request, using: environment, onEvent: observe)
+    }
+
+    _ = result.executable
+    _ = result.resourceBundles
+    _ = result.directory
+    try await kit.cleanBuildArtifacts(in: scratch, using: environment, onEvent: observe)
+    try await kit.resetBuildStorage(in: scratch, using: environment, onEvent: observe)
+    return result
+}
+
+private func observe(_ event: SwiftlyKitEvent) async {
+
+    switch event {
+        case .progress(let progress):
+            if case let .preparingEnvironment(component, step) = progress.operation {
+                _ = component
+                _ = step
+            }
+            _ = progress.detail
+
+        case .command(let command):
+            _ = command.executable
+            _ = command.arguments
+            _ = command.workingDirectory
+            _ = command.environment
+
+        case .output(let output):
+            _ = output.stream
+            _ = output.text
+
+        @unknown default:
+            break
     }
 }

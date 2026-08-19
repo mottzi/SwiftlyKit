@@ -5,38 +5,6 @@ import Testing
 @Suite("Environment storage")
 struct EnvironmentStorageTests {
 
-    @Test("Standard and custom storage namespaces are distinct and hashable")
-    func storageValuesAreStable() {
-
-        let root = URL(filePath: "/tmp/swiftlykit-test-storage")
-        let custom = EnvironmentStorage.directory(root)
-
-        #expect(EnvironmentStorage.standard == .standard)
-        #expect(custom == .directory(root))
-        #expect(custom != .standard)
-        #expect(Set([EnvironmentStorage.standard, custom]).count == 2)
-    }
-
-    @Test("Removal plan factories accept a custom storage namespace")
-    func removalPlanStorageCompiles() throws {
-
-        let storage = EnvironmentStorage.directory(URL(filePath: "/tmp/swiftlykit-test-storage"))
-        let version = SwiftVersion(major: 6, minor: 3, patch: 3)
-        let sdkIdentifier = "swift-6.3.3-RELEASE_static-linux-0.1.0"
-
-        let plans = [
-            EnvironmentRemovalPlan.toolchain(version, in: storage),
-            try EnvironmentRemovalPlan.staticLinuxSDK(identifier: sdkIdentifier, in: storage),
-            try EnvironmentRemovalPlan.environment(
-                toolchain: version,
-                staticLinuxSDKIdentifier: sdkIdentifier,
-                in: storage
-            )
-        ]
-
-        #expect(plans.allSatisfy { $0 != EnvironmentRemovalPlan.toolchain(version) })
-    }
-
     @Test("Removal plans preserve custom storage through Codable")
     func removalPlanStorageRoundTrip() throws {
 

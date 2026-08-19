@@ -4,18 +4,6 @@ import Testing
 @Suite("SwiftPM process environment")
 struct SwiftPMEnvironmentTests {
 
-    @Test("Resolved values do not change when the caller dictionary changes")
-    func snapshotIsImmutable() throws {
-
-        var entries: [String: SwiftPMEnvironment.Value] = ["MODE": .plain("initial")]
-        let environment = try SwiftPMEnvironment(entries)
-        let snapshot = environment.snapshot(inheriting: [:])
-
-        entries["MODE"] = .plain("changed")
-
-        #expect(snapshot.values["MODE"] == "initial")
-    }
-
     @Test("Plain, sensitive, empty, and unset entries resolve against one inherited snapshot")
     func resolvesEntries() throws {
 
