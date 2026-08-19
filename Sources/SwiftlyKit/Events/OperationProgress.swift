@@ -1,34 +1,27 @@
-/// Text progress for a current operation and, during preparation, an optional component.
+/// Progress information for one current workflow activity.
 public struct OperationProgress: Sendable {
 
-    /// The current workflow activity.
+    /// The current workflow activity and its preparation context.
     public let operation: Operation
 
-    /// The component being prepared, or `nil` if the activity is not environment preparation.
-    public let component: PreparationComponent?
-
-    /// A human-readable description of the current activity.
+    /// Human-readable diagnostic text for the current activity.
+    /// Consumers must not parse this value.
     public let detail: String
 
-    init(
-        operation: Operation,
-        component: PreparationComponent? = nil,
-        detail: String
-    ) {
+    init(operation: Operation, detail: String) {
         self.operation = operation
-        self.component = component
         self.detail = detail
     }
 
 }
 
 extension OperationProgress {
-    
-    /// A mutating workflow activity that can emit progress.
-    public enum Operation: Sendable {
 
-        /// Installation of a required environment component.
-        case preparingEnvironment
+    /// A mutating workflow activity that can emit progress.
+    public enum Operation: Sendable, Equatable {
+
+        /// Preparation of one required environment component.
+        case preparingEnvironment(component: PreparationComponent, step: PreparationStep)
 
         /// Removal of exact Swiftly-managed environment resources.
         case removingEnvironment
@@ -52,5 +45,22 @@ extension OperationProgress {
         case resettingBuildStorage
 
     }
-    
+
+    /// An environment preparation activity that SwiftlyKit can report.
+    public enum PreparationStep: Sendable {
+
+        /// Download of data for an environment component.
+        case downloading
+
+        /// Verification of an environment component.
+        case verifying
+
+        /// Installation of an environment component.
+        case installing
+
+        /// Initialization of an installed environment component.
+        case initializing
+
+    }
+
 }

@@ -165,7 +165,8 @@ extension EnvironmentPreparer {
 
                 await report(
                     .toolchain,
-                    "Installing Swift \(toolchain) without changing the selected default.",
+                    step: .installing,
+                    detail: "Installing Swift \(toolchain) without changing the selected default.",
                     to: onEvent
                 )
 
@@ -198,7 +199,8 @@ extension EnvironmentPreparer {
 
                 await report(
                     .staticLinuxSDK,
-                    "Installing the matching checksummed Static Linux SDK.",
+                    step: .installing,
+                    detail: "Installing the matching checksummed Static Linux SDK.",
                     to: onEvent
                 )
 
@@ -257,7 +259,12 @@ extension EnvironmentPreparer {
 
         let packageURL = stagingDirectory.appending(path: "swiftly.pkg")
 
-        await report(.swiftly, "Downloading the official Swiftly installer from Swift.org.", to: onEvent)
+        await report(
+            .swiftly,
+            step: .downloading,
+            detail: "Downloading the official Swiftly installer from Swift.org.",
+            to: onEvent
+        )
 
         do {
             try await downloadPackage(Self.officialPackageURL, packageURL)
@@ -270,7 +277,12 @@ extension EnvironmentPreparer {
             throw EnvironmentPreparationError.downloadFailed
         }
 
-        await report(.swiftly, "Verifying the installer signature and Apple trust.", to: onEvent)
+        await report(
+            .swiftly,
+            step: .verifying,
+            detail: "Verifying the installer signature and Apple trust.",
+            to: onEvent
+        )
 
         let verifySignatureCommand = SubprocessCommand(
             executableURL: URL(filePath: "/usr/sbin/pkgutil"),
@@ -291,7 +303,12 @@ extension EnvironmentPreparer {
         let location = try storage.resolved(homeDirectory: homeDirectory)
 
         if case .standard = storage {
-            await report(.swiftly, "Installing Swiftly for the current user.", to: onEvent)
+            await report(
+                .swiftly,
+                step: .installing,
+                detail: "Installing Swiftly for the current user.",
+                to: onEvent
+            )
 
             let installPackageCommand = SubprocessCommand(
                 executableURL: URL(filePath: "/usr/sbin/installer"),
@@ -300,7 +317,12 @@ extension EnvironmentPreparer {
             )
             try await checkedRun(installPackageCommand, onEvent: onEvent)
         } else {
-            await report(.swiftly, "Installing Swiftly in the selected storage namespace.", to: onEvent)
+            await report(
+                .swiftly,
+                step: .installing,
+                detail: "Installing Swiftly in the selected storage namespace.",
+                to: onEvent
+            )
             try await installCustomSwiftly(
                 packageURL: packageURL,
                 stagingDirectory: stagingDirectory,
@@ -311,7 +333,8 @@ extension EnvironmentPreparer {
 
         await report(
             .swiftly,
-            "Initializing Swiftly without modifying shell profiles or selecting a toolchain.",
+            step: .initializing,
+            detail: "Initializing Swiftly without modifying shell profiles or selecting a toolchain.",
             to: onEvent
         )
 
@@ -459,11 +482,15 @@ extension EnvironmentPreparer {
         }
     }
 
-    private func report(_ component: PreparationComponent, _ detail: String, to handler: SwiftlyKitEvent.Handler?) async {
+    private func report(
+        _ component: PreparationComponent,
+        step: OperationProgress.PreparationStep,
+        detail: String,
+        to handler: SwiftlyKitEvent.Handler?
+    ) async {
 
         let progress = OperationProgress(
-            operation: .preparingEnvironment,
-            component: component,
+            operation: .preparingEnvironment(component: component, step: step),
             detail: detail
         )
         

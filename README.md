@@ -510,6 +510,26 @@ events contain standard output and standard error from delegated commands.
 SwiftlyKit does not report a percentage when the underlying tool cannot supply
 a reliable value.
 
+Environment preparation progress contains a semantic component and step. Use
+these values for application state and localization. Use `detail` only as
+human-readable diagnostic text:
+
+```swift
+if case .progress(let progress) = event {
+    switch progress.operation {
+    case .preparingEnvironment(let component, let step):
+        model.currentPreparation = (component, step)
+
+    default:
+        model.diagnostic = progress.detail
+    }
+}
+```
+
+A progress event announces an activity before SwiftlyKit attempts it. It does
+not report that the activity started or completed. The operation's return or
+thrown error reports the terminal outcome.
+
 ## Build result and verification
 
 SwiftlyKit supports these Linux Musl targets:

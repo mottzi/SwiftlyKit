@@ -110,6 +110,10 @@ struct EnvironmentPreparerTests {
             #expect(event.workingDirectory == command.workingDirectory)
             #expect(event.environment == nil)
         }
+        #expect(await events.preparations == [
+            RecordedPreparation(component: .toolchain, step: .installing),
+            RecordedPreparation(component: .staticLinuxSDK, step: .installing)
+        ])
     }
 
     @Test("Custom environment storage reaches toolchain and SDK installation commands")
@@ -681,6 +685,12 @@ struct EnvironmentPreparerTests {
                 #expect(event.workingDirectory == command.workingDirectory)
                 #expect(event.environment == command.environment)
             }
+            #expect(await events.preparations == [
+                RecordedPreparation(component: .swiftly, step: .downloading),
+                RecordedPreparation(component: .swiftly, step: .verifying),
+                RecordedPreparation(component: .swiftly, step: .installing),
+                RecordedPreparation(component: .swiftly, step: .initializing)
+            ])
         }
     }
 
@@ -922,15 +932,28 @@ private actor PlanRecorder {
 private actor PreparationEventRecorder {
 
     private(set) var commands: [CommandInvocation] = []
+    private(set) var preparations: [RecordedPreparation] = []
 
     func record(_ event: SwiftlyKitEvent) {
         switch event {
-            case .progress, .output:
-                break
+            case .progress(let progress):
+                guard case let .preparingEnvironment(component, step) = progress.operation else { return }
+                preparations.append(RecordedPreparation(component: component, step: step))
+
             case .command(let command):
                 commands.append(command)
+
+            case .output:
+                break
         }
     }
+
+}
+
+private struct RecordedPreparation: Equatable {
+
+    let component: PreparationComponent
+    let step: OperationProgress.PreparationStep
 
 }
 

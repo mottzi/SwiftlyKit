@@ -1,7 +1,7 @@
 /// A progress, command, or subprocess output event from a mutating SwiftlyKit operation.
 public enum SwiftlyKitEvent: Sendable {
 
-    /// Reports the current workflow activity and optional preparation component.
+    /// Reports the current workflow activity and human-readable detail.
     case progress(OperationProgress)
 
     /// Reports a delegated command before SwiftlyKit attempts to start it.

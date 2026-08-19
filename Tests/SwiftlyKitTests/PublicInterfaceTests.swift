@@ -149,6 +149,29 @@ struct PublicInterfaceTests {
         _ = fastTrack
     }
 
+    @Test("Semantic preparation progress compiles without testable access")
+    func semanticPreparationProgressCompiles() {
+
+        let observer: SwiftlyKitEvent.Handler = { event in
+            switch event {
+                case .progress(let progress):
+                    if case let .preparingEnvironment(component, step) = progress.operation {
+                        _ = component
+                        _ = step
+                    }
+                    _ = progress.detail
+
+                case .command, .output:
+                    break
+
+                @unknown default:
+                    break
+            }
+        }
+
+        _ = observer
+    }
+
     @Test("SwiftPM shared and scratch storage compile in staged and fast-track workflows")
     func swiftPMStorageCompiles() {
 
