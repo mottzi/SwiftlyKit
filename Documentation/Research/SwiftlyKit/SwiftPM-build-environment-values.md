@@ -264,7 +264,7 @@ The implementation uses the smallest coherent workflow-level design:
 1. `SwiftPMEnvironment` describes additions, sensitive additions, and inherited
    removals. It validates names and values before any workflow starts.
 2. `prepare` captures the host environment once and stores the resolved snapshot
-   privately in `LocalBuildEnvironment`. The fast track performs the same
+   privately in `LocalBuildEnvironment`. The convenience API performs the same
    binding.
 3. Package inspection, graph discovery, explicit resolution, build, bin-path
    lookup, clean, and reset use the identical snapshot. Swiftly preparation,

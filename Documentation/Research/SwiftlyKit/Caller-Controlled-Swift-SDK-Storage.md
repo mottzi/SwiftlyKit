@@ -399,7 +399,7 @@ upstream regression is detected immediately.
    and remove command; never fall back to the standard registry.
 6. Keep standard mode behavior unchanged.
 7. Keep the exact one-SDK build selection directory.
-8. Carry the namespace through both staged and fast-track workflows and through
+8. Carry the namespace through both staged and convenience workflows and through
    persisted removal plans.
 9. Verify remote checksum rejection, duplicate handling, custom-root discovery,
    custom-root removal, cancellation, recorder failure, and standard/custom

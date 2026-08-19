@@ -90,7 +90,7 @@ let result = try await SwiftlyKit.build(packageRoot)
 print(result.executable.path)
 ```
 
-This fast track:
+This convenience API:
 
 - selects the package's only executable product;
 - targets x86-64 Linux;
@@ -145,7 +145,7 @@ let result = try await SwiftlyKit.build(
 ```
 
 > [!IMPORTANT]
-> The fast track authorizes SwiftlyKit to install Swiftly, the selected
+> The convenience API authorizes SwiftlyKit to install Swiftly, the selected
 > toolchain, and its SDK when required. It can also resolve dependencies and
 > update `Package.resolved`. Use the staged workflow when your app must show or
 > approve these changes first.
@@ -156,10 +156,10 @@ SwiftlyKit provides two workflows. Both use the same build pipeline.
 
 | Workflow | Use it when |
 | --- | --- |
-| Fast track | The caller can authorize the complete operation with one `async` call. |
+| Convenience API | The caller can authorize the complete operation with one `async` call. |
 | Staged workflow | The caller must inspect requirements, ask for approval, select a product, or control dependency resolution. |
 
-The fast track performs assessment, preparation, product discovery, dependency
+The convenience API performs assessment, preparation, product discovery, dependency
 resolution when required, and the build. The staged workflow exposes these
 operations separately.
 
@@ -283,7 +283,7 @@ compilation. It withholds the result if relevant package state changes. See
 
 ## Build and environment configuration
 
-The defaults support the common fast-track build. Use the following options
+The defaults support the common convenience build. Use the following options
 when the consumer needs more control.
 
 ### Build request options
@@ -358,7 +358,7 @@ let assessment = try await kit.assess(packageRoot, for: .linux(.arm64))
 let environment = try await kit.prepare(assessment)
 ```
 
-The fast track accepts the same option:
+The convenience API accepts the same option:
 
 ```swift
 let result = try await SwiftlyKit.build(
@@ -571,7 +571,7 @@ target.
 ## Lifecycle and operational behavior
 
 The following sections cover approval recovery, host recovery, and runtime
-safety. Most fast-track consumers do not need these interfaces.
+safety. Most convenience API consumers do not need these interfaces.
 
 ### Removal plans
 
@@ -590,7 +590,7 @@ let environment = try await kit.prepare(
 )
 ```
 
-The fast track accepts the same recorder. SwiftlyKit awaits the recorder before
+The convenience API accepts the same recorder. SwiftlyKit awaits the recorder before
 each toolchain or SDK installation command. Store each call as the latest plan.
 If the recorder throws, SwiftlyKit does not start that installation command.
 
@@ -701,7 +701,7 @@ before stripping, publication, and cleanup.
 
 All long operations are `async throws` functions. Across cooperating SwiftlyKit
 processes for one macOS user, only one preparation, removal, dependency
-resolution, build, or cleanup operation runs at a time. The fast track holds
+resolution, build, or cleanup operation runs at a time. The convenience API holds
 this coordination for its complete workflow. Assessment and product discovery
 remain concurrent and read-only.
 
@@ -775,7 +775,7 @@ Common control-flow errors include:
 
 | Type | Purpose |
 | --- | --- |
-| `SwiftlyKit` | Provides host inspection, the fast track, staged operations, and explicit removal. |
+| `SwiftlyKit` | Provides host inspection, the convenience API, staged operations, and explicit removal. |
 | `EnvironmentChoices`, `EnvironmentAssessment` | Describe compatible environments, the selected environment, and required installations. |
 | `LocalBuildEnvironment` | Binds later operations to one prepared package and environment. |
 | `ExecutableProducts`, `ExecutableProduct` | List executable products and select one product. |

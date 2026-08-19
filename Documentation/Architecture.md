@@ -1,6 +1,6 @@
 # SwiftlyKit architecture
 
-SwiftlyKit exposes one public facade with a convenience fast track and a staged
+SwiftlyKit exposes one public facade with a convenience API and a staged
 workflow. Each facade captures one immutable `EnvironmentStorage` choice. Both
 routes use the same internal workflow components:
 `EnvironmentAssessor`, `EnvironmentPreparer`, `EnvironmentRemover`, and `SwiftPM`.
@@ -37,10 +37,10 @@ flowchart LR
 
 ## Public workflows
 
-The static `SwiftlyKit.build` fast track creates a `SwiftlyKit` value with its
+The static convenience API, `SwiftlyKit.build`, creates a `SwiftlyKit` value with its
 `environmentStorage` choice and runs the staged operations in order: assess,
 prepare, discover products, select one, and build. If the build reports that
-dependency resolution is required, the fast track resolves once and retries
+dependency resolution is required, the convenience API resolves once and retries
 the build. It is orchestration over the staged interface, not a separate build
 pipeline. Both paths accept the same optional `recordRemovalPlan` callback for
 toolchain and SDK installation, and retain their natural throwing result types.
@@ -98,7 +98,7 @@ installation completion. The consumer retries readiness inspection or
 assessment after the user finishes the system interaction.
 
 For one macOS user, every production `SwiftlyKit` facade value and static
-fast-track call that uses coordination protocol v1 admits at most one mutating
+convenience API call that uses coordination protocol v1 admits at most one mutating
 public operation at a time. One cancellation-aware `MutationGate` provides FIFO
 admission inside one process. Before an admitted mutation starts, the gate opens
 the stable user-scoped file at
@@ -127,7 +127,7 @@ cannot be mutated concurrently by cooperating SwiftlyKit processes for the same
 user.
 
 Preparation, removal, dependency resolution, builds, and explicit cleanup each hold one
-lease for their complete public operation. The static fast track holds one lease
+lease for their complete public operation. The static convenience API holds one lease
 across assessment, preparation, product discovery, dependency resolution, build,
 parent-side inspection, optional stripping, output publication, and requested
 cleanup. Its private under-lease mechanics do not reacquire the gate. Another
@@ -197,7 +197,7 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 
 ## Implementation map
 
-- `SwiftlyKit.swift` is the public facade, fast-track orchestrator, and interface
+- `SwiftlyKit.swift` is the public facade, convenience API orchestrator, and interface
   that maps internal failures to `SwiftlyKitError`.
 - `MutationGate.swift` combines process-local FIFO admission with a persistent
   user-scoped advisory file lock for complete public mutating workflows.
@@ -249,8 +249,10 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - `SwiftPM/Output` owns ELF verification, exact linked runtime-resource
   discovery, trusted-local resource-tree validation, staged executable
   transformation, and atomic complete-directory publication.
-- `SwiftPM/SourceStability` owns resolved-graph source discovery, canonical path
-  identity, deterministic snapshots, recursive event observation, and the
+- `Filesystem` owns domain-independent canonical file identity and path-overlap
+  comparison shared by environment and SwiftPM workflows.
+- `SwiftPM/SourceStability` owns resolved-graph source discovery, deterministic
+  snapshots, recursive event observation, and the
   build-scoped accept-or-withhold decision.
 - `SwiftPM/Storage` converts a public `SwiftPMScratchStorage` choice into a
   canonical, safety-checked scratch directory and hides the retained exact-SDK
@@ -266,7 +268,7 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   callers.
 - All production facade values and cooperating SwiftlyKit processes for one user
   share one mutation lease. Uncooperative tools do not share this invariant.
-- The static fast track holds one lease for its complete workflow. Staged
+- The static convenience API holds one lease for its complete workflow. Staged
   mutations each hold one lease for the duration of that public call.
 - The Command Line Tools installer is requested only through the explicit public
   recovery operation. It is not part of assessment or preparation, and success
@@ -352,12 +354,12 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   another process wins atomic link creation, SwiftlyKit verifies and reuses that
   exact selection; conflicting filesystem state is never accepted.
 - Product discovery and builds disable automatic dependency resolution. Staged
-  builds surface a structured resolution-required error; only the fast track
+  builds surface a structured resolution-required error; only the convenience API
   performs the explicit resolve-and-retry sequence. Staged resolution accepts
-  its own scratch selection, while the fast track reuses its build scratch.
+  its own scratch selection, while the convenience API reuses its build scratch.
 - Executable products are unique and ordered by name. Named and sole-product
   selection use the same `ExecutableProducts.select` behavior in staged and
-  fast-track workflows.
+  convenience workflows.
 - Internal SwiftPM failures are classified structurally before becoming public
   `SwiftlyKitError` values. Collected subprocess output and surfaced diagnostics
   are bounded.
