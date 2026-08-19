@@ -31,7 +31,7 @@ struct SwiftlyKitWorkflowTests {
                 target: .linux(.arm64)
             )
             let kit = SwiftlyKit(
-                mutationGate: .shared,
+                mutationGate: testMutationGate(in: packageRoot),
                 assessor: EnvironmentAssessor(),
                 preparer: EnvironmentPreparer(
                     assessHost: { .ready },
@@ -82,7 +82,7 @@ struct SwiftlyKitWorkflowTests {
             let swiftly = SwiftlyInstallation(executableURL: packageRoot.appending(path: "swiftly"))
             let runner = RecordingSubprocessRunner(results: [.success()])
             let kit = SwiftlyKit(
-                mutationGate: .shared,
+                mutationGate: testMutationGate(in: packageRoot),
                 assessor: EnvironmentAssessor(),
                 preparer: EnvironmentPreparer(
                     runner: runner,
@@ -141,7 +141,7 @@ struct SwiftlyKitWorkflowTests {
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"]))
             ])
             let kit = SwiftlyKit(
-                mutationGate: .shared,
+                mutationGate: testMutationGate(in: packageRoot),
                 assessor: testEnvironmentAssessor(
                     inventory: inventory,
                     isSwiftlyAvailable: true,
@@ -272,8 +272,15 @@ struct SwiftlyKitWorkflowTests {
             let executable = packageRoot.appending(path: "Tool")
             try writeELF(to: executable, architecture: .arm64)
             let runner = WorkflowMutationRunner(binaryDirectory: packageRoot)
-            let firstKit = workflowKit(runner: runner)
-            let secondKit = workflowKit(runner: runner)
+            let lockFile = packageRoot.appending(path: "mutation.lock")
+            let firstKit = workflowKit(
+                gate: MutationGate(lockFile: lockFile),
+                runner: runner
+            )
+            let secondKit = workflowKit(
+                gate: MutationGate(lockFile: lockFile),
+                runner: runner
+            )
             let environment = LocalBuildEnvironment(
                 swiftVersion: SwiftVersion(major: 6, minor: 2, patch: 1),
                 staticLinuxSDK: StaticLinuxSDK(
@@ -412,10 +419,10 @@ private actor WorkflowMutationRunner: SubprocessRunning {
 
 }
 
-private func workflowKit(runner: WorkflowMutationRunner) -> SwiftlyKit {
+private func workflowKit(gate: MutationGate, runner: WorkflowMutationRunner) -> SwiftlyKit {
 
     SwiftlyKit(
-        mutationGate: .shared,
+        mutationGate: gate,
         assessor: EnvironmentAssessor(),
         preparer: EnvironmentPreparer(),
         swiftPM: SwiftPM(
@@ -423,6 +430,12 @@ private func workflowKit(runner: WorkflowMutationRunner) -> SwiftlyKit {
             validateEnvironment: { _ in }
         ),
         remover: EnvironmentRemover()
+    )
+}
+
+private func testMutationGate(in packageRoot: URL) -> MutationGate {
+    MutationGate(
+        lockFile: packageRoot.appending(path: ".swiftlykit-test-mutation.lock")
     )
 }
 

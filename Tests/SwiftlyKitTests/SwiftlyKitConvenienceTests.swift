@@ -543,7 +543,9 @@ private func convenienceKit(
     }
 
     return SwiftlyKit(
-        mutationGate: .shared,
+        mutationGate: MutationGate(
+            lockFile: packageRoot.appending(path: ".swiftlykit-test-mutation.lock")
+        ),
         assessor: testEnvironmentAssessor(
             environmentStorage: environmentStorage,
             inventory: inventory,
