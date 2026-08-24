@@ -72,6 +72,11 @@ You must use ASD-STE100 Simplified Technical English for comments.
 
 - Place `///` above function, class, or other declarations. Describe the
   declaration's high-level systemic purpose, macro behavior, or side effects.
+- For SwiftUI views, styles, and modifiers, describe the user-visible
+  affordance, interaction feedback, or state transition encoded by the
+  declaration. Do not restate implementation details such as drawing a view,
+  setting opacity, or selecting a color. Omit comments when the UI behavior is
+  already clear from the code.
 - Use `//` only inside function bodies for local mechanical actions specific to
   the immediately following code.
 - Document types with direct noun phrases; omit filler openings such as “Defines
