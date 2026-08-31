@@ -7,7 +7,7 @@ struct SwiftPMBuildOutput {
     let resourceBundles: [URL]
 
     /// Finds the selected executable and verifies its exact linked resources in a SwiftPM binary directory.
-    ///
+    /// Returns an executable-only output when no resource candidates exist.
     /// The method does not read private SwiftPM link metadata when the directory has no `.resources` candidates.
     static func inspect(product: String, in binaryDirectory: URL) throws -> SwiftPMBuildOutput {
 

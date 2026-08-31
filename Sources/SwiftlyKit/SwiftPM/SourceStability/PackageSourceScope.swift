@@ -2,6 +2,7 @@ import Foundation
 
 /// Canonical roots and inclusion rules for one package-source observation.
 ///
+/// Recreated scopes resolve the current symlink targets.
 /// A scope is intentionally cheap to recreate. Callers that observe a package
 /// for a period of time can retain the scope used to start their monitor, while
 /// snapshot captures should create a fresh scope so that changing symlinked
@@ -21,6 +22,7 @@ struct PackageSourceScope: Sendable {
 
     /// Whether a canonical path is inside an observed root after exclusions.
     ///
+    /// Returns false for paths outside all observed roots.
     /// A more deeply nested observed root takes precedence over an exclusion,
     /// which allows resolved dependency roots under package scratch storage to
     /// remain observable.
