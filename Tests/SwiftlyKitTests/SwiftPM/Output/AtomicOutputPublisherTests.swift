@@ -15,11 +15,15 @@ struct AtomicOutputPublisherTests {
             try Data("executable".utf8).write(to: source)
 
             let result = try await AtomicOutputPublisher.publish(
-                SwiftPMBuildOutput(executable: source, resourceBundles: []),
+                executable: source,
+                executableName: "Tool",
+                resourceBundles: [],
+                architecture: .x86_64,
                 to: destination
             )
 
             #expect(result.executable == destination.appending(path: "Tool"))
+            #expect(result.executableName == "Tool")
             #expect(result.resourceBundles.isEmpty)
             #expect(result.directory == destination)
             #expect(try Data(contentsOf: result.executable) == Data("executable".utf8))
@@ -40,7 +44,10 @@ struct AtomicOutputPublisherTests {
             let destination = directory.appending(path: "Published", directoryHint: .isDirectory)
 
             let result = try await AtomicOutputPublisher.publish(
-                SwiftPMBuildOutput(executable: executable, resourceBundles: [bundle]),
+                executable: executable,
+                executableName: "Tool",
+                resourceBundles: [bundle],
+                architecture: .x86_64,
                 to: destination,
                 prepareExecutable: { stagedExecutable in
                     try Data("prepared executable".utf8).write(to: stagedExecutable)
@@ -76,7 +83,10 @@ struct AtomicOutputPublisherTests {
                     group.addTask {
                         do {
                             _ = try await AtomicOutputPublisher.publish(
-                                SwiftPMBuildOutput(executable: source, resourceBundles: []),
+                                executable: source,
+                                executableName: "Tool",
+                                resourceBundles: [],
+                                architecture: .x86_64,
                                 to: destination
                             )
                             return .published
@@ -107,9 +117,12 @@ struct AtomicOutputPublisherTests {
             try Data("old".utf8).write(to: destination.appending(path: "OldTool"))
 
             _ = try await AtomicOutputPublisher.publish(
-                SwiftPMBuildOutput(executable: source, resourceBundles: []),
+                executable: source,
+                executableName: "Tool",
+                resourceBundles: [],
+                architecture: .x86_64,
                 to: destination,
-                replacingExisting: true
+                destinationPolicy: .replace
             )
 
             #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path()) == ["Tool"])
@@ -129,9 +142,12 @@ struct AtomicOutputPublisherTests {
 
             await #expect(throws: PublicationPreparationError.failed) {
                 try await AtomicOutputPublisher.publish(
-                    SwiftPMBuildOutput(executable: source, resourceBundles: []),
+                    executable: source,
+                    executableName: "Tool",
+                    resourceBundles: [],
+                    architecture: .x86_64,
                     to: destination,
-                    replacingExisting: true,
+                    destinationPolicy: .replace,
                     prepareExecutable: { _ in throw PublicationPreparationError.failed }
                 )
             }
@@ -160,7 +176,10 @@ struct AtomicOutputPublisherTests {
 
             await #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
                 try await AtomicOutputPublisher.publish(
-                    SwiftPMBuildOutput(executable: executable, resourceBundles: [bundle]),
+                    executable: executable,
+                    executableName: "Tool",
+                    resourceBundles: [bundle],
+                    architecture: .x86_64,
                     to: destination
                 )
             }
@@ -172,7 +191,10 @@ struct AtomicOutputPublisherTests {
             try FileManager.default.linkItem(at: asset, to: bundle.appending(path: "hard-linked"))
             await #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
                 try await AtomicOutputPublisher.publish(
-                    SwiftPMBuildOutput(executable: executable, resourceBundles: [bundle]),
+                    executable: executable,
+                    executableName: "Tool",
+                    resourceBundles: [bundle],
+                    architecture: .x86_64,
                     to: destination
                 )
             }
@@ -182,7 +204,10 @@ struct AtomicOutputPublisherTests {
             #expect(mkfifo(pipe.path(percentEncoded: false), 0o600) == 0)
             await #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
                 try await AtomicOutputPublisher.publish(
-                    SwiftPMBuildOutput(executable: executable, resourceBundles: [bundle]),
+                    executable: executable,
+                    executableName: "Tool",
+                    resourceBundles: [bundle],
+                    architecture: .x86_64,
                     to: destination
                 )
             }
@@ -204,7 +229,10 @@ struct AtomicOutputPublisherTests {
 
             await #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
                 try await AtomicOutputPublisher.publish(
-                    SwiftPMBuildOutput(executable: executable, resourceBundles: [bundle]),
+                    executable: executable,
+                    executableName: "Tool",
+                    resourceBundles: [bundle],
+                    architecture: .x86_64,
                     to: destination,
                     prepareExecutable: { stagedExecutable in
                         let stagedBundle = stagedExecutable

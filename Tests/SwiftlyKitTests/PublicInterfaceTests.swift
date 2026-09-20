@@ -71,11 +71,19 @@ struct PublicInterfaceTests {
         let remove: @Sendable (EnvironmentRemovalPlan) async throws -> Void = {
             try await SwiftlyKit.remove($0, onEvent: observe)
         }
+        let publish: @Sendable (BuildResult, URL) async throws -> BuildResult = {
+            try await $0.publish(to: $1)
+        }
+        let publishIntoDirectory: @Sendable (BuildResult, URL) async throws -> BuildResult = {
+            try await $0.publish(into: $1)
+        }
 
         _ = losslessVersion
         _ = decoded.storage
         _ = request
         _ = remove
+        _ = publish
+        _ = publishIntoDirectory
         _ = SwiftPMSharedStorage.standard
         _ = SwiftPMScratchStorage.packageDefault
         _ = SwiftPMTraits.packageDefaults
@@ -159,6 +167,7 @@ private func stagedWorkflow(packageRoot: URL, destination: URL) async throws -> 
     }
 
     _ = result.executable
+    _ = result.executableName
     _ = result.resourceBundles
     _ = result.directory
     try await kit.cleanBuildArtifacts(in: scratch, using: environment, onEvent: observe)

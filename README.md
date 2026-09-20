@@ -102,10 +102,21 @@ let result = try await SwiftlyKit.build(
 )
 ```
 
-The destination's parent directory must exist. SwiftlyKit publishes the complete
-directory only after the build, optional stripping, and verification succeed.
-It refuses to replace an existing destination unless you pass
-`replacingExisting: true`.
+You can also publish an existing build result without rebuilding:
+
+```swift
+let built = try await SwiftlyKit.build(packageRoot, product: "MyTool", strip: true)
+let result = try await built.publish(to: destination)
+```
+
+The destination's parent directory must exist. Both paths stage and validate the
+complete directory before publishing it. SwiftlyKit refuses to replace an
+existing destination unless you pass `replacingExisting: true`. Post-build
+publication uses the same cross-process mutation coordination as other SwiftlyKit workflows.
+
+For a folder selected by the user, call `built.publish(into: destination)`.
+The folder must still be empty when publication commits. SwiftlyKit preserves
+its contents if another process adds a file first.
 
 Keep `result.executable` and every URL in `result.resourceBundles` together. A
 published `result.directory` contains only those runnable files. A result in

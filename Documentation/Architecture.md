@@ -363,10 +363,10 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - Internal SwiftPM failures are classified structurally before becoming public
   `SwiftlyKitError` values. Collected subprocess output and surfaced diagnostics
   are bounded.
-- A public `BuildResult` identifies the final executable, its exact verified
-  runtime resource bundles in stable name order, and their computed common
-  directory. The executable must be a static, little-endian ELF64 file for the
-  requested architecture. Stripped results are verified again.
+- A public `BuildResult` identifies the final executable, its publication name,
+  its exact verified runtime resource bundles in stable name order, and their
+  computed common directory. The executable must be a static, little-endian
+  ELF64 file for the requested architecture. Stripped results are verified again.
 - Runtime resource ownership comes only from the selected product's final link
   file and the linked modules' generated resource accessors. Unrelated stale
   sibling bundles are ignored. Missing, escaping, symbolic-link, malformed, or
@@ -392,7 +392,10 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   complete directory with one executable and only its exact linked bundles. An
   exclusive rename provides create-only publication. A rename swap provides
   atomic replacement of an existing nonempty destination before the prior tree
-  is removed. A caller moves or deploys this directory as one unit.
+  is removed. `BuildResult.publish(to:replacingExisting:)` uses the same
+  implementation after a build without rebuilding or stripping again.
+  `BuildResult.publish(into:)` commits only if its existing destination is still
+  empty. A caller moves or deploys the published directory as one unit.
 - Cleanup starts only after successful publication. If cleanup fails, the
   published directory remains and the error identifies that directory.
 - SwiftPM provides no stable runtime-resource enumeration interface. The output

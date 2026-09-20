@@ -110,6 +110,7 @@ struct SwiftPMTests {
 
             let result = try await swiftPM.build(request, using: environment)
             #expect(result.executable == executable)
+            #expect(result.executableName == "Tool")
             #expect(result.resourceBundles.isEmpty)
             #expect(result.directory.pathComponents == directory.pathComponents)
             let commands = await runner.commands
@@ -768,6 +769,7 @@ struct SwiftPMTests {
             )
 
             #expect(result.executable == publication.appending(path: "Tool"))
+            #expect(result.executableName == "Tool")
             #expect(result.resourceBundles == [
                 publication.appending(path: "Dependency_Assets.resources", directoryHint: .isDirectory)
             ])
@@ -1076,6 +1078,7 @@ struct SwiftPMTests {
             )
 
             #expect(result.executable == strippedExecutable)
+            #expect(result.executableName == "Tool")
             #expect(result.resourceBundles.map(\.pathComponents) == [resources.pathComponents])
             #expect(try Data(contentsOf: executable) == originalBytes)
             #expect(try Data(contentsOf: strippedExecutable) == originalBytes)

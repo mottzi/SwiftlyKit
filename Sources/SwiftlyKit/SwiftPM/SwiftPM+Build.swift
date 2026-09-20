@@ -123,7 +123,9 @@ extension SwiftPM {
                 guard request.strip else {
                     return BuildResult(
                         executable: executable,
-                        resourceBundles: output.resourceBundles
+                        executableName: output.executable.lastPathComponent,
+                        resourceBundles: output.resourceBundles,
+                        architecture: environment.target.architecture
                     )
                 }
 
@@ -141,7 +143,9 @@ extension SwiftPM {
                 )
                 return BuildResult(
                     executable: strippedExecutable,
-                    resourceBundles: output.resourceBundles
+                    executableName: output.executable.lastPathComponent,
+                    resourceBundles: output.resourceBundles,
+                    architecture: environment.target.architecture
                 )
 
             case .publish(let destination, let replacingExisting, let cleanup):
@@ -153,9 +157,12 @@ extension SwiftPM {
                     await report(.publishing, detail: "Publishing \(request.product.name).", to: onEvent)
                 }
                 let result = try await AtomicOutputPublisher.publish(
-                    output,
+                    executable: output.executable,
+                    executableName: output.executable.lastPathComponent,
+                    resourceBundles: output.resourceBundles,
+                    architecture: environment.target.architecture,
                     to: destination,
-                    replacingExisting: replacingExisting,
+                    destinationPolicy: replacingExisting ? .replace : .create,
                     prepareExecutable: { stagedExecutable in
                         if request.strip {
                             try await strip(
