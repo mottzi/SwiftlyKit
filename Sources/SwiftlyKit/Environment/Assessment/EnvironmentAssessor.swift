@@ -250,6 +250,7 @@ struct LocalEnvironmentSnapshot: Sendable {
 
         var components: [PreparationComponent] = []
         if !isSwiftlyAvailable { components.append(.swiftly) }
+        if isSwiftlyAvailable && !toolchainAvailable { components.append(.swiftlyUpdate) }
         if !toolchainAvailable { components.append(.toolchain) }
         if !sdkAvailable { components.append(.staticLinuxSDK) }
 

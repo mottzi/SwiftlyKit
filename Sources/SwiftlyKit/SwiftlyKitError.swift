@@ -156,7 +156,7 @@ extension SwiftlyKitError: LocalizedError {
                 "Swiftly 1.0 or later is required; an existing Swiftly installation is not replaced automatically."
 
             case .swiftlyInstallationFailed(let detail):
-                "Swiftly could not be installed: \(detail)"
+                "Tool installation failed: \(detail)"
 
             case .networkFailure(let detail):
                 "A required download failed: \(detail)"

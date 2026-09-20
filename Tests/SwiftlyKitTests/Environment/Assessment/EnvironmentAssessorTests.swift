@@ -365,7 +365,7 @@ struct EnvironmentAssessorTests {
             let exact = try choices.select(.exact(newer.version))
 
             #expect(choices.map(\.swiftVersion) == [newer.version, older.version])
-            #expect(choices[0].requiredComponents == [.toolchain, .staticLinuxSDK])
+            #expect(choices[0].requiredComponents == [.swiftlyUpdate, .toolchain, .staticLinuxSDK])
             #expect(choices[1].requiredComponents.isEmpty)
             #expect(automatic.swiftVersion == older.version)
             #expect(exact.swiftVersion == newer.version)

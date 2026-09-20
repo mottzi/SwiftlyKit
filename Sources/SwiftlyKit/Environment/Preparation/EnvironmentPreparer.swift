@@ -143,13 +143,6 @@ extension EnvironmentPreparer {
                 guard assessment.requiredComponents.contains(.toolchain)
                 else { throw EnvironmentPreparationError.unauthorizedMutationRequired }
 
-                await report(
-                    .toolchain,
-                    step: .installing,
-                    detail: "Installing Swift \(toolchain) without changing the selected default.",
-                    to: onEvent
-                )
-
                 let installToolchainCommand = SubprocessCommand(
                     executableURL: swiftly.executableURL,
                     arguments: ["install", toolchain.description, "--verify", "--assume-yes"],
@@ -161,7 +154,40 @@ extension EnvironmentPreparer {
                     .toolchain(toolchain, in: assessment.environmentStorage),
                     using: recordRemovalPlan
                 )
-                try await checkedRun(installToolchainCommand, onEvent: onEvent)
+                if assessment.requiredComponents.contains(.swiftlyUpdate) {
+                    await report(
+                        .swiftlyUpdate,
+                        step: .installing,
+                        detail: "Checking for Swiftly updates before installing Swift.",
+                        to: onEvent
+                    )
+                    // let Swiftly check for updates before it constructs toolchain download URLs
+                    let updateCommand = SubprocessCommand(
+                        executableURL: swiftly.executableURL,
+                        arguments: ["self-update", "--assume-yes"],
+                        workingDirectory: temporaryDirectory,
+                        environment: swiftly.processEnvironment
+                    )
+                    let update = try await execute(updateCommand, onEvent: onEvent)
+                    guard update.succeeded else {
+                        throw EnvironmentPreparationError.installationFailed(
+                            "Swiftly update failed: \(Self.installationDiagnostic(update))"
+                        )
+                    }
+                }
+
+                await report(
+                    .toolchain,
+                    step: .installing,
+                    detail: "Installing Swift \(toolchain) without changing the selected default.",
+                    to: onEvent
+                )
+
+                try await checkedRun(
+                    installToolchainCommand,
+                    operation: "Installing Swift \(toolchain) failed.",
+                    onEvent: onEvent
+                )
                 installedToolchain = true
 
                 state = try await preparationState.refresh(assessment)
@@ -208,7 +234,11 @@ extension EnvironmentPreparer {
                     )
                 }
                 try await record(removalPlan, using: recordRemovalPlan)
-                try await checkedRun(installSDKCommand, onEvent: onEvent)
+                try await checkedRun(
+                    installSDKCommand,
+                    operation: "Installing the Static Linux SDK failed.",
+                    onEvent: onEvent
+                )
                 state = try await preparationState.refresh(assessment)
             }
 
@@ -422,10 +452,16 @@ extension EnvironmentPreparer {
         }
     }
 
-    private func checkedRun(_ command: SubprocessCommand, onEvent: SwiftlyKitEvent.Handler?) async throws {
+    private func checkedRun(
+        _ command: SubprocessCommand,
+        operation: String? = nil,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws {
         let result = try await execute(command, onEvent: onEvent)
         guard result.succeeded else {
-            throw EnvironmentPreparationError.installationFailed(Self.bounded(result.combinedOutput))
+            let diagnostic = Self.installationDiagnostic(result)
+            let detail = operation.map { "\($0)\n\(diagnostic)" } ?? diagnostic
+            throw EnvironmentPreparationError.installationFailed(detail)
         }
     }
 
@@ -454,6 +490,14 @@ extension EnvironmentPreparer {
             case let error as InstalledEnvironmentError: return error.swiftlyKitError
             default: return .swiftlyInstallationFailed("An unexpected environment error occurred.")
         }
+    }
+
+    private static func installationDiagnostic(_ result: SubprocessResult) -> String {
+
+        let error = result.standardError.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !error.isEmpty { return Self.bounded(error) }
+        return String(result.standardOutput.suffix(8 * 1024))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func bounded(_ value: String) -> String {

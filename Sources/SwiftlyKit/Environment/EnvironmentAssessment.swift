@@ -1,9 +1,9 @@
 import Foundation
 
-/// A read-only result for one exact build environment and its unavailable components.
+/// A read-only result for one exact build environment and its preparation requirements.
 public struct EnvironmentAssessment: Sendable {
 
-    /// The unavailable components that preparation is authorized to install.
+    /// The installations and conditional updates that preparation is authorized to perform.
     public let requiredComponents: [PreparationComponent]
 
     let packageInputs: PackageInputSnapshot

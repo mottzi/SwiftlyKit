@@ -56,6 +56,7 @@ struct EnvironmentPreparerTests {
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let commands = RecordingSubprocessRunner(results: [
             .success(),
+            .success(),
             .success()
         ])
         let inspections = InventorySequence(inventories: [
@@ -81,7 +82,7 @@ struct EnvironmentPreparerTests {
         let traits = try SwiftPMTraits(["PreparationFeature"], includingDefaults: false)
 
         let environment = try await preparer.prepare(
-            try assessment(requires: [.toolchain, .staticLinuxSDK]),
+            try assessment(requires: [.swiftlyUpdate, .toolchain, .staticLinuxSDK]),
             swiftPMEnvironment: snapshot,
             swiftPMTraits: traits,
             onEvent: { await events.record($0) }
@@ -96,9 +97,10 @@ struct EnvironmentPreparerTests {
         #expect(recorded.allSatisfy { $0.environment == nil })
         #expect(recorded.allSatisfy { $0.sensitiveEnvironmentKeys.isEmpty })
         #expect(recorded.allSatisfy { !$0.arguments.contains("--traits") })
-        #expect(recorded[0].arguments == ["install", "6.2.1", "--verify", "--assume-yes"])
-        #expect(!recorded[0].arguments.contains("--use"))
-        #expect(recorded[1].arguments == [
+        #expect(recorded[0].arguments == ["self-update", "--assume-yes"])
+        #expect(recorded[1].arguments == ["install", "6.2.1", "--verify", "--assume-yes"])
+        #expect(!recorded[1].arguments.contains("--use"))
+        #expect(recorded[2].arguments == [
             "run", "swift", "sdk", "install", sdkMetadata.downloadURL.absoluteString,
             "--checksum", sdkMetadata.checksum, "+6.2.1"
         ])
@@ -111,6 +113,7 @@ struct EnvironmentPreparerTests {
             #expect(event.environment == nil)
         }
         #expect(await events.preparations == [
+            RecordedPreparation(component: .swiftlyUpdate, step: .installing),
             RecordedPreparation(component: .toolchain, step: .installing),
             RecordedPreparation(component: .staticLinuxSDK, step: .installing)
         ])
@@ -134,7 +137,7 @@ struct EnvironmentPreparerTests {
             let plans = PlanRecorder()
             let planCountsAtSDKCommands = CountRecorder()
             let commands = RecordingSubprocessRunner(
-                results: [.success(), .success()],
+                results: [.success(), .success(), .success()],
                 onRun: { command in
                     if command.arguments.contains("sdk") {
                         await planCountsAtSDKCommands.append(await plans.count)
@@ -157,12 +160,12 @@ struct EnvironmentPreparerTests {
             )
 
             _ = try await preparer.prepare(
-                try assessment(requires: [.toolchain, .staticLinuxSDK], environmentStorage: storage),
+                try assessment(requires: [.swiftlyUpdate, .toolchain, .staticLinuxSDK], environmentStorage: storage),
                 recordRemovalPlan: { plan in await plans.append(plan) }
             )
 
             let recorded = await commands.commands
-            #expect(recorded.count == 2)
+            #expect(recorded.count == 3)
             for command in recorded {
                 #expect(preparationPath(command.environment?["SWIFTLY_HOME_DIR"]) == preparationPath(storageRoot))
                 #expect(preparationPath(command.environment?["SWIFTLY_BIN_DIR"]) == preparationPath(
@@ -172,14 +175,14 @@ struct EnvironmentPreparerTests {
                     storageRoot.appending(path: "toolchains")
                 ))
             }
-            #expect(recorded[1].arguments.prefix(7) == [
+            #expect(recorded[2].arguments.prefix(7) == [
                 "run", "swift", "sdk", "install", sdkMetadata.downloadURL.absoluteString,
                 "--checksum", sdkMetadata.checksum
             ])
-            let sdkPathOption = try #require(recorded[1].arguments.firstIndex(of: "--swift-sdks-path"))
-            let sdkPath = try #require(recorded[1].arguments.dropFirst(sdkPathOption + 1).first)
+            let sdkPathOption = try #require(recorded[2].arguments.firstIndex(of: "--swift-sdks-path"))
+            let sdkPath = try #require(recorded[2].arguments.dropFirst(sdkPathOption + 1).first)
             #expect(URL(filePath: sdkPath).pathComponents == storageRoot.appending(path: "swift-sdks").pathComponents)
-            #expect(recorded[1].arguments.suffix(1) == ["+6.2.1"])
+            #expect(recorded[2].arguments.suffix(1) == ["+6.2.1"])
             #expect(await plans.values == [
                 .toolchain(version, in: storage),
                 try .environment(
@@ -220,7 +223,7 @@ struct EnvironmentPreparerTests {
                 revalidate: { _ in }
             )
 
-            await #expect(throws: SwiftlyKitError.swiftlyInstallationFailed("custom registry failed")) {
+            await #expect(throws: SwiftlyKitError.swiftlyInstallationFailed("Installing the Static Linux SDK failed.\ncustom registry failed")) {
                 try await preparer.prepare(
                     try self.assessment(
                         requires: [.staticLinuxSDK],
@@ -317,7 +320,7 @@ struct EnvironmentPreparerTests {
     func successfulInstallationRecordsFullPlan() async throws {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
-        let commands = RecordingSubprocessRunner(results: [.success(), .success()])
+        let commands = RecordingSubprocessRunner(results: [.success(), .success(), .success()])
         let inspections = InventorySequence(inventories: [
             inventory(includesToolchain: false, includesSDK: false),
             inventory(includesToolchain: true, includesSDK: false),
@@ -334,7 +337,7 @@ struct EnvironmentPreparerTests {
 
         let plans = PlanRecorder()
         _ = try await preparer.prepare(
-            try assessment(requires: [.toolchain, .staticLinuxSDK]),
+            try assessment(requires: [.swiftlyUpdate, .toolchain, .staticLinuxSDK]),
             recordRemovalPlan: { plan in await plans.append(plan) }
         )
 
@@ -386,7 +389,7 @@ struct EnvironmentPreparerTests {
 
         await #expect(throws: EnvironmentPlanRecordingError.self) {
             try await preparer.prepare(
-                try assessment(requires: [.toolchain]),
+                try assessment(requires: [.swiftlyUpdate, .toolchain]),
                 recordRemovalPlan: { _ in throw RecorderRefusal() }
             )
         }
@@ -397,7 +400,7 @@ struct EnvironmentPreparerTests {
     func widenedRecorderRefusalPreventsSDKMutation() async throws {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
-        let commands = RecordingSubprocessRunner(results: [.success()])
+        let commands = RecordingSubprocessRunner(results: [.success(), .success()])
         let inspections = InventorySequence(inventories: [
             inventory(includesToolchain: false, includesSDK: false),
             inventory(includesToolchain: true, includesSDK: false)
@@ -417,7 +420,7 @@ struct EnvironmentPreparerTests {
 
         await #expect(throws: EnvironmentPlanRecordingError.self) {
             try await preparer.prepare(
-                try assessment(requires: [.toolchain, .staticLinuxSDK]),
+                try assessment(requires: [.swiftlyUpdate, .toolchain, .staticLinuxSDK]),
                 recordRemovalPlan: { plan in
                     await plans.append(plan)
                     if plan == fullPlan {
@@ -432,6 +435,7 @@ struct EnvironmentPreparerTests {
             try .environment(toolchain: version, staticLinuxSDKIdentifier: sdk.identifier)
         ])
         #expect(await commands.commands.map(\.arguments) == [
+            ["self-update", "--assume-yes"],
             ["install", "6.2.1", "--verify", "--assume-yes"]
         ])
     }
@@ -455,7 +459,7 @@ struct EnvironmentPreparerTests {
         let plans = PlanRecorder()
         await #expect(throws: CancellationError.self) {
             try await preparer.prepare(
-                try assessment(requires: [.toolchain]),
+                try assessment(requires: [.swiftlyUpdate, .toolchain]),
                 recordRemovalPlan: { plan in await plans.append(plan) }
             )
         }
@@ -467,7 +471,7 @@ struct EnvironmentPreparerTests {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
         let commands = RecordingSubprocessRunner(
-            results: [.success()],
+            results: [.success(), .success()],
             onRun: { command in
                 if command.arguments.contains("sdk") { throw CancellationError() }
             }
@@ -487,7 +491,7 @@ struct EnvironmentPreparerTests {
         let plans = PlanRecorder()
         await #expect(throws: CancellationError.self) {
             try await preparer.prepare(
-                try assessment(requires: [.toolchain, .staticLinuxSDK]),
+                try assessment(requires: [.swiftlyUpdate, .toolchain, .staticLinuxSDK]),
                 recordRemovalPlan: { plan in await plans.append(plan) }
             )
         }
@@ -501,7 +505,7 @@ struct EnvironmentPreparerTests {
     func postCommandInspectionFailurePreservesError() async throws {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
-        let commands = RecordingSubprocessRunner(results: [.success()])
+        let commands = RecordingSubprocessRunner(results: [.success(), .success()])
         let inspections = InspectionErrorSequence()
         let preparer = EnvironmentPreparer(
             runner: commands,
@@ -512,7 +516,7 @@ struct EnvironmentPreparerTests {
         )
 
         await #expect(throws: SwiftlyKitError.incompatibleSwiftly) {
-            try await preparer.prepare(try assessment(requires: [.toolchain]))
+            try await preparer.prepare(try assessment(requires: [.swiftlyUpdate, .toolchain]))
         }
     }
 
@@ -525,7 +529,7 @@ struct EnvironmentPreparerTests {
         )
 
         await #expect(throws: SwiftlyKitError.unsupportedHost) {
-            try await preparer.prepare(try assessment(requires: [.toolchain]))
+            try await preparer.prepare(try assessment(requires: [.swiftlyUpdate, .toolchain]))
         }
     }
 
@@ -552,7 +556,9 @@ struct EnvironmentPreparerTests {
         _ = try await preparer.prepare(try assessment(requires: [.toolchain]))
 
         #expect(await inspections.callCount == 2)
-        #expect(await commands.commands.count == 1)
+        #expect(await commands.commands.map(\.arguments) == [
+            ["install", "6.2.1", "--verify", "--assume-yes"]
+        ])
     }
 
     @Test("SDK installation refreshes inventory before validating preparation")
@@ -582,11 +588,47 @@ struct EnvironmentPreparerTests {
         #expect(await commands.commands.count == 1)
     }
 
+    @Test("Swiftly update failure stops toolchain installation and can be retried")
+    func updateFailureStopsInstallation() async throws {
+
+        let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+        let commands = RecordingSubprocessRunner(results: [
+            .failure(standardError: "network unavailable"),
+            .success(),
+            .success()
+        ])
+        let inspections = InventorySequence(inventories: [
+            inventory(includesToolchain: false, includesSDK: true),
+            inventory(includesToolchain: false, includesSDK: true),
+            inventory(includesToolchain: true, includesSDK: true)
+        ])
+        let preparer = EnvironmentPreparer(
+            runner: commands,
+            assessHost: { .ready },
+            detectSwiftly: { swiftly },
+            inspect: { _, _ in try await inspections.next() },
+            locateSDK: { _ in URL(filePath: "/tmp/sdk.artifactbundle") },
+            revalidate: { _ in }
+        )
+
+        await #expect(throws: SwiftlyKitError.swiftlyInstallationFailed("Swiftly update failed: network unavailable")) {
+            try await preparer.prepare(try assessment(requires: [.swiftlyUpdate, .toolchain]))
+        }
+        #expect(await commands.commands.map(\.arguments) == [["self-update", "--assume-yes"]])
+
+        _ = try await preparer.prepare(try assessment(requires: [.swiftlyUpdate, .toolchain]))
+        #expect(await commands.commands.map(\.arguments) == [
+            ["self-update", "--assume-yes"],
+            ["self-update", "--assume-yes"],
+            ["install", "6.2.1", "--verify", "--assume-yes"]
+        ])
+    }
+
     @Test("Preparation preserves a toolchain plan when its command fails")
     func failedToolchainInstallationPreservesPlan() async throws {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
-        let commands = RecordingSubprocessRunner(results: [.failure(standardError: "failed")])
+        let commands = RecordingSubprocessRunner(results: [.success(), .failure(output: String(repeating: "Download progress\n", count: 1000), standardError: "Lock held by process 52499")])
         let preparer = EnvironmentPreparer(
             runner: commands,
             assessHost: { .ready },
@@ -596,9 +638,9 @@ struct EnvironmentPreparerTests {
         )
 
         let plans = PlanRecorder()
-        await #expect(throws: SwiftlyKitError.swiftlyInstallationFailed("failed")) {
+        await #expect(throws: SwiftlyKitError.swiftlyInstallationFailed("Installing Swift 6.2.1 failed.\nLock held by process 52499")) {
             try await preparer.prepare(
-                try assessment(requires: [.toolchain]),
+                try assessment(requires: [.swiftlyUpdate, .toolchain]),
                 recordRemovalPlan: { plan in await plans.append(plan) }
             )
         }
@@ -609,7 +651,7 @@ struct EnvironmentPreparerTests {
     func failedSDKInstallationPreservesFullPlan() async throws {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
-        let commands = RecordingSubprocessRunner(results: [.success(), .failure(standardError: "failed")])
+        let commands = RecordingSubprocessRunner(results: [.success(), .success(), .failure(standardError: "failed")])
         let inspections = InventorySequence(inventories: [
             inventory(includesToolchain: false, includesSDK: false),
             inventory(includesToolchain: true, includesSDK: false)
@@ -623,9 +665,9 @@ struct EnvironmentPreparerTests {
         )
 
         let plans = PlanRecorder()
-        await #expect(throws: SwiftlyKitError.swiftlyInstallationFailed("failed")) {
+        await #expect(throws: SwiftlyKitError.swiftlyInstallationFailed("Installing the Static Linux SDK failed.\nfailed")) {
             try await preparer.prepare(
-                try assessment(requires: [.toolchain, .staticLinuxSDK]),
+                try assessment(requires: [.swiftlyUpdate, .toolchain, .staticLinuxSDK]),
                 recordRemovalPlan: { plan in await plans.append(plan) }
             )
         }
