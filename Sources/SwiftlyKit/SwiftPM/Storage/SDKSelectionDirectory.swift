@@ -134,8 +134,14 @@ extension SDKSelectionDirectory {
         do {
             entries = try fileManager.contentsOfDirectory(
                 at: searchDirectory,
-                includingPropertiesForKeys: [.isSymbolicLinkKey]
-            )
+                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+            ).filter { entry in
+                guard entry.lastPathComponent == "configuration" else { return true }
+                let values = try entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values.isDirectory == true, values.isSymbolicLink != true else { return true }
+                // SwiftPM creates an empty configuration directory beside installed SDK bundles
+                return try !fileManager.contentsOfDirectory(atPath: entry.path(percentEncoded: false)).isEmpty
+            }
         } catch {
             throw Error.couldNotCreateDirectory(searchDirectory.path(percentEncoded: false))
         }

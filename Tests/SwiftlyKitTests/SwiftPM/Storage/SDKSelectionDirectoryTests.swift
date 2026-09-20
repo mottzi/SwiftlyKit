@@ -5,6 +5,39 @@ import Testing
 @Suite("SDK selection directory")
 struct SDKSelectionDirectoryTests {
 
+    @Test("SwiftPM's empty configuration directory permits selection reuse")
+    func reusesSelectionAfterSwiftPMConfigurationCreation() throws {
+
+        try withTemporaryDirectory(prefix: "SwiftlyKit-SDKConfiguration") { directory in
+            let scratch = directory.appending(path: "scratch")
+            let identifier = "swift-6.4.0-RELEASE_static-linux-0.1.0"
+            let bundle = try createBundle(identifier: identifier, in: directory)
+            let selection = try SDKSelectionDirectory.resolve(
+                sdkIdentifier: identifier,
+                sdkBundleURL: bundle,
+                scratchDirectory: scratch
+            )
+            let configuration = selection.appending(path: "configuration")
+            try FileManager.default.createDirectory(at: configuration, withIntermediateDirectories: false)
+
+            #expect(try SDKSelectionDirectory.resolve(
+                sdkIdentifier: identifier,
+                sdkBundleURL: bundle,
+                scratchDirectory: scratch
+            ) == selection)
+            #expect(FileManager.default.fileExists(atPath: configuration.path(percentEncoded: false)))
+
+            try Data("override".utf8).write(to: configuration.appending(path: "sdk.json"))
+            #expect(throws: SDKSelectionDirectory.Error.self) {
+                try SDKSelectionDirectory.resolve(
+                    sdkIdentifier: identifier,
+                    sdkBundleURL: bundle,
+                    scratchDirectory: scratch
+                )
+            }
+        }
+    }
+
     @Test("Preparation is deterministic and exposes only the exact SDK")
     func deterministicExactSelection() throws {
 
