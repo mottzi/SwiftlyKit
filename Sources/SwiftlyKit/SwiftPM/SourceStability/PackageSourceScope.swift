@@ -48,6 +48,20 @@ struct PackageSourceScope: Sendable {
         }
     }
 
+    /// Excludes generated storage from one root's stream; nested source roots use separate streams.
+    func eventExclusions(for root: URL) -> [URL] {
+
+        let candidates = Self.ignoredTopLevelNames.map { root.appending(path: $0) }
+            + excludedRoots.filter {
+                $0 != root && $0.pathComponents.starts(with: root.pathComponents)
+            }
+        return Array(Set(candidates)).filter { candidate in
+            !candidates.contains { other in
+                other != candidate && candidate.pathComponents.starts(with: other.pathComponents)
+            }
+        }
+    }
+
     /// Whether a child at this relative path should be traversed or hashed.
     func includesEntry(named name: String, relativePath: String) -> Bool {
         !relativePath.isEmpty || !Self.ignoredTopLevelNames.contains(name)

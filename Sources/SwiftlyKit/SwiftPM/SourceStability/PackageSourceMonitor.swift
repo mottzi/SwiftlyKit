@@ -14,7 +14,7 @@ final class PackageSourceMonitor: @unchecked Sendable {
         cancel()
     }
 
-    /// Starts one recursive FSEvents stream for the selected package roots.
+    /// Starts separate source streams so excluded storage cannot hide nested dependency roots.
     static func start(
         roots: [URL],
         excluding excludedRoots: [URL] = []
@@ -46,13 +46,13 @@ final class PackageSourceMonitor: @unchecked Sendable {
 
 extension PackageSourceMonitor {
 
-    /// Locked ownership of one FSEvents stream and its recorded mutation state.
+    /// Locked ownership of the source streams and their shared mutation state.
     fileprivate final class Storage: @unchecked Sendable {
 
         private let scope: PackageSourceScope
         private let queue = DispatchQueue(label: "codes.mottzi.SwiftlyKit.PackageSourceMonitor")
         private let lock = NSLock()
-        private var stream: FSEventStreamRef?
+        private var streams: [FSEventStreamRef] = []
         private var didChange = false
         private var isReliable = true
 
@@ -63,6 +63,19 @@ extension PackageSourceMonitor {
         func start() throws {
 
             guard !scope.roots.isEmpty else { throw Error.streamCreationFailed }
+
+            do {
+                for root in scope.roots {
+                    let stream = try startStream(for: root)
+                    lock.withLock { streams.append(stream) }
+                }
+            } catch {
+                cancel()
+                throw error
+            }
+        }
+
+        private func startStream(for root: URL) throws -> FSEventStreamRef {
 
             var context = FSEventStreamContext(
                 version: 0,
@@ -76,7 +89,7 @@ extension PackageSourceMonitor {
                     | kFSEventStreamCreateFlagWatchRoot
                     | kFSEventStreamCreateFlagNoDefer
             )
-            let paths = scope.roots.map { $0.path(percentEncoded: false) }
+            let paths = [root.path(percentEncoded: false)]
 
             guard let stream = FSEventStreamCreate(
                 nil,
@@ -88,6 +101,13 @@ extension PackageSourceMonitor {
                 flags
             ) else { throw Error.streamCreationFailed }
 
+            let exclusions = scope.eventExclusions(for: root).map { $0.path(percentEncoded: false) }
+            guard FSEventStreamSetExclusionPaths(stream, exclusions as CFArray) else {
+                FSEventStreamInvalidate(stream)
+                FSEventStreamRelease(stream)
+                throw Error.streamExclusionFailed
+            }
+
             FSEventStreamSetDispatchQueue(stream, queue)
             guard FSEventStreamStart(stream) else {
                 FSEventStreamInvalidate(stream)
@@ -96,7 +116,7 @@ extension PackageSourceMonitor {
             }
 
             FSEventStreamFlushSync(stream)
-            lock.withLock { self.stream = stream }
+            return stream
         }
 
         func record(
@@ -135,8 +155,8 @@ extension PackageSourceMonitor {
 
         func beginObservation() {
 
-            let stream = lock.withLock { self.stream }
-            if let stream { FSEventStreamFlushSync(stream) }
+            let streams = lock.withLock { self.streams }
+            for stream in streams { FSEventStreamFlushSync(stream) }
             lock.withLock {
                 didChange = false
                 isReliable = true
@@ -145,16 +165,15 @@ extension PackageSourceMonitor {
 
         func finish() -> Outcome {
 
-            guard let stream = takeStream() else { return lock.withLock { outcome } }
-
-            FSEventStreamFlushSync(stream)
-            stopAndRelease(stream)
+            for stream in takeStreams() {
+                FSEventStreamFlushSync(stream)
+                stopAndRelease(stream)
+            }
             return lock.withLock { outcome }
         }
 
         func cancel() {
-            guard let stream = takeStream() else { return }
-            stopAndRelease(stream)
+            for stream in takeStreams() { stopAndRelease(stream) }
         }
 
     }
@@ -168,11 +187,11 @@ extension PackageSourceMonitor.Storage {
         return didChange ? .changed : .unchanged
     }
 
-    private func takeStream() -> FSEventStreamRef? {
+    private func takeStreams() -> [FSEventStreamRef] {
         lock.withLock {
-            let stream = self.stream
-            self.stream = nil
-            return stream
+            let streams = self.streams
+            self.streams = []
+            return streams
         }
     }
 
@@ -216,6 +235,7 @@ extension PackageSourceMonitor {
     enum Error: Swift.Error, Equatable {
         case streamCreationFailed
         case streamStartFailed
+        case streamExclusionFailed
     }
 
 }

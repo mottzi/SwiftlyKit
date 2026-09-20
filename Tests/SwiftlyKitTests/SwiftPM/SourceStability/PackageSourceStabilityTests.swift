@@ -100,6 +100,44 @@ struct PackageSourceStabilityTests {
         }
     }
 
+    @Test("Build-output traffic preserves package and nested dependency observation", arguments: [0, 1, 2])
+    func buildOutputTraffic(changedRoot: Int) async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SourceTraffic") { directory in
+            let scratch = directory.appending(path: ".build")
+            let output = scratch.appending(path: "out")
+            let dependency = scratch.appending(path: "checkouts/Dependency")
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: dependency, withIntermediateDirectories: true)
+            let source = directory.appending(path: "main.swift")
+            let dependencySource = dependency.appending(path: "main.swift")
+            let original = Data("print(1)\n".utf8)
+            try original.write(to: source)
+            try original.write(to: dependencySource)
+            let stability = try await PackageSourceStability.start(
+                roots: [directory, dependency],
+                excluding: [scratch]
+            )
+
+            for index in 0..<6000 {
+                try Data("object".utf8).write(to: output.appending(path: "object-\(index)"))
+                if index == 3000, changedRoot != 0 {
+                    let changedSource = changedRoot == 1 ? source : dependencySource
+                    try Data("print(2)\n".utf8).write(to: changedSource)
+                    try original.write(to: changedSource)
+                }
+            }
+
+            if changedRoot == 0 {
+                try await stability.finish()
+            } else {
+                await #expect(throws: PackageSourceStabilityError.sourceChanged) {
+                    try await stability.finish()
+                }
+            }
+        }
+    }
+
     @Test("Cancellation remains CancellationError while observation starts")
     func cancellation() async throws {
 
