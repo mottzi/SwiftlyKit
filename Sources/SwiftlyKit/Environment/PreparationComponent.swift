@@ -1,5 +1,6 @@
 /// An installation or update that environment preparation can perform.
 public enum PreparationComponent: Sendable {
+
     /// The Swiftly command-line tool.
     case swiftly
 
@@ -11,4 +12,5 @@ public enum PreparationComponent: Sendable {
 
     /// The selected Static Linux SDK.
     case staticLinuxSDK
+
 }

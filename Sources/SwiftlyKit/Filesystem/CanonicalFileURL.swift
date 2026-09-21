@@ -48,6 +48,10 @@ extension CanonicalFileURL {
         case symbolicLinkLoop
     }
 
+}
+
+extension CanonicalFileURL {
+
     private static let maximumSymbolicLinkCount = 64
 
 }

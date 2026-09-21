@@ -56,17 +56,6 @@ public struct EnvironmentRemovalPlan: Codable, Sendable, Hashable {
 
 extension EnvironmentRemovalPlan {
 
-    /// An exact environment resource named by a removal plan.
-    public enum Resource: Hashable, Sendable {
-
-        /// One exact stable Swift toolchain.
-        case toolchain(SwiftVersion)
-
-        /// One exact Static Linux SDK identifier.
-        case staticLinuxSDK(identifier: String)
-
-    }
-
     /// The exact resources named by this plan.
     /// Membership does not confirm resource existence or ownership and does not specify removal order.
     public var resources: Set<Resource> {
@@ -157,6 +146,25 @@ extension EnvironmentRemovalPlan {
     private static func malformedPayload() -> DecodingError {
         .dataCorrupted(.init(codingPath: [], debugDescription: "Malformed environment removal plan."))
     }
+
+}
+
+extension EnvironmentRemovalPlan {
+
+    /// An exact environment resource named by a removal plan.
+    public enum Resource: Hashable, Sendable {
+
+        /// One exact stable Swift toolchain.
+        case toolchain(SwiftVersion)
+
+        /// One exact Static Linux SDK identifier.
+        case staticLinuxSDK(identifier: String)
+
+    }
+
+}
+
+extension EnvironmentRemovalPlan {
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion

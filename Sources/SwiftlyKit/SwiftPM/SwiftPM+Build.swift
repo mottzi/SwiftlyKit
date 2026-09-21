@@ -246,8 +246,9 @@ extension SwiftPM {
 
         if case .directory = environmentStorage {
             let location: EnvironmentStorageLocation
-            do { location = try environmentStorage.resolved() }
-            catch let error {
+            do {
+                location = try environmentStorage.resolved()
+            } catch let error {
                 if case .unsafeEnvironmentStorage(let url) = error {
                     throw SwiftPMError.unsafeEnvironmentStorage(url)
                 }

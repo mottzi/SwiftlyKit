@@ -14,16 +14,6 @@ public struct BuildResult: Sendable {
 
     let architecture: LinuxArchitecture
 
-}
-
-extension BuildResult {
-
-    /// The directory that contains the executable and its required runtime resource bundles.
-    /// Managed build storage can also contain unrelated SwiftPM output.
-    public var directory: URL {
-        executable.deletingLastPathComponent()
-    }
-
     /// Coordinates publication and revalidates the executable before it publishes the runnable directory.
     /// The parent must exist. The destination must not exist unless replacement is enabled.
     public func publish(to destination: URL, replacingExisting: Bool = false) async throws -> BuildResult {
@@ -38,6 +28,20 @@ extension BuildResult {
     public func publish(into destination: URL) async throws -> BuildResult {
         try await publish(to: destination, destinationPolicy: .existingEmptyDirectory)
     }
+
+}
+
+extension BuildResult {
+
+    /// The directory that contains the executable and its required runtime resource bundles.
+    /// Managed build storage can also contain unrelated SwiftPM output.
+    public var directory: URL {
+        executable.deletingLastPathComponent()
+    }
+
+}
+
+extension BuildResult {
 
     private func publish(
         to destination: URL,

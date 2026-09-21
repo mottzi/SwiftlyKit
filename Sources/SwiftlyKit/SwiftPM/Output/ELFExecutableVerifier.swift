@@ -51,13 +51,19 @@ extension ELFExecutableVerifier {
             try reader.validateRange(at: programHeaderOffset, byteCount: 56)
 
             switch ProgramHeaderType(rawValue: try reader.uint32(at: programHeaderOffset)) {
-                case .loadable: hasLoadableSegment = true
-                case .interpreter: throw dynamicallyLinkedError
+                case .loadable:
+                    hasLoadableSegment = true
+
+                case .interpreter:
+                    throw dynamicallyLinkedError
+
                 case .dynamicLinking:
                     if try declaresNeededLibrary(reader, programHeaderOffset: programHeaderOffset) {
                         throw dynamicallyLinkedError
                     }
-                case nil: continue
+
+                case nil:
+                    continue
             }
         }
 

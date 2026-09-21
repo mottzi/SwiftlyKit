@@ -49,10 +49,11 @@ extension HostPreflight {
         guard url.path(percentEncoded: false).hasPrefix("/") else { return false }
 
         var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(
+        let exists = FileManager.default.fileExists(
             atPath: url.path(percentEncoded: false),
             isDirectory: &isDirectory
-        ) else { return false }
+        )
+        guard exists else { return false }
         guard isDirectory.boolValue else { return false }
 
         return FileManager.default.isReadableFile(atPath: url.path(percentEncoded: false))

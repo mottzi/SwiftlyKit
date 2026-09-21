@@ -64,9 +64,9 @@ extension SwiftPMSharedStorage {
 
 }
 
-private extension SwiftPMSharedStorage {
+extension SwiftPMSharedStorage {
 
-    static func validate(_ directory: URL?) throws -> URL? {
+    fileprivate static func validate(_ directory: URL?) throws -> URL? {
         guard let directory else { return nil }
 
         let path = directory.path(percentEncoded: false)

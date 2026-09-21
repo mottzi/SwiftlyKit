@@ -162,10 +162,7 @@ extension EnvironmentStorageLocation {
 
 }
 
-private func validateExistingDirectory(
-    _ url: URL,
-    reporting errorURL: URL
-) throws(SwiftlyKitError) {
+private func validateExistingDirectory(_ url: URL, reporting errorURL: URL) throws(SwiftlyKitError) {
 
     let path = url.path(percentEncoded: false)
     let filesystemPath = path == "/" || !path.hasSuffix("/")

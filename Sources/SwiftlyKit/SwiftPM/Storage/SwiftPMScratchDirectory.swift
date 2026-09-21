@@ -6,12 +6,6 @@ struct SwiftPMScratchDirectory {
     let url: URL
     private let isExplicit: Bool
 
-    /// The SwiftPM arguments for an explicitly selected scratch directory.
-    var commandArguments: [String] {
-        guard isExplicit else { return [] }
-        return ["--scratch-path", url.path(percentEncoded: false)]
-    }
-
     init(
         storage: SwiftPMScratchStorage,
         packageRoot: URL,
@@ -52,8 +46,9 @@ struct SwiftPMScratchDirectory {
 
         if case .directory = environmentStorage {
             let location: EnvironmentStorageLocation
-            do { location = try environmentStorage.resolved() }
-            catch let error {
+            do {
+                location = try environmentStorage.resolved()
+            } catch let error {
                 if case .unsafeEnvironmentStorage(let url) = error {
                     throw SwiftPMError.unsafeEnvironmentStorage(url)
                 }
@@ -69,4 +64,10 @@ struct SwiftPMScratchDirectory {
         self.url = url
     }
     
+    /// The SwiftPM arguments for an explicitly selected scratch directory.
+    var commandArguments: [String] {
+        guard isExplicit else { return [] }
+        return ["--scratch-path", url.path(percentEncoded: false)]
+    }
+
 }

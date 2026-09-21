@@ -160,10 +160,7 @@ extension InstalledEnvironmentInspector {
         return data
     }
 
-    private func sdkListOutput(
-        swiftly: SwiftlyInstallation,
-        toolchain: SwiftVersion
-    ) async throws -> String {
+    private func sdkListOutput(swiftly: SwiftlyInstallation, toolchain: SwiftVersion) async throws -> String {
 
         let command = swiftly.command(
             tool: "swift",

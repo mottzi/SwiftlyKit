@@ -58,19 +58,6 @@ struct LiveSubprocessRunner: SubprocessRunning {
 
 extension LiveSubprocessRunner {
 
-    private static func processEnvironment(_ environment: [String: String]?) -> Environment {
-
-        guard let environment else { return .inherit }
-
-        return .custom(environment.map { key, value in
-            Array("\(key)=\(value)\0".utf8)
-        })
-    }
-
-}
-
-extension LiveSubprocessRunner {
-
     private func collect(
         _ sequence: SubprocessOutputSequence,
         stream: CommandOutputChunk.Stream,
@@ -102,6 +89,19 @@ extension LiveSubprocessRunner {
         }
 
         return collected
+    }
+
+}
+
+extension LiveSubprocessRunner {
+
+    private static func processEnvironment(_ environment: [String: String]?) -> Environment {
+
+        guard let environment else { return .inherit }
+
+        return .custom(environment.map { key, value in
+            Array("\(key)=\(value)\0".utf8)
+        })
     }
 
     private static func appendRetained(_ text: String, to collected: inout String) {
@@ -181,6 +181,10 @@ extension UTF8StreamDecoder {
         return actualCount
     }
 
+    private static func isContinuation(_ byte: UInt8) -> Bool {
+        (0x80...0xBF).contains(byte)
+    }
+
     private static func scalarByteCount(startingWith byte: UInt8) -> Int {
         switch byte {
             case 0xC2...0xDF: 2
@@ -188,10 +192,6 @@ extension UTF8StreamDecoder {
             case 0xF0...0xF4: 4
             default: 1
         }
-    }
-
-    private static func isContinuation(_ byte: UInt8) -> Bool {
-        (0x80...0xBF).contains(byte)
     }
 
     private static func isValidPartialScalar(_ bytes: ArraySlice<UInt8>) -> Bool {

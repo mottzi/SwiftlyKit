@@ -50,6 +50,10 @@ extension BuildRequest {
         try Self.validate(jobs: jobs)
     }
 
+}
+
+extension BuildRequest {
+
     /// Rejects a nonpositive optional SwiftPM build job count.
     static func validate(jobs: Int?) throws {
         guard let jobs else { return }

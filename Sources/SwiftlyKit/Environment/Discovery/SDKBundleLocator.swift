@@ -14,10 +14,11 @@ enum SDKBundleLocator {
         for candidate in candidates {
             var isDirectory: ObjCBool = false
 
-            guard FileManager.default.fileExists(
+            let exists = FileManager.default.fileExists(
                 atPath: candidate.path(percentEncoded: false),
                 isDirectory: &isDirectory
-            ) else { continue }
+            )
+            guard exists else { continue }
             guard isDirectory.boolValue else { continue }
 
             return candidate.resolvingSymlinksInPath().standardizedFileURL
@@ -47,11 +48,11 @@ enum SDKBundleLocator {
         }
     }
 
-    private static func locate(
-        identifier: String,
-        in directory: URL,
-        confinedTo confinementDirectory: URL
-    ) -> URL? {
+}
+
+extension SDKBundleLocator {
+
+    private static func locate(identifier: String, in directory: URL, confinedTo confinementDirectory: URL) -> URL? {
 
         let candidate = directory.appending(
             path: "\(identifier).artifactbundle",
@@ -59,10 +60,11 @@ enum SDKBundleLocator {
         )
         var isDirectory: ObjCBool = false
 
-        guard FileManager.default.fileExists(
+        let exists = FileManager.default.fileExists(
             atPath: candidate.path(percentEncoded: false),
             isDirectory: &isDirectory
-        ), isDirectory.boolValue else { return nil }
+        )
+        guard exists, isDirectory.boolValue else { return nil }
 
         let resolvedCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL
         let resolvedDirectory = confinementDirectory.resolvingSymlinksInPath().standardizedFileURL

@@ -30,7 +30,8 @@ struct LiveEnvironmentPreparationStateObserver: EnvironmentPreparationStateObser
     }
 
     func preflight(_ assessment: EnvironmentAssessment) async throws -> EnvironmentPreparationState {
-        try (await HostPreflight().assess()).requireReady()
+        let readiness = try await HostPreflight().assess()
+        try readiness.requireReady()
         try assessment.packageInputs.validateCurrent()
         return try await refresh(assessment)
     }

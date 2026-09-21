@@ -256,10 +256,7 @@ extension EnvironmentPreparer {
 
 extension EnvironmentPreparer {
 
-    private func bootstrapSwiftly(
-        in storage: EnvironmentStorage,
-        onEvent: SwiftlyKitEvent.Handler?
-    ) async throws {
+    private func bootstrapSwiftly(in storage: EnvironmentStorage, onEvent: SwiftlyKitEvent.Handler?) async throws {
 
         let stagingDirectory = temporaryDirectory.appending(
             path: "SwiftlyKit-\(UUID().uuidString)",
@@ -465,10 +462,7 @@ extension EnvironmentPreparer {
         }
     }
 
-    private func execute(
-        _ command: SubprocessCommand,
-        onEvent: SwiftlyKitEvent.Handler?
-    ) async throws -> SubprocessResult {
+    private func execute(_ command: SubprocessCommand, onEvent: SwiftlyKitEvent.Handler?) async throws -> SubprocessResult {
         do {
             return try await runner.run(command, onEvent: onEvent)
         } catch is CancellationError {
@@ -551,10 +545,11 @@ extension EnvironmentPreparer {
 
     private static func isRegularFile(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(
+        let exists = FileManager.default.fileExists(
             atPath: url.path(percentEncoded: false),
             isDirectory: &isDirectory
-        ), !isDirectory.boolValue else { return false }
+        )
+        guard exists, !isDirectory.boolValue else { return false }
         let attributes = try? FileManager.default.attributesOfItem(
             atPath: url.path(percentEncoded: false)
         )

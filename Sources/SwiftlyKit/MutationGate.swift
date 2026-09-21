@@ -4,9 +4,6 @@ import Foundation
 /// Mutation gate for one user. It queues local operations and excludes other SwiftlyKit processes.
 actor MutationGate {
 
-    /// Gate used by default SwiftlyKit values and static workflows.
-    static let shared = MutationGate()
-
     /// Lock that excludes other SwiftlyKit processes after local admission.
     private let processLock: ProcessMutationLock
 
@@ -294,4 +291,11 @@ extension MutationGate {
 
     }
     
+}
+
+extension MutationGate {
+
+    /// Gate used by default SwiftlyKit values and static workflows.
+    static let shared = MutationGate()
+
 }

@@ -13,6 +13,10 @@ extension BuildTarget {
         LinuxArchitecture.allCases.map { .linux($0) }
     }
     
+}
+
+extension BuildTarget {
+
     var architecture: LinuxArchitecture {
         switch self {
             case .linux(let architecture): architecture

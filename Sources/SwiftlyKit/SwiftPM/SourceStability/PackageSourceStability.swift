@@ -27,10 +27,7 @@ final class PackageSourceStability: @unchecked Sendable {
     }
 
     /// Starts observation and captures the initial package-source state.
-    static func start(
-        roots: [URL],
-        excluding excludedRoots: [URL] = []
-    ) async throws -> PackageSourceStability {
+    static func start(roots: [URL], excluding excludedRoots: [URL] = []) async throws -> PackageSourceStability {
 
         let monitor: PackageSourceMonitor
         do { monitor = try PackageSourceMonitor.start(roots: roots, excluding: excludedRoots) }

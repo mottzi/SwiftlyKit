@@ -3,6 +3,10 @@ import Foundation
 /// Removes exact Swiftly-managed environment resources after a complete safety preflight.
 struct EnvironmentRemover {
 
+    typealias SessionOpening = @Sendable (
+        EnvironmentStorage
+    ) async throws -> EnvironmentRemovalSession?
+
     private let temporaryDirectory: URL
     private let runner: any SubprocessRunning
     private let openSession: SessionOpening
@@ -127,10 +131,6 @@ struct EnvironmentRemover {
             }
         }
     }
-
-    typealias SessionOpening = @Sendable (
-        EnvironmentStorage
-    ) async throws -> EnvironmentRemovalSession?
 
 }
 

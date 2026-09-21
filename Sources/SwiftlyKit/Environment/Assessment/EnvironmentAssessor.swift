@@ -3,10 +3,6 @@ import Foundation
 /// Read-only orchestration that resolves one exact build environment.
 struct EnvironmentAssessor: Sendable {
 
-    private let environmentStorage: EnvironmentStorage
-    private let loadLocalEnvironment: LocalEnvironmentLoadHandler
-    private let loadReleaseCatalog: ReleaseCatalogLoadHandler
-
     typealias LocalEnvironmentLoadHandler = @Sendable (
         _ packageRoot: URL,
         _ environmentStorage: EnvironmentStorage
@@ -15,6 +11,10 @@ struct EnvironmentAssessor: Sendable {
     typealias ReleaseCatalogLoadHandler = @Sendable (
         _ requirement: AssessmentCatalogRequirement
     ) async throws -> AssessmentCatalogSnapshot
+
+    private let environmentStorage: EnvironmentStorage
+    private let loadLocalEnvironment: LocalEnvironmentLoadHandler
+    private let loadReleaseCatalog: ReleaseCatalogLoadHandler
 
     init(environmentStorage: EnvironmentStorage = .standard) {
         self.init(
@@ -62,10 +62,7 @@ struct EnvironmentAssessor: Sendable {
     }
 
     /// Captures one observation and returns each exact compatible environment in newest-first order.
-    func compatibleEnvironments(
-        _ packageRoot: URL,
-        for target: BuildTarget
-    ) async throws -> EnvironmentChoices {
+    func compatibleEnvironments(_ packageRoot: URL, for target: BuildTarget) async throws -> EnvironmentChoices {
 
         let local = try await loadLocalEnvironment(packageRoot, environmentStorage)
         let catalog = try await loadReleaseCatalog(.currentOnly)
@@ -174,7 +171,8 @@ extension EnvironmentAssessor {
         environmentStorage: EnvironmentStorage
     ) async throws -> LocalEnvironmentSnapshot {
 
-        try (await HostPreflight().assess()).requireReady()
+        let readiness = try await HostPreflight().assess()
+        try readiness.requireReady()
 
         let packageInputs = try PackageInputSnapshot.capture(at: packageRoot)
         let validatedStorage = try environmentStorage.validated(

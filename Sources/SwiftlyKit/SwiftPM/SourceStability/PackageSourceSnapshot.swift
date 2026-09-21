@@ -8,10 +8,7 @@ struct PackageSourceSnapshot: Equatable, Sendable {
     private let fileCount: Int
 
     /// Captures paths, contents, permissions, and safe symbolic-link destinations across the selected roots.
-    static func capture(
-        roots: [URL],
-        excluding excludedRoots: [URL] = []
-    ) throws -> PackageSourceSnapshot {
+    static func capture(roots: [URL], excluding excludedRoots: [URL] = []) throws -> PackageSourceSnapshot {
 
         try Task.checkCancellation()
         let scope = try PackageSourceScope(roots: roots, excluding: excludedRoots)
@@ -113,6 +110,36 @@ extension PackageSourceSnapshot {
         }
     }
 
+    private static func hashSymbolicLink(
+        _ link: URL,
+        relativePath: String,
+        rootIndex: Int,
+        scope: PackageSourceScope,
+        hasher: inout SHA256
+    ) throws {
+
+        let destination = try FileManager.default.destinationOfSymbolicLink(
+            atPath: link.path(percentEncoded: false)
+        )
+        let destinationURL = URL(filePath: destination)
+        let resolved = if destination.hasPrefix("/") {
+            try CanonicalFileURL.resolve(destinationURL)
+        } else {
+            try CanonicalFileURL.resolve(
+                link.deletingLastPathComponent().appending(path: destination)
+            )
+        }
+        let exists = FileManager.default.fileExists(atPath: resolved.path(percentEncoded: false))
+
+        guard exists,
+              scope.includes(resolved)
+        else { throw Error.escapingSymbolicLink(link) }
+
+        hasher.update(data: Data("l\(rootIndex):\(relativePath)\0".utf8))
+        hasher.update(data: Data(destination.utf8))
+        hasher.update(data: Data([0]))
+    }
+
     private static func hashRegularFile(
         _ file: URL,
         relativePath: String,
@@ -151,36 +178,6 @@ extension PackageSourceSnapshot {
         hasher.update(data: Data([0]))
     }
 
-    private static func hashSymbolicLink(
-        _ link: URL,
-        relativePath: String,
-        rootIndex: Int,
-        scope: PackageSourceScope,
-        hasher: inout SHA256
-    ) throws {
-
-        let destination = try FileManager.default.destinationOfSymbolicLink(
-            atPath: link.path(percentEncoded: false)
-        )
-        let destinationURL = URL(filePath: destination)
-        let resolved = if destination.hasPrefix("/") {
-            try CanonicalFileURL.resolve(destinationURL)
-        } else {
-            try CanonicalFileURL.resolve(
-                link.deletingLastPathComponent().appending(path: destination)
-            )
-        }
-        let exists = FileManager.default.fileExists(atPath: resolved.path(percentEncoded: false))
-
-        guard exists,
-              scope.includes(resolved)
-        else { throw Error.escapingSymbolicLink(link) }
-
-        hasher.update(data: Data("l\(rootIndex):\(relativePath)\0".utf8))
-        hasher.update(data: Data(destination.utf8))
-        hasher.update(data: Data([0]))
-    }
-
 }
 
 extension PackageSourceSnapshot {
@@ -206,6 +203,10 @@ extension PackageSourceSnapshot {
         case unstableEntry(URL)
         case unsupportedEntry(URL)
     }
+
+}
+
+extension PackageSourceSnapshot {
 
     private static let maximumFileCount = 200_000
     private static let maximumTotalByteCount = Int64(8 * 1_024 * 1_024 * 1_024)

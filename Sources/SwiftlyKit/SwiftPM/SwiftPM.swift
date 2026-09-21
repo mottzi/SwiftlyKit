@@ -46,11 +46,7 @@ struct SwiftPM {
 
 extension SwiftPM {
 
-    func report(
-        _ operation: OperationProgress.Operation,
-        detail: String,
-        to handler: SwiftlyKitEvent.Handler?
-    ) async {
+    func report(_ operation: OperationProgress.Operation, detail: String, to handler: SwiftlyKitEvent.Handler?) async {
 
         await handler?(.progress(OperationProgress(operation: operation, detail: detail)))
     }

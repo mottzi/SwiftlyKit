@@ -13,6 +13,12 @@ public struct ExecutableProduct: Sendable, Hashable {
 /// Executable products discovered from one prepared package in name order.
 public struct ExecutableProducts: Sendable {
 
+    /// The product stored at each collection position.
+    public typealias Element = ExecutableProduct
+
+    /// The integer position of a product.
+    public typealias Index = Int
+
     private let products: [ExecutableProduct]
 
     init(_ products: [ExecutableProduct]) {
@@ -40,12 +46,6 @@ public struct ExecutableProducts: Sendable {
 // MARK: - RandomAccessCollection
 
 extension ExecutableProducts: RandomAccessCollection {
-
-    /// The product stored at each collection position.
-    public typealias Element = ExecutableProduct
-
-    /// The integer position of a product.
-    public typealias Index = Int
 
     /// The position of the first product.
     public var startIndex: Index {

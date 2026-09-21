@@ -27,8 +27,9 @@ struct SwiftOrgReleaseCache: Sendable {
             .isSymbolicLinkKey
         ])
 
-        guard values.isSymbolicLink != true else { throw CacheError.unsafePath }
-        guard values.isRegularFile == true else { throw CacheError.unsafePath }
+        guard values.isSymbolicLink != true,
+              values.isRegularFile == true
+        else { throw CacheError.unsafePath }
         guard let size = values.fileSize else { throw CacheError.invalidPayload }
         guard size <= Self.maximumPayloadSize else { throw CacheError.invalidPayload }
 
@@ -50,8 +51,9 @@ struct SwiftOrgReleaseCache: Sendable {
                 .isSymbolicLinkKey
             ])
 
-            guard values.isSymbolicLink != true else { throw CacheError.unsafePath }
-            guard values.isRegularFile == true else { throw CacheError.unsafePath }
+            guard values.isSymbolicLink != true,
+                  values.isRegularFile == true
+            else { throw CacheError.unsafePath }
         }
 
         try data.write(to: fileURL, options: .atomic)
@@ -64,6 +66,18 @@ struct SwiftOrgReleaseCache: Sendable {
 }
 
 extension SwiftOrgReleaseCache {
+
+    private func validateDirectory(_ directoryURL: URL) throws {
+
+        let values = try directoryURL.resourceValues(forKeys: [
+            .isDirectoryKey,
+            .isSymbolicLinkKey
+        ])
+
+        guard values.isSymbolicLink != true,
+              values.isDirectory == true
+        else { throw CacheError.unsafePath }
+    }
 
     private func createDirectoryIfNeeded(_ directoryURL: URL) throws {
 
@@ -86,17 +100,6 @@ extension SwiftOrgReleaseCache {
             [.posixPermissions: 0o700],
             ofItemAtPath: directoryURL.path(percentEncoded: false)
         )
-    }
-
-    private func validateDirectory(_ directoryURL: URL) throws {
-
-        let values = try directoryURL.resourceValues(forKeys: [
-            .isDirectoryKey,
-            .isSymbolicLinkKey
-        ])
-
-        guard values.isSymbolicLink != true else { throw CacheError.unsafePath }
-        guard values.isDirectory == true else { throw CacheError.unsafePath }
     }
 
 }

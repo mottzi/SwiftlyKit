@@ -61,31 +61,6 @@ public struct SwiftPMEnvironment: Sendable {
 
 extension SwiftPMEnvironment {
 
-    /// Uses one snapshot of the inherited process environment without caller changes.
-    public static let inherited = SwiftPMEnvironment(uncheckedEntries: [:])
-
-}
-
-extension SwiftPMEnvironment {
-
-    /// One caller instruction for a SwiftPM process value.
-    public enum Value: Sendable {
-
-        /// Adds or replaces a nonsecret value.
-        case plain(String)
-
-        /// Adds or replaces a value that SwiftlyKit redacts from its output.
-        case sensitive(String)
-
-        /// Removes an inherited value.
-        case unset
-
-    }
-
-}
-
-extension SwiftPMEnvironment {
-
     private static func validate(name: String, value: Value) throws(SwiftlyKitError) {
 
         let validName = name.range(
@@ -118,12 +93,37 @@ extension SwiftPMEnvironment {
 
 extension SwiftPMEnvironment {
 
+    /// One caller instruction for a SwiftPM process value.
+    public enum Value: Sendable {
+
+        /// Adds or replaces a nonsecret value.
+        case plain(String)
+
+        /// Adds or replaces a value that SwiftlyKit redacts from its output.
+        case sensitive(String)
+
+        /// Removes an inherited value.
+        case unset
+
+    }
+
+}
+
+extension SwiftPMEnvironment {
+
     /// One resolved process environment and its output-protection metadata.
     struct Snapshot: Sendable {
         let values: [String: String]
         let sensitiveNames: Set<String>
         let toolValues: [String: String]
     }
+
+}
+
+extension SwiftPMEnvironment {
+
+    /// Uses one snapshot of the inherited process environment without caller changes.
+    public static let inherited = SwiftPMEnvironment(uncheckedEntries: [:])
 
 }
 

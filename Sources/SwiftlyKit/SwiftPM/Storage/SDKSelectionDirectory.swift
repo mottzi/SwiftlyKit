@@ -57,19 +57,14 @@ enum SDKSelectionDirectory {
 
 extension SDKSelectionDirectory {
 
-    private static func isValidIdentifier(
-        _ identifier: String
-    ) -> Bool {
+    private static func isValidIdentifier(_ identifier: String) -> Bool {
         
         guard !identifier.isEmpty else { return false }
         let allowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
         return identifier.unicodeScalars.allSatisfy(allowedCharacters.contains)
     }
 
-    private static func selectionComponent(
-        sdkIdentifier: String,
-        canonicalBundleURL: URL
-    ) -> String {
+    private static func selectionComponent(sdkIdentifier: String, canonicalBundleURL: URL) -> String {
         
         let digest = SHA256.hash(data: Data(canonicalBundleURL.path(percentEncoded: false).utf8))
             .map { String(format: "%02x", $0) }
@@ -82,44 +77,32 @@ extension SDKSelectionDirectory {
 
 extension SDKSelectionDirectory {
 
-    private static func createSelection(
-        in searchDirectory: URL,
-        linkURL: URL,
-        canonicalBundleURL: URL,
+    private static func createOwnedDirectoryHierarchy(
+        from root: URL,
+        components: [String],
         fileManager: FileManager
-    ) throws -> URL {
+    ) throws {
 
-        do {
-            try fileManager.createSymbolicLink(at: linkURL, withDestinationURL: canonicalBundleURL)
-        } catch let error as CocoaError where error.code == .fileWriteFileExists {
-            // A separate SwiftlyKit instance or process won the creation race.
-        } catch {
-            throw Error.couldNotCreateSelection(linkURL.path(percentEncoded: false))
+        var directory = root
+        for component in components {
+            directory.append(path: component, directoryHint: .isDirectory)
+            try createOwnedDirectory(at: directory, fileManager: fileManager)
         }
-
-        return try requireReadySelection(
-            in: searchDirectory,
-            linkURL: linkURL,
-            canonicalBundleURL: canonicalBundleURL,
-            fileManager: fileManager
-        )
     }
 
-    private static func requireReadySelection(
-        in searchDirectory: URL,
-        linkURL: URL,
-        canonicalBundleURL: URL,
-        fileManager: FileManager
-    ) throws -> URL {
+    private static func createOwnedDirectory(at url: URL, fileManager: FileManager) throws {
 
-        switch try selectionState(
-            in: searchDirectory,
-            linkURL: linkURL,
-            canonicalBundleURL: canonicalBundleURL,
-            fileManager: fileManager
-        ) {
-            case .ready: return searchDirectory
-            case .absent: throw Error.couldNotCreateSelection(linkURL.path(percentEncoded: false))
+        do {
+            try fileManager.createDirectory(at: url, withIntermediateDirectories: false)
+        } catch let error as CocoaError where error.code == .fileWriteFileExists {
+            let values: URLResourceValues
+            do { values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) }
+            catch { throw Error.couldNotCreateDirectory(url.path(percentEncoded: false)) }
+            guard values.isDirectory == true,
+                  values.isSymbolicLink != true
+            else { throw Error.unexpectedItem(url.path(percentEncoded: false)) }
+        } catch {
+            throw Error.couldNotCreateDirectory(url.path(percentEncoded: false))
         }
     }
 
@@ -175,39 +158,44 @@ extension SDKSelectionDirectory {
         return .ready
     }
 
-}
-
-extension SDKSelectionDirectory {
-
-    private static func createOwnedDirectoryHierarchy(
-        from root: URL,
-        components: [String],
+    private static func createSelection(
+        in searchDirectory: URL,
+        linkURL: URL,
+        canonicalBundleURL: URL,
         fileManager: FileManager
-    ) throws {
-
-        var directory = root
-        for component in components {
-            directory.append(path: component, directoryHint: .isDirectory)
-            try createOwnedDirectory(at: directory, fileManager: fileManager)
-        }
-    }
-
-    private static func createOwnedDirectory(
-        at url: URL,
-        fileManager: FileManager
-    ) throws {
+    ) throws -> URL {
 
         do {
-            try fileManager.createDirectory(at: url, withIntermediateDirectories: false)
+            try fileManager.createSymbolicLink(at: linkURL, withDestinationURL: canonicalBundleURL)
         } catch let error as CocoaError where error.code == .fileWriteFileExists {
-            let values: URLResourceValues
-            do { values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) }
-            catch { throw Error.couldNotCreateDirectory(url.path(percentEncoded: false)) }
-            guard values.isDirectory == true,
-                  values.isSymbolicLink != true
-            else { throw Error.unexpectedItem(url.path(percentEncoded: false)) }
+            // A separate SwiftlyKit instance or process won the creation race.
         } catch {
-            throw Error.couldNotCreateDirectory(url.path(percentEncoded: false))
+            throw Error.couldNotCreateSelection(linkURL.path(percentEncoded: false))
+        }
+
+        return try requireReadySelection(
+            in: searchDirectory,
+            linkURL: linkURL,
+            canonicalBundleURL: canonicalBundleURL,
+            fileManager: fileManager
+        )
+    }
+
+    private static func requireReadySelection(
+        in searchDirectory: URL,
+        linkURL: URL,
+        canonicalBundleURL: URL,
+        fileManager: FileManager
+    ) throws -> URL {
+
+        switch try selectionState(
+            in: searchDirectory,
+            linkURL: linkURL,
+            canonicalBundleURL: canonicalBundleURL,
+            fileManager: fileManager
+        ) {
+            case .ready: return searchDirectory
+            case .absent: throw Error.couldNotCreateSelection(linkURL.path(percentEncoded: false))
         }
     }
 

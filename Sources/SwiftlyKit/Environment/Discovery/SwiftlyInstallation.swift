@@ -6,12 +6,6 @@ struct SwiftlyInstallation: Equatable {
     let executableURL: URL
     let location: EnvironmentStorageLocation?
 
-    /// Inherited process values bound to the detected Swiftly namespace.
-    var processEnvironment: [String: String]? {
-        guard let location else { return nil }
-        return location.processEnvironment
-    }
-
     init(executableURL: URL) {
         self.executableURL = executableURL
         self.location = nil
@@ -61,6 +55,12 @@ struct SwiftlyInstallation: Equatable {
 
 extension SwiftlyInstallation {
 
+    /// Inherited process values bound to the detected Swiftly namespace.
+    var processEnvironment: [String: String]? {
+        guard let location else { return nil }
+        return location.processEnvironment
+    }
+
     /// Adds the selected namespace's SDK registry to a Swift SDK command.
     /// Standard storage leaves SwiftPM's default registry unchanged.
     func sdkCommandArguments(_ arguments: [String]) -> [String] {
@@ -108,10 +108,11 @@ extension SwiftlyInstallation {
         guard url.path(percentEncoded: false).hasPrefix("/") else { return false }
 
         var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(
+        let exists = FileManager.default.fileExists(
             atPath: url.path(percentEncoded: false),
             isDirectory: &isDirectory
-        ) else { return false }
+        )
+        guard exists else { return false }
         guard !isDirectory.boolValue else { return false }
         
         guard let attributes = try? FileManager.default.attributesOfItem(

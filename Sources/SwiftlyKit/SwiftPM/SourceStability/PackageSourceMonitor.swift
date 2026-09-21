@@ -15,10 +15,7 @@ final class PackageSourceMonitor: @unchecked Sendable {
     }
 
     /// Starts separate source streams so excluded storage cannot hide nested dependency roots.
-    static func start(
-        roots: [URL],
-        excluding excludedRoots: [URL] = []
-    ) throws -> PackageSourceMonitor {
+    static func start(roots: [URL], excluding excludedRoots: [URL] = []) throws -> PackageSourceMonitor {
 
         let storage = try Storage(roots: roots, excludedRoots: excludedRoots)
         try storage.start()
@@ -75,54 +72,7 @@ extension PackageSourceMonitor {
             }
         }
 
-        private func startStream(for root: URL) throws -> FSEventStreamRef {
-
-            var context = FSEventStreamContext(
-                version: 0,
-                info: Unmanaged.passUnretained(self).toOpaque(),
-                retain: nil,
-                release: nil,
-                copyDescription: nil
-            )
-            let flags = FSEventStreamCreateFlags(
-                kFSEventStreamCreateFlagFileEvents
-                    | kFSEventStreamCreateFlagWatchRoot
-                    | kFSEventStreamCreateFlagNoDefer
-            )
-            let paths = [root.path(percentEncoded: false)]
-
-            guard let stream = FSEventStreamCreate(
-                nil,
-                packageSourceEventCallback,
-                &context,
-                paths as CFArray,
-                FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-                0.05,
-                flags
-            ) else { throw Error.streamCreationFailed }
-
-            let exclusions = scope.eventExclusions(for: root).map { $0.path(percentEncoded: false) }
-            guard FSEventStreamSetExclusionPaths(stream, exclusions as CFArray) else {
-                FSEventStreamInvalidate(stream)
-                FSEventStreamRelease(stream)
-                throw Error.streamExclusionFailed
-            }
-
-            FSEventStreamSetDispatchQueue(stream, queue)
-            guard FSEventStreamStart(stream) else {
-                FSEventStreamInvalidate(stream)
-                FSEventStreamRelease(stream)
-                throw Error.streamStartFailed
-            }
-
-            FSEventStreamFlushSync(stream)
-            return stream
-        }
-
-        func record(
-            path: String,
-            flags: FSEventStreamEventFlags
-        ) {
+        func record(path: String, flags: FSEventStreamEventFlags) {
 
             if flags & Self.unreliableEventFlags != 0 {
                 lock.withLock { isReliable = false }
@@ -182,9 +132,48 @@ extension PackageSourceMonitor {
 
 extension PackageSourceMonitor.Storage {
 
-    private var outcome: PackageSourceMonitor.Outcome {
-        if !isReliable { return .unreliable }
-        return didChange ? .changed : .unchanged
+    private func startStream(for root: URL) throws -> FSEventStreamRef {
+
+        var context = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil,
+            release: nil,
+            copyDescription: nil
+        )
+        let flags = FSEventStreamCreateFlags(
+            kFSEventStreamCreateFlagFileEvents
+                | kFSEventStreamCreateFlagWatchRoot
+                | kFSEventStreamCreateFlagNoDefer
+        )
+        let paths = [root.path(percentEncoded: false)]
+
+        guard let stream = FSEventStreamCreate(
+            nil,
+            packageSourceEventCallback,
+            &context,
+            paths as CFArray,
+            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+            0.05,
+            flags
+        ) else { throw PackageSourceMonitor.Error.streamCreationFailed }
+
+        let exclusions = scope.eventExclusions(for: root).map { $0.path(percentEncoded: false) }
+        guard FSEventStreamSetExclusionPaths(stream, exclusions as CFArray) else {
+            FSEventStreamInvalidate(stream)
+            FSEventStreamRelease(stream)
+            throw PackageSourceMonitor.Error.streamExclusionFailed
+        }
+
+        FSEventStreamSetDispatchQueue(stream, queue)
+        guard FSEventStreamStart(stream) else {
+            FSEventStreamInvalidate(stream)
+            FSEventStreamRelease(stream)
+            throw PackageSourceMonitor.Error.streamStartFailed
+        }
+
+        FSEventStreamFlushSync(stream)
+        return stream
     }
 
     private func takeStreams() -> [FSEventStreamRef] {
@@ -199,6 +188,11 @@ extension PackageSourceMonitor.Storage {
         FSEventStreamStop(stream)
         FSEventStreamInvalidate(stream)
         FSEventStreamRelease(stream)
+    }
+
+    private var outcome: PackageSourceMonitor.Outcome {
+        if !isReliable { return .unreliable }
+        return didChange ? .changed : .unchanged
     }
 
 }

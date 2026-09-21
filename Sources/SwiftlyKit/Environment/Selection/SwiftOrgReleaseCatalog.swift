@@ -254,6 +254,10 @@ extension SwiftOrgReleaseCatalog {
         case invalidPayload
     }
 
+}
+
+extension SwiftOrgReleaseCatalog {
+
     private struct Snapshot: Sendable {
         let releases: [OfficialStableRelease]
         let loadedAt: Date
@@ -289,6 +293,10 @@ extension SwiftOrgReleaseCatalog {
 extension SwiftOrgReleaseCatalog {
 
     static let shared = SwiftOrgReleaseCatalog()
+
+}
+
+extension SwiftOrgReleaseCatalog {
 
     private static let defaultRefreshInterval: TimeInterval = 60 * 60
     private static let releasesURL = URL(string: "https://www.swift.org/api/v1/install/releases.json")!
