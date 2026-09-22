@@ -1,11 +1,13 @@
 import Foundation
 
+/// Installer package transfer to a caller-selected file.
 protocol PackageDownloading: Sendable {
 
     func download(from source: URL, to destination: URL) async throws
 
 }
 
+/// HTTPS installer downloader that requires a successful HTTP response before moving the file.
 struct HTTPPackageDownloader: PackageDownloading {
 
     private(set) var transfer: @Sendable (URL) async throws -> (temporaryURL: URL, statusCode: Int?) = { source in

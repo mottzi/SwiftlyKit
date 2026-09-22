@@ -12,8 +12,10 @@ struct EnvironmentPreparationState: Sendable {
 /// Owns host/package preflight and consistent installed-state observations.
 protocol EnvironmentPreparationStateObserving: Sendable {
 
+    /// Checks host readiness and package inputs before inspecting the selected environment.
     func preflight(_ assessment: EnvironmentAssessment) async throws -> EnvironmentPreparationState
 
+    /// Reads the current Swiftly installation, toolchain inventory, and selected SDK bundle.
     func refresh(_ assessment: EnvironmentAssessment) async throws -> EnvironmentPreparationState
 
 }

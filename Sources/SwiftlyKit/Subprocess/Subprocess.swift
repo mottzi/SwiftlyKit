@@ -42,8 +42,10 @@ struct SubprocessResult: Equatable {
 
 typealias SubprocessOutputHandler = @Sendable (CommandOutputChunk.Stream, String) async -> Void
 
+/// Child-process execution with optional output delivery and a collected result.
 protocol SubprocessRunning: Sendable {
 
+    /// Runs one invocation and delivers output chunks to the supplied handler.
     func run(_ command: SubprocessCommand, onOutput: SubprocessOutputHandler?) async throws -> SubprocessResult
 
 }

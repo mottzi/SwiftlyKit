@@ -24,6 +24,7 @@ extension SwiftPM {
 
 extension SwiftPM {
 
+    /// Inspects the package with the prepared toolchain without automatic dependency resolution.
     func packageDescription(
         using environment: LocalBuildEnvironment,
         scratchStorage: SwiftPMScratchStorage = .packageDefault,

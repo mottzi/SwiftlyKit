@@ -1,6 +1,7 @@
 /// Pure, deterministic selection of one exact official toolchain and matching SDK.
 enum EnvironmentSelectionPolicy {
 
+    /// Honors an exact selection or package preference, otherwise preferring the newest installed compatible pair.
     static func select(
         toolchain: ToolchainSelection,
         toolsVersion: SwiftVersion,

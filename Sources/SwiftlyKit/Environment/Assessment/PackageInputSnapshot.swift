@@ -11,6 +11,7 @@ struct PackageInputSnapshot: Equatable, Sendable {
     private let swiftVersionFileURL: URL?
     private let swiftVersionFile: Data?
 
+    /// Rejects preparation if the captured package inputs changed or cannot be read.
     func validateCurrent() throws(SwiftlyKitError) {
 
         guard let current = try? Self.capture(at: packageRoot), current == self

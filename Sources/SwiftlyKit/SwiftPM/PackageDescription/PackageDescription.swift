@@ -1,5 +1,6 @@
 import Foundation
 
+/// Validated explicit and implicit executable products from a SwiftPM package description.
 struct PackageDescription {
 
     let products: [ExecutableProduct]

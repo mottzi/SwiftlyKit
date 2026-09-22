@@ -1,7 +1,9 @@
 import Foundation
 
+/// SDK bundle lookup within standard or caller-selected environment storage.
 enum SDKBundleLocator {
 
+    /// Returns the first installed bundle in the standard SwiftPM SDK locations.
     static func locate(identifier: String, homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL? {
 
         let bundleName = "\(identifier).artifactbundle"
@@ -27,6 +29,7 @@ enum SDKBundleLocator {
         return nil
     }
 
+    /// Returns the installed bundle in the selected storage without escaping a custom SDK directory.
     static func locate(
         identifier: String,
         in storage: EnvironmentStorage,

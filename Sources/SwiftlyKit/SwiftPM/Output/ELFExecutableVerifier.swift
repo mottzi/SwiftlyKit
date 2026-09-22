@@ -3,6 +3,7 @@ import Foundation
 /// Verifier for static ELF64 build outputs for supported Linux architectures.
 enum ELFExecutableVerifier {
 
+    /// Rejects executables with the wrong ELF architecture or dynamic library requirements.
     static func verify(_ url: URL, architecture: LinuxArchitecture) throws(SwiftPMError) {
         
         do { try verifyContents(of: url, architecture: architecture) }

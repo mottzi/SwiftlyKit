@@ -2,6 +2,7 @@ import Foundation
 
 extension SwiftPM {
     
+    /// Builds and verifies the executable and source stability before optional publication and cleanup.
     func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,

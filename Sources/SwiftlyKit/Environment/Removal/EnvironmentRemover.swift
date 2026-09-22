@@ -45,6 +45,7 @@ struct EnvironmentRemover {
         self.openSession = openSession
     }
 
+    /// Validates planned removals and verifies installed state after each removal command.
     func remove(_ plan: EnvironmentRemovalPlan, onEvent: SwiftlyKitEvent.Handler? = nil) async throws {
 
         let environmentStorage = plan.environmentStorage

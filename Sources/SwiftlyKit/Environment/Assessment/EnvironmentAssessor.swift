@@ -32,6 +32,7 @@ struct EnvironmentAssessor: Sendable {
         self.loadReleaseCatalog = loadReleaseCatalog
     }
 
+    /// Selects one environment from a shared discovery observation.
     func assess(
         _ packageRoot: URL,
         for target: BuildTarget,
@@ -162,6 +163,7 @@ struct LocalEnvironmentSnapshot: Sendable {
     let isSwiftlyAvailable: Bool
     let sdkBundleExists: @Sendable (String) -> Bool
 
+    /// Returns the installations required by the observed inventory and SDK bundle location.
     func requiredComponents(for release: OfficialStableRelease) -> [PreparationComponent] {
 
         let toolchainAvailable = inventory.contains(toolchain: release.version)
@@ -183,11 +185,13 @@ struct LocalEnvironmentSnapshot: Sendable {
 
 }
 
+/// Current or fallback origin of an assessment catalog observation.
 enum AssessmentCatalogProvenance: Equatable, Sendable {
     case current
     case cache
 }
 
+/// Validated release metadata and its source for one environment observation.
 struct AssessmentCatalogSnapshot: Sendable {
     let releases: [OfficialStableRelease]
     let provenance: AssessmentCatalogProvenance

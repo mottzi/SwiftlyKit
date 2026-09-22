@@ -111,22 +111,23 @@ let result = try await built.publish(to: destination)
 
 The destination's parent directory must exist. Both paths stage and validate the
 complete directory before publishing it. SwiftlyKit refuses to replace an
-existing destination unless you pass `replacingExisting: true`. Post-build
-publication uses the same cross-process mutation coordination as other SwiftlyKit workflows.
+existing destination unless you pass `replacingExisting: true`.
 
-For a folder selected by the user, call `built.publish(into: destination)`.
+To publish into an existing empty folder, call `built.publish(into: destination)`.
 The folder must still be empty when publication commits. SwiftlyKit preserves
 its contents if another process adds a file first.
 
 Keep `result.executable` and every URL in `result.resourceBundles` together. A
 published `result.directory` contains only those runnable files. A result in
 SwiftPM build storage can share its directory with unrelated build output.
+`result.executableName` is the filename used when publishing, even if stripping
+changed the filename in build storage.
 
 > [!IMPORTANT]
 > `SwiftlyKit.build(_:)` authorizes SwiftlyKit to install missing environment
-> components. It may also resolve package dependencies and update
-> `Package.resolved`. Use the staged workflow when your app must inspect or
-> approve those changes first.
+> components and update Swiftly before installing a missing toolchain. It may
+> also resolve package dependencies and update `Package.resolved`. Use the staged
+> workflow when your app must inspect or approve those changes first.
 
 ## Choose a workflow
 
@@ -184,6 +185,11 @@ installations and uncached package dependencies still require network access.
 ```swift
 let environment = try await kit.prepare(assessment)
 ```
+
+When Swiftly is installed but the selected toolchain is missing,
+`assessment.requiredComponents` includes `.swiftlyUpdate`. Calling `prepare(_:)`
+authorizes checking for and applying a Swiftly update before installing that
+toolchain.
 
 Call `prepare(_:)` even when `assessment.requiresInstallation` is `false`.
 Preparation returns the environment required by later staged operations. If
@@ -246,6 +252,9 @@ The convenience call and `BuildRequest` share these build choices:
 | `scratchStorage` | `.packageDefault` | Uses `.build` or an explicit SwiftPM scratch directory. |
 | `output` | `.buildStorage` | Keeps output in build storage or publishes a runnable directory. |
 | `strip` | `false` | Strips a SwiftlyKit-owned copy, then verifies it again. |
+
+Use `BuildTarget.allCases`, `LinuxArchitecture.allCases`, and
+`BuildConfiguration.allCases` to list supported choices in your app.
 
 The convenience call also accepts SwiftPM environment values, package traits,
 shared SwiftPM directories, separate environment storage, a removal-plan
@@ -312,7 +321,7 @@ create a custom environment root but never deletes the root or Swiftly itself.
 It ignores inherited `SWIFTLY_*` variables. A custom root does not create a
 private `HOME` or move SwiftPM scratch, cache, configuration, or security files.
 
-Publication can run `.retain`, `.clean`, or `.reset` after success. `.clean`
+`BuildOutput.publish` accepts `.retain`, `.clean`, or `.reset` for cleanup. `.clean`
 removes compiled output and keeps dependency state. `.reset` removes the complete
 effective scratch directory. SwiftlyKit starts cleanup only after it publishes
 the runnable directory. If cleanup then fails, SwiftlyKit throws
@@ -460,11 +469,11 @@ Other errors that commonly need a distinct response include
 `unsafeBuildStorage`, `unsafeEnvironmentStorage`, `unsafeEnvironmentRemoval`,
 and `unsupportedHost`.
 
-Only one preparation, removal, dependency resolution, build, or cleanup runs at
-a time for cooperating SwiftlyKit processes owned by one macOS user. Cancel the
-calling task to terminate its subprocess group and discard transient publication
-files. Direct `swift` and `swiftly` commands do not join this coordination. Do
-not use them to modify the same installation, package, storage, SDK, or output
+Only one preparation, removal, dependency resolution, build, publication, or
+cleanup runs at a time for cooperating SwiftlyKit processes owned by one macOS
+user. Cancel the calling task to terminate its subprocess group and discard
+transient publication files. Direct `swift` and `swiftly` commands do not join
+this coordination. Do not use them to modify the same installation, package, storage, SDK, or output
 while SwiftlyKit is working. A tool launched by SwiftlyKit can survive if its
 parent process ends abruptly. Stop that tool or wait for it before retrying.
 

@@ -1,7 +1,9 @@
 import Foundation
 
+/// Checks that a prepared environment still matches the package and selected storage.
 enum SwiftPMEnvironmentValidator {
 
+    /// Revalidates package requirements, storage paths, the Swiftly executable, and the selected SDK bundle.
     static func validate(_ environment: LocalBuildEnvironment, locateSDK: (String) -> URL?) throws {
 
         let packageInputs = try PackageInputSnapshot.capture(at: environment.packageRoot)

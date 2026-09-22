@@ -2,6 +2,7 @@ import Foundation
 
 extension SwiftPM {
 
+    /// Resolves package dependencies in the selected scratch storage with the prepared environment.
     func resolveDependencies(
         in scratchStorage: SwiftPMScratchStorage,
         using environment: LocalBuildEnvironment,

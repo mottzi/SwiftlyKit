@@ -67,6 +67,10 @@ public struct EnvironmentChoices: Sendable, RandomAccessCollection {
         return assessment
     }
 
+}
+
+extension EnvironmentChoices {
+
     /// The position of the first compatible assessment.
     public var startIndex: Index {
         assessments.startIndex

@@ -114,21 +114,7 @@ extension LiveSubprocessRunner {
 
 }
 
-extension LiveSubprocessRunner {
-
-    private static let processPlatformOptions: PlatformOptions = {
-        var options = PlatformOptions()
-        options.createSession = true
-        options.teardownSequence = [
-            .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(1))
-        ]
-        return options
-    }()
-
-    private static let outputLimit = 1_048_576
-
-}
-
+/// UTF-8 decoder that retains incomplete characters between subprocess output chunks.
 private struct UTF8StreamDecoder {
 
     private var pending: [UInt8] = []
@@ -207,5 +193,20 @@ extension UTF8StreamDecoder {
             default: return true
         }
     }
+
+}
+
+extension LiveSubprocessRunner {
+
+    private static let processPlatformOptions: PlatformOptions = {
+        var options = PlatformOptions()
+        options.createSession = true
+        options.teardownSequence = [
+            .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(1))
+        ]
+        return options
+    }()
+
+    private static let outputLimit = 1_048_576
 
 }

@@ -16,6 +16,7 @@ public struct CommandOutputChunk: Sendable {
 
 extension CommandOutputChunk {
 
+    /// Adapts subprocess stream chunks to output events without adding a handler if none was supplied.
     static func handler(for eventHandler: SwiftlyKitEvent.Handler?) -> SubprocessOutputHandler? {
 
         guard let eventHandler else { return nil }
