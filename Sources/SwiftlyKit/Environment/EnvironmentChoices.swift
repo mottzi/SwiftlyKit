@@ -1,6 +1,6 @@
 /// Read-only exact environment assessments from one package, catalog, and installed-state observation.
 /// Elements contain each compatible Swift version once in newest-first order.
-/// The collection is empty if no official stable release is compatible.
+/// Cached results contain only complete installed environments.
 public struct EnvironmentChoices: Sendable, RandomAccessCollection {
 
     /// The assessment stored at each collection position.
@@ -8,6 +8,9 @@ public struct EnvironmentChoices: Sendable, RandomAccessCollection {
 
     /// The integer position of an assessment.
     public typealias Index = Int
+
+    /// Whether a catalog outage limited the choices to complete installed environments.
+    public let usesCachedCatalog: Bool
 
     private let assessments: [EnvironmentAssessment]
     private let assessmentsByVersion: [SwiftVersion: EnvironmentAssessment]
@@ -23,9 +26,11 @@ public struct EnvironmentChoices: Sendable, RandomAccessCollection {
         swiftVersionPreference: String?,
         architecture: LinuxArchitecture,
         releases: [OfficialStableRelease],
-        inventory: InstalledEnvironmentInventory
+        inventory: InstalledEnvironmentInventory,
+        usesCachedCatalog: Bool
     ) {
 
+        self.usesCachedCatalog = usesCachedCatalog
         self.assessments = assessments
         self.assessmentsByVersion = Dictionary(uniqueKeysWithValues: assessments.map {
             ($0.swiftVersion, $0)
@@ -52,6 +57,7 @@ public struct EnvironmentChoices: Sendable, RandomAccessCollection {
                 inventory: inventory
             )
         } catch {
+            if usesCachedCatalog { throw AssessmentCatalogFailure.unavailable }
             throw error.swiftlyKitError
         }
 

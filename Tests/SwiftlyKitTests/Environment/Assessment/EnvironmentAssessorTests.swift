@@ -98,7 +98,7 @@ struct EnvironmentAssessorTests {
             localEnvironment: TestLocalEnvironmentLoader { _, _ in
                 throw SwiftlyKitError.unsupportedHost
             },
-            releaseCatalog: TestAssessmentReleaseCatalog { _ in
+            releaseCatalog: TestAssessmentReleaseCatalog {
                 Issue.record("Catalog loading must not run.")
                 return AssessmentCatalogSnapshot(releases: [], provenance: .current)
             }
@@ -266,29 +266,91 @@ struct EnvironmentAssessorTests {
         }
     }
 
-    @Test("Discovery does not present a persistent fallback as a complete catalog")
-    func discoveryRequiresLiveCatalog() async throws {
+    @Test("Offline discovery reuses only complete installed environments")
+    func offlineDiscoveryReusesInstalledPairs() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
             try Data("// swift-tools-version: 6.0\n".utf8).write(
                 to: packageRoot.appending(path: "Package.swift")
             )
-
-            let assessor = testEnvironmentAssessor(
-                releaseCatalog: TestAssessmentReleaseCatalog { requirement in
-                    guard case .currentOnly = requirement else {
-                        Issue.record("Discovery must require current metadata.")
-                        return AssessmentCatalogSnapshot(releases: [], provenance: .cache)
-                    }
-                    throw SwiftlyKitError.networkFailure(
-                        "The Swift.org release catalog is unavailable."
+            let installed = assessorRelease("6.2.4")
+            let missingSDK = assessorRelease("6.3.3")
+            let missingBundle = assessorRelease("6.4.0")
+            let uninstalled = assessorRelease("6.5.0")
+            let inventory = InstalledEnvironmentInventory(
+                toolchains: [installed.version, missingSDK.version, missingBundle.version],
+                sdks: [installed, missingBundle].map {
+                    InstalledStaticLinuxSDK(
+                        toolchainVersion: $0.version,
+                        identifier: $0.staticLinuxSDK.identifier
                     )
                 }
             )
+            let assessor = testEnvironmentAssessor(
+                inventory: inventory,
+                isSwiftlyAvailable: true,
+                sdkBundleIdentifiers: [installed.staticLinuxSDK.identifier],
+                releaseCatalog: TestAssessmentReleaseCatalog.cached([
+                    installed, missingSDK, missingBundle, uninstalled
+                ])
+            )
 
-            await #expect(throws: SwiftlyKitError.networkFailure(
-                "The Swift.org release catalog is unavailable."
-            )) {
+            let choices = try await assessor.compatibleEnvironments(packageRoot, for: .linux(.arm64))
+            let assessment = try await assessor.assess(packageRoot, for: .linux(.arm64), toolchain: .automatic)
+
+            #expect(choices.usesCachedCatalog)
+            #expect(choices.map(\.swiftVersion) == [installed.version])
+            #expect(choices.allSatisfy { $0.requiredComponents.isEmpty })
+            #expect(try choices.select(.automatic).swiftVersion == assessment.swiftVersion)
+            #expect(try choices.select(.exact(installed.version)).swiftVersion == installed.version)
+            #expect(throws: SwiftlyKitError.networkFailure("The Swift.org release catalog is unavailable.")) {
+                try choices.select(.exact(missingSDK.version))
+            }
+        }
+    }
+
+    @Test("Offline discovery does not silently replace an unavailable pinned Swift version")
+    func offlineDiscoveryPreservesPreference() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            try Data("6.4.0\n".utf8).write(to: packageRoot.appending(path: ".swift-version"))
+            let installed = assessorRelease("6.3.3")
+            let assessor = testEnvironmentAssessor(
+                inventory: InstalledEnvironmentInventory(
+                    toolchains: [installed.version],
+                    sdks: [InstalledStaticLinuxSDK(
+                        toolchainVersion: installed.version,
+                        identifier: installed.staticLinuxSDK.identifier
+                    )]
+                ),
+                isSwiftlyAvailable: true,
+                sdkBundleIdentifiers: [installed.staticLinuxSDK.identifier],
+                releaseCatalog: TestAssessmentReleaseCatalog.cached([installed, assessorRelease("6.4.0")])
+            )
+
+            let choices = try await assessor.compatibleEnvironments(packageRoot, for: .linux(.arm64))
+            #expect(throws: SwiftlyKitError.networkFailure("The Swift.org release catalog is unavailable.")) {
+                try choices.select(.automatic)
+            }
+            #expect(try choices.select(.exact(installed.version)).swiftVersion == installed.version)
+        }
+    }
+
+    @Test("Offline discovery reports catalog unavailability if no installed environment is usable")
+    func offlineDiscoveryRequiresInstalledPair() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Assessor") { packageRoot in
+            try Data("// swift-tools-version: 6.0\n".utf8).write(
+                to: packageRoot.appending(path: "Package.swift")
+            )
+            let assessor = testEnvironmentAssessor(
+                releaseCatalog: TestAssessmentReleaseCatalog.cached([assessorRelease()])
+            )
+
+            await #expect(throws: SwiftlyKitError.networkFailure("The Swift.org release catalog is unavailable.")) {
                 try await assessor.compatibleEnvironments(packageRoot, for: .linux(.arm64))
             }
         }
@@ -364,6 +426,7 @@ struct EnvironmentAssessorTests {
             let automatic = try choices.select(.automatic)
             let exact = try choices.select(.exact(newer.version))
 
+            #expect(!choices.usesCachedCatalog)
             #expect(choices.map(\.swiftVersion) == [newer.version, older.version])
             #expect(choices[0].requiredComponents == [.swiftlyUpdate, .toolchain, .staticLinuxSDK])
             #expect(choices[1].requiredComponents.isEmpty)

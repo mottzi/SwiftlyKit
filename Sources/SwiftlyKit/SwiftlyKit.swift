@@ -104,7 +104,7 @@ extension SwiftlyKit {
 
     /// Returns exact compatible environments from one read-only package and installed-state observation.
     /// Results contain each Swift version once in newest-first order.
-    /// Installed-state results can become stale before the caller selects an environment.
+    /// During a catalog outage, results are limited to complete installed environments in validated cached metadata.
     public func compatibleEnvironments(_ packageRoot: URL, for target: BuildTarget) async throws -> EnvironmentChoices {
         
         try await assessor.compatibleEnvironments(packageRoot, for: target)

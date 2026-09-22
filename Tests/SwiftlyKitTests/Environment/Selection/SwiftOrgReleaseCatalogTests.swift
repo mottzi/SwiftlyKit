@@ -128,6 +128,39 @@ struct SwiftOrgReleaseCatalogTests {
         #expect(await counter.count == 2)
     }
 
+    @Test("A failed refresh preserves the last valid snapshot and retries after connectivity returns")
+    func failedRefreshPreservesCacheAndRecovers() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Catalog") { directory in
+            let first = catalogData()
+            let updated = catalogData("6.4.0")
+            let responses = CatalogResponseSequence([
+                .init(data: first, statusCode: 200),
+                .init(data: Data(), statusCode: 503),
+                .init(data: updated, statusCode: 200)
+            ])
+            let cache = SwiftOrgReleaseCache(fileURL: directory.appending(path: "cache/releases.json"))
+            let catalog = SwiftOrgReleaseCatalog(
+                load: { _ in await responses.next() },
+                cache: cache,
+                now: Date.init,
+                refreshInterval: 0
+            )
+
+            let original = try await catalog.stableReleases()
+            await #expect(throws: SwiftOrgReleaseCatalog.CatalogError.networkFailure) {
+                try await catalog.stableReleases()
+            }
+            #expect(await catalog.cachedReleases() == original)
+            #expect(try cache.read() == first)
+
+            let refreshed = try await catalog.stableReleases()
+            #expect(refreshed.map(\.version) == [swiftVersion("6.4.0")])
+            #expect(await catalog.cachedReleases() == refreshed)
+            #expect(try cache.read() == updated)
+        }
+    }
+
     @Test("Concurrent callers share one live request")
     func coalescesConcurrentRequests() async throws {
 
@@ -352,4 +385,18 @@ private func catalogData(_ version: String = "6.3.3") -> Data {
 
 private func swiftVersion(_ value: String) -> SwiftVersion {
     SwiftVersion(value)!
+}
+
+private actor CatalogResponseSequence {
+
+    private var responses: [SwiftOrgReleaseCatalog.Response]
+
+    init(_ responses: [SwiftOrgReleaseCatalog.Response]) {
+        self.responses = responses
+    }
+
+    func next() -> SwiftOrgReleaseCatalog.Response {
+        responses.removeFirst()
+    }
+
 }

@@ -173,6 +173,12 @@ let assessment = try choices.select(.automatic)
 The selected version must support the package's `swift-tools-version` and target
 architecture.
 
+During a catalog outage, both assessment and discovery use validated cached
+metadata to reuse complete installed environments. `choices.usesCachedCatalog`
+indicates that the list is limited to those environments. Do not replace an
+explicit selection just because it is absent from this limited list. New tool
+installations and uncached package dependencies still require network access.
+
 ### 2. Prepare the accepted environment
 
 ```swift

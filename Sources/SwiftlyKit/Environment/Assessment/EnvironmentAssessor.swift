@@ -8,9 +8,7 @@ struct EnvironmentAssessor: Sendable {
         _ environmentStorage: EnvironmentStorage
     ) async throws -> LocalEnvironmentSnapshot
 
-    typealias ReleaseCatalogLoadHandler = @Sendable (
-        _ requirement: AssessmentCatalogRequirement
-    ) async throws -> AssessmentCatalogSnapshot
+    typealias ReleaseCatalogLoadHandler = @Sendable () async throws -> AssessmentCatalogSnapshot
 
     private let environmentStorage: EnvironmentStorage
     private let loadLocalEnvironment: LocalEnvironmentLoadHandler
@@ -40,43 +38,27 @@ struct EnvironmentAssessor: Sendable {
         toolchain: ToolchainSelection
     ) async throws -> EnvironmentAssessment {
 
-        let local = try await loadLocalEnvironment(packageRoot, environmentStorage)
-        let catalog = try await loadReleaseCatalog(.currentOrCached)
-
-        switch catalog.provenance {
-            case .current:
-                return try assessment(
-                    selecting: toolchain,
-                    releases: catalog.releases,
-                    target: target,
-                    from: local
-                )
-            case .cache:
-                return try cachedAssessment(
-                    selecting: toolchain,
-                    releases: catalog.releases,
-                    target: target,
-                    from: local
-                )
-        }
+        let choices = try await compatibleEnvironments(packageRoot, for: target)
+        return try choices.select(toolchain)
     }
 
     /// Captures one observation and returns each exact compatible environment in newest-first order.
     func compatibleEnvironments(_ packageRoot: URL, for target: BuildTarget) async throws -> EnvironmentChoices {
 
         let local = try await loadLocalEnvironment(packageRoot, environmentStorage)
-        let catalog = try await loadReleaseCatalog(.currentOnly)
-        guard catalog.provenance == .current else {
-            throw AssessmentCatalogFailure.unavailable
-        }
-
+        let catalog = try await loadReleaseCatalog()
         let releases = EnvironmentSelectionPolicy.compatibleReleases(
             toolsVersion: local.packageInputs.toolsVersion,
             architecture: target.architecture,
             releases: catalog.releases
         )
-        let assessments = releases.map { release in
+        var assessments = releases.map { release in
             assessment(for: release, target: target, from: local)
+        }
+
+        if catalog.provenance == .cache {
+            assessments.removeAll { $0.requiresInstallation }
+            guard !assessments.isEmpty else { throw AssessmentCatalogFailure.unavailable }
         }
 
         return EnvironmentChoices(
@@ -84,68 +66,15 @@ struct EnvironmentAssessor: Sendable {
             toolsVersion: local.packageInputs.toolsVersion,
             swiftVersionPreference: local.packageInputs.swiftVersion,
             architecture: target.architecture,
-            releases: catalog.releases,
-            inventory: local.inventory
+            releases: catalog.provenance == .cache ? assessments.map(\.release) : catalog.releases,
+            inventory: local.inventory,
+            usesCachedCatalog: catalog.provenance == .cache
         )
     }
 
 }
 
 extension EnvironmentAssessor {
-
-    private func assessment(
-        selecting toolchain: ToolchainSelection,
-        releases: [OfficialStableRelease],
-        target: BuildTarget,
-        from local: LocalEnvironmentSnapshot
-    ) throws -> EnvironmentAssessment {
-
-        let release: OfficialStableRelease
-
-        do {
-            release = try EnvironmentSelectionPolicy.select(
-                toolchain: toolchain,
-                toolsVersion: local.packageInputs.toolsVersion,
-                swiftVersionPreference: local.packageInputs.swiftVersion,
-                architecture: target.architecture,
-                releases: releases,
-                inventory: local.inventory
-            )
-        } catch {
-            throw error.swiftlyKitError
-        }
-
-        return assessment(for: release, target: target, from: local)
-    }
-
-    private func cachedAssessment(
-        selecting toolchain: ToolchainSelection,
-        releases: [OfficialStableRelease],
-        target: BuildTarget,
-        from local: LocalEnvironmentSnapshot
-    ) throws -> EnvironmentAssessment {
-
-        let installedReleases = releases.filter(
-            local.containsCompletePair(for:)
-        )
-
-        let cached: EnvironmentAssessment
-        do {
-            cached = try assessment(
-                selecting: toolchain,
-                releases: installedReleases,
-                target: target,
-                from: local
-            )
-        } catch {
-            throw AssessmentCatalogFailure.unavailable
-        }
-
-        guard cached.requiredComponents.isEmpty else {
-            throw AssessmentCatalogFailure.unavailable
-        }
-        return cached
-    }
 
     private func assessment(
         for release: OfficialStableRelease,
@@ -204,9 +133,7 @@ extension EnvironmentAssessor {
         )
     }
 
-    private static func loadOfficialReleaseCatalog(
-        requiring requirement: AssessmentCatalogRequirement
-    ) async throws -> AssessmentCatalogSnapshot {
+    private static func loadOfficialReleaseCatalog() async throws -> AssessmentCatalogSnapshot {
 
         do {
             return AssessmentCatalogSnapshot(
@@ -218,8 +145,7 @@ extension EnvironmentAssessor {
         } catch SwiftOrgReleaseCatalog.CatalogError.invalidPayload {
             throw SwiftlyKitError.integrityCheckFailed("Swift.org returned unsupported release metadata.")
         } catch {
-            guard case .currentOrCached = requirement,
-                  let releases = await SwiftOrgReleaseCatalog.shared.cachedReleases()
+            guard let releases = await SwiftOrgReleaseCatalog.shared.cachedReleases()
             else { throw AssessmentCatalogFailure.unavailable }
             return AssessmentCatalogSnapshot(releases: releases, provenance: .cache)
         }
@@ -255,19 +181,6 @@ struct LocalEnvironmentSnapshot: Sendable {
         return components
     }
 
-    func containsCompletePair(for release: OfficialStableRelease) -> Bool {
-
-        inventory.contains(
-            toolchain: release.version,
-            sdk: release.staticLinuxSDK.identifier
-        ) && sdkBundleExists(release.staticLinuxSDK.identifier)
-    }
-
-}
-
-enum AssessmentCatalogRequirement: Equatable, Sendable {
-    case currentOnly
-    case currentOrCached
 }
 
 enum AssessmentCatalogProvenance: Equatable, Sendable {

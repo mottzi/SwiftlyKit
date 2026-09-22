@@ -51,43 +51,32 @@ struct TestLocalEnvironmentLoader {
 
 struct TestAssessmentReleaseCatalog {
 
-    private let makeSnapshot: @Sendable (
-        AssessmentCatalogRequirement
-    ) async throws -> AssessmentCatalogSnapshot
+    private let makeSnapshot: @Sendable () async throws -> AssessmentCatalogSnapshot
 
     init(
-        makeSnapshot: @escaping @Sendable (
-            AssessmentCatalogRequirement
-        ) async throws -> AssessmentCatalogSnapshot
+        makeSnapshot: @escaping @Sendable () async throws -> AssessmentCatalogSnapshot
     ) {
         self.makeSnapshot = makeSnapshot
     }
 
-    func snapshot(
-        _ requirement: AssessmentCatalogRequirement
-    ) async throws -> AssessmentCatalogSnapshot {
-        try await makeSnapshot(requirement)
+    func snapshot() async throws -> AssessmentCatalogSnapshot {
+        try await makeSnapshot()
     }
 
     static func current(_ releases: [OfficialStableRelease]) -> Self {
-        Self { _ in
+        Self {
             AssessmentCatalogSnapshot(releases: releases, provenance: .current)
         }
     }
 
     static func cached(_ releases: [OfficialStableRelease]) -> Self {
-        Self { requirement in
-            guard case .currentOrCached = requirement else {
-                throw SwiftlyKitError.networkFailure(
-                    "The Swift.org release catalog is unavailable."
-                )
-            }
-            return AssessmentCatalogSnapshot(releases: releases, provenance: .cache)
+        Self {
+            AssessmentCatalogSnapshot(releases: releases, provenance: .cache)
         }
     }
 
     static func failure(_ error: SwiftlyKitError) -> Self {
-        Self { _ in throw error }
+        Self { throw error }
     }
 
 }
