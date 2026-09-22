@@ -264,6 +264,12 @@ also accepts `"6.3"` or `"6.3.3"` and normalizes a two-component version to a
 patch version of zero. SwiftlyKit does not select snapshots, development
 branches, custom SDKs, or arbitrary Swiftly selectors.
 
+Compatibility here means the package's Swift tools version and Linux target
+architecture. SwiftPM also compiles package manifests and host tools against the
+active macOS SDK. An older Swift compiler may be unable to use a newer host SDK,
+even with the correct Static Linux SDK installed. Selection does not certify
+host SDK compatibility or guarantee that the package will compile.
+
 ### SwiftPM environment and traits
 
 Bind environment values and traits to the complete SwiftPM workflow:
