@@ -27,7 +27,7 @@ In Xcode, select **File > Add Package Dependencies** and enter:
 https://github.com/mottzi/SwiftlyKit.git
 ```
 
-Select version `0.3.1` or later and add the `SwiftlyKit` library to your target.
+Select version `0.4.0` or later and add the `SwiftlyKit` library to your target.
 
 For a Swift package, add the package and product dependencies:
 
@@ -42,7 +42,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/mottzi/SwiftlyKit.git",
-            from: "0.3.1"
+            from: "0.4.0"
         )
     ],
     targets: [
