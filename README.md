@@ -32,10 +32,11 @@ In Xcode, select **File > Add Package Dependencies** and enter:
 https://github.com/mottzi/SwiftlyKit.git
 ```
 
-These examples use the `0.5.0` API. It renames `.publish` to `.export`
-without compatibility aliases.
+These examples use the upcoming `0.5.1` API. Export uses one method and an
+explicit destination policy. The previous replacement Boolean and `into:`
+overload have been removed without compatibility aliases.
 
-Select version `0.5.0` or later and add the `SwiftlyKit` library to your target.
+Select version `0.5.1` or later and add the `SwiftlyKit` library to your target.
 
 For a Swift package, add the package and product dependencies:
 
@@ -50,7 +51,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/mottzi/SwiftlyKit.git",
-            from: "0.5.0"
+            from: "0.5.1"
         )
     ],
     targets: [
@@ -119,11 +120,33 @@ let result = try await built.export(to: destination)
 
 The destination's parent directory must exist. Both paths stage and validate the
 complete directory before exporting it. SwiftlyKit refuses to replace an
-existing destination unless you pass `replacingExisting: true`.
+existing destination unless you select `policy: .replaceIfPresent`. This policy
+also creates the directory when the destination is missing.
 
-To export into an existing empty folder, call `built.export(into: destination)`.
-The folder must still be empty when SwiftlyKit completes the export. SwiftlyKit
-preserves its contents if another process adds a file first.
+To export into an existing empty folder, use the same method with an explicit policy:
+
+```swift
+let exported = try await built.export(
+    to: destination,
+    policy: .requireExistingEmptyDirectory
+)
+```
+
+The folder must exist and still be empty when SwiftlyKit commits the export.
+SwiftlyKit preserves its contents if another process adds a file first.
+
+`BuildResult.export` and `BuildOutput.export` share `ExportDestinationPolicy`:
+
+| Policy | Destination rule |
+| --- | --- |
+| `.createNewDirectory` | The default creates a new directory and rejects any existing destination. |
+| `.replaceIfPresent` | Creates a missing directory or replaces the existing destination and its contents. |
+| `.requireExistingEmptyDirectory` | Requires an existing empty directory when export commits; does not overwrite contents. |
+
+The destination's parent must exist for every policy. Cleanup is available only
+on `BuildOutput.export` and begins after successful export. Exporting a completed
+`BuildResult` does not clean build storage and returns a new result identifying
+the exported files.
 
 Keep `result.executable` and every URL in `result.resourceBundles` together. An
 exported `result.directory` contains only those runnable files. A result in

@@ -377,7 +377,7 @@ struct SwiftlyKitConvenienceTests {
                 configuration: .release,
                 jobs: 2,
                 scratchStorage: .directory(scratch),
-                output: .export(to: output, replacingExisting: true, cleanup: .reset),
+                output: .export(to: output, policy: .replaceIfPresent, cleanup: .reset),
                 swiftPMTraits: try SwiftPMTraits(["ExportFeature"], includingDefaults: false),
                 onEvent: { await events.record($0) }
             )

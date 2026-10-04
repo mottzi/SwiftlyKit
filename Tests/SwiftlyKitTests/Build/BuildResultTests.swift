@@ -79,7 +79,7 @@ struct BuildResultTests {
             let destination = directory.appending(path: "Exported", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
 
-            let exported = try await result.export(into: destination)
+            let exported = try await result.export(to: destination, policy: .requireExistingEmptyDirectory)
 
             #expect(exported.executable == destination.appending(path: "Tool"))
             #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path()) == ["Tool"])
@@ -104,10 +104,59 @@ struct BuildResultTests {
             try Data("keep".utf8).write(to: unrelatedFile)
 
             await #expect(throws: SwiftlyKitError.outputAlreadyExists(destination)) {
-                try await result.export(into: destination)
+                try await result.export(to: destination, policy: .requireExistingEmptyDirectory)
             }
 
             #expect(try Data(contentsOf: unrelatedFile) == Data("keep".utf8))
+        }
+    }
+
+    @Test("Replacement policy creates missing output or replaces existing contents", arguments: [false, true])
+    func replacementPolicy(destinationExists: Bool) async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-BuildResult") { directory in
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .x86_64)
+            let result = BuildResult(
+                executable: executable,
+                executableName: "Tool",
+                resourceBundles: [],
+                architecture: .x86_64
+            )
+            let destination = directory.appending(path: "Exported", directoryHint: .isDirectory)
+            if destinationExists {
+                try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+                try Data("old".utf8).write(to: destination.appending(path: "OldTool"))
+            }
+
+            let exported = try await result.export(to: destination, policy: .replaceIfPresent)
+
+            #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path()) == ["Tool"])
+            #expect(try Data(contentsOf: exported.executable) == Data(contentsOf: executable))
+            #expect(result.executable == executable)
+        }
+    }
+
+    @Test("Existing-empty policy rejects a missing destination without creating it")
+    func existingEmptyPolicyRequiresDirectory() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-BuildResult") { directory in
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .x86_64)
+            let result = BuildResult(
+                executable: executable,
+                executableName: "Tool",
+                resourceBundles: [],
+                architecture: .x86_64
+            )
+            let destination = directory.appending(path: "Missing", directoryHint: .isDirectory)
+
+            await #expect(throws: SwiftlyKitError.outputExportFailed(destination)) {
+                try await result.export(to: destination, policy: .requireExistingEmptyDirectory)
+            }
+
+            #expect(!FileManager.default.fileExists(atPath: destination.path()))
+            #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path()) == ["Tool"])
         }
     }
 

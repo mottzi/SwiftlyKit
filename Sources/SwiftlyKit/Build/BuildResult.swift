@@ -14,21 +14,6 @@ public struct BuildResult: Sendable {
 
     let architecture: LinuxArchitecture
 
-    /// Coordinates export and revalidates the executable before it exports the runnable directory.
-    /// The parent must exist. The destination must not exist unless replacement is enabled.
-    public func export(to destination: URL, replacingExisting: Bool = false) async throws -> BuildResult {
-
-        try await export(
-            to: destination,
-            destinationPolicy: replacingExisting ? .replace : .create
-        )
-    }
-
-    /// Coordinates export into an existing empty directory and revalidates the executable.
-    public func export(into destination: URL) async throws -> BuildResult {
-        try await export(to: destination, destinationPolicy: .existingEmptyDirectory)
-    }
-
 }
 
 extension BuildResult {
@@ -43,9 +28,13 @@ extension BuildResult {
 
 extension BuildResult {
 
-    private func export(
+    /// Exports the verified executable and its resource bundles without rebuilding.
+    /// Returns a new result identifying the exported files; this result remains unchanged.
+    /// The parent must exist. By default, the destination must not exist.
+    /// Destination policy is enforced when the staged output is committed.
+    public func export(
         to destination: URL,
-        destinationPolicy: AtomicOutputExporter.DestinationPolicy
+        policy: ExportDestinationPolicy = .createNewDirectory
     ) async throws -> BuildResult {
 
         try await MutationGate.shared.withAccess {
@@ -56,7 +45,7 @@ extension BuildResult {
                     resourceBundles: resourceBundles,
                     architecture: architecture,
                     to: destination,
-                    destinationPolicy: destinationPolicy,
+                    destinationPolicy: policy,
                     prepareExecutable: { stagedExecutable in
                         try ELFExecutableVerifier.verify(stagedExecutable, architecture: architecture)
                     }

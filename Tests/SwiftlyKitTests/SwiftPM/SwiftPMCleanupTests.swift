@@ -205,7 +205,7 @@ struct SwiftPMCleanupTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 scratchStorage: .directory(scratch),
-                output: .export(to: output, replacingExisting: true, cleanup: .reset)
+                output: .export(to: output, policy: .replaceIfPresent, cleanup: .reset)
             )
 
             let result = try await swiftPM.build(

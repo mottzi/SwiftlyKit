@@ -149,7 +149,7 @@ extension SwiftPM {
                     architecture: environment.target.architecture
                 )
 
-            case .export(let destination, let replacingExisting, let cleanup):
+            case .export(let destination, let policy, let cleanup):
                 if request.strip {
                     await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
                 }
@@ -163,7 +163,7 @@ extension SwiftPM {
                     resourceBundles: output.resourceBundles,
                     architecture: environment.target.architecture,
                     to: destination,
-                    destinationPolicy: replacingExisting ? .replace : .create,
+                    destinationPolicy: policy,
                     prepareExecutable: { stagedExecutable in
                         if request.strip {
                             try await strip(

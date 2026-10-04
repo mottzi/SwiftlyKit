@@ -783,6 +783,40 @@ struct SwiftPMTests {
         }
     }
 
+    @Test("Build export honors the existing-empty destination policy", arguments: [false, true])
+    func existingEmptyExportPolicy(destinationExists: Bool) async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
+            let executable = directory.appending(path: "Tool")
+            try writeELF(to: executable, architecture: .arm64)
+            let output = directory.appending(path: "Exported", directoryHint: .isDirectory)
+            if destinationExists {
+                try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+            }
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
+                .success(output: "built"),
+                .success(output: directory.path(percentEncoded: false) + "\n")
+            ])
+            let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
+            let request = BuildRequest(
+                ExecutableProduct(name: "Tool"),
+                output: .export(to: output, policy: .requireExistingEmptyDirectory)
+            )
+
+            if destinationExists {
+                let result = try await swiftPM.build(request, using: buildEnvironment(in: directory))
+                #expect(result.executable == output.appending(path: "Tool"))
+                #expect(try Data(contentsOf: result.executable) == Data(contentsOf: executable))
+            } else {
+                await #expect(throws: SwiftPMError.outputExportFailed(output)) {
+                    try await swiftPM.build(request, using: buildEnvironment(in: directory))
+                }
+                #expect(!FileManager.default.fileExists(atPath: output.path()))
+            }
+        }
+    }
+
     @Test("Dependency resolution uses the exact toolchain and forwards progress and command output")
     func dependencyResolutionCommandAndEvents() async throws {
 
@@ -921,7 +955,7 @@ struct SwiftPMTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: .release,
-                output: .export(to: output, replacingExisting: true),
+                output: .export(to: output, policy: .replaceIfPresent),
                 strip: true
             )
             let values = try SwiftPMEnvironment([
@@ -1117,7 +1151,7 @@ struct SwiftPMTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        output: .export(to: output, replacingExisting: true),
+                        output: .export(to: output, policy: .replaceIfPresent),
                         strip: true
                     ),
                     using: buildEnvironment(in: directory)

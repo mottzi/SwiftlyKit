@@ -64,7 +64,7 @@ struct PublicInterfaceTests {
                 scratchStorage: .directory(
                     destination.deletingLastPathComponent().appending(path: "scratch")
                 ),
-                output: .export(to: destination, replacingExisting: true, cleanup: .reset),
+                output: .export(to: destination, policy: .replaceIfPresent, cleanup: .reset),
                 strip: true
             )
         }
@@ -75,7 +75,7 @@ struct PublicInterfaceTests {
             try await $0.export(to: $1)
         }
         let exportIntoDirectory: @Sendable (BuildResult, URL) async throws -> BuildResult = {
-            try await $0.export(into: $1)
+            try await $0.export(to: $1, policy: .requireExistingEmptyDirectory)
         }
 
         _ = losslessVersion
@@ -106,7 +106,7 @@ private func configuredWorkflow(packageRoot: URL, destination: URL, token: Strin
         configuration: .release,
         jobs: 2,
         scratchStorage: .directory(stateRoot.appending(path: "scratch")),
-        output: .export(to: destination, replacingExisting: true, cleanup: .reset),
+        output: .export(to: destination, policy: .replaceIfPresent, cleanup: .reset),
         strip: true,
         swiftPMEnvironment: try SwiftPMEnvironment([
             "PACKAGE_FLAVOR": .plain("production"),

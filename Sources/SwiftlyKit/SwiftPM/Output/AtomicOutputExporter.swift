@@ -11,7 +11,7 @@ enum AtomicOutputExporter {
         resourceBundles: [URL],
         architecture: LinuxArchitecture,
         to destination: URL,
-        destinationPolicy: DestinationPolicy = .create,
+        destinationPolicy: ExportDestinationPolicy = .createNewDirectory,
         prepareExecutable: (URL) async throws -> Void = { _ in }
     ) async throws -> BuildResult {
 
@@ -157,24 +157,24 @@ extension AtomicOutputExporter {
     private static func export(
         _ staging: URL,
         to destination: URL,
-        destinationPolicy: DestinationPolicy,
+        destinationPolicy: ExportDestinationPolicy,
         stagingCanBeRemoved: inout Bool
     ) throws {
 
         switch destinationPolicy {
-            case .create:
+            case .createNewDirectory:
                 try create(
                     staging,
                     at: destination,
                     stagingCanBeRemoved: &stagingCanBeRemoved
                 )
-            case .replace:
+            case .replaceIfPresent:
                 try replace(
                     destination,
                     with: staging,
                     stagingCanBeRemoved: &stagingCanBeRemoved
                 )
-            case .existingEmptyDirectory:
+            case .requireExistingEmptyDirectory:
                 try replaceEmptyDirectory(
                     destination,
                     with: staging,
@@ -282,17 +282,6 @@ extension AtomicOutputExporter {
     private static func itemExists(at url: URL) -> Bool {
         var information = stat()
         return lstat(url.path(percentEncoded: false), &information) == 0
-    }
-
-}
-
-extension AtomicOutputExporter {
-
-    /// Destination mutation allowed when staged output is committed.
-    enum DestinationPolicy {
-        case create
-        case replace
-        case existingEmptyDirectory
     }
 
 }

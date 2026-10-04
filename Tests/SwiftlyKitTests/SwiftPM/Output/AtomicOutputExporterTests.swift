@@ -122,11 +122,41 @@ struct AtomicOutputExporterTests {
                 resourceBundles: [],
                 architecture: .x86_64,
                 to: destination,
-                destinationPolicy: .replace
+                destinationPolicy: .replaceIfPresent
             )
 
             #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path()) == ["Tool"])
             #expect(try Data(contentsOf: destination.appending(path: "Tool")) == Data("new".utf8))
+        }
+    }
+
+    @Test("Existing-empty policy preserves contents added while output is staged")
+    func destinationBecomesNonemptyDuringPreparation() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Exporter") { directory in
+            let source = directory.appending(path: "Tool")
+            try Data("executable".utf8).write(to: source)
+            let destination = directory.appending(path: "Exported", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+            let unrelatedFile = destination.appending(path: "keep.txt")
+
+            await #expect(throws: SwiftPMError.outputAlreadyExists(destination)) {
+                try await AtomicOutputExporter.export(
+                    executable: source,
+                    executableName: "Tool",
+                    resourceBundles: [],
+                    architecture: .x86_64,
+                    to: destination,
+                    destinationPolicy: .requireExistingEmptyDirectory,
+                    prepareExecutable: { _ in
+                        try Data("keep".utf8).write(to: unrelatedFile)
+                    }
+                )
+            }
+
+            #expect(try Data(contentsOf: unrelatedFile) == Data("keep".utf8))
+            #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path()) == ["keep.txt"])
+            #expect(Set(try FileManager.default.contentsOfDirectory(atPath: directory.path())) == ["Tool", "Exported"])
         }
     }
 
@@ -147,7 +177,7 @@ struct AtomicOutputExporterTests {
                     resourceBundles: [],
                     architecture: .x86_64,
                     to: destination,
-                    destinationPolicy: .replace,
+                    destinationPolicy: .replaceIfPresent,
                     prepareExecutable: { _ in throw ExportPreparationError.failed }
                 )
             }

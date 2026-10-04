@@ -392,10 +392,13 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   complete directory with one executable and only its exact linked bundles. An
   exclusive rename provides create-only export. A rename swap provides
   atomic replacement of an existing nonempty destination before the prior tree
-  is removed. `BuildResult.export(to:replacingExisting:)` uses the same
+  is removed. `BuildResult.export(to:policy:)` uses the same
   implementation after a build without rebuilding or stripping again.
-  `BuildResult.export(into:)` commits only if its existing destination is still
-  empty. A caller moves or deploys the exported directory as one unit.
+  `ExportDestinationPolicy.requireExistingEmptyDirectory` commits only if its
+  destination exists and is still empty. Both `BuildResult.export` and
+  `BuildOutput.export` use this policy type; new output defaults to
+  `.createNewDirectory`, and replacement requires `.replaceIfPresent`. A caller
+  moves or deploys the exported directory as one unit.
 - Cleanup starts only after successful export. If cleanup fails, the
   exported directory remains and the error identifies that directory.
 - SwiftPM provides no stable runtime-resource enumeration interface. The output

@@ -25,7 +25,7 @@ struct BuildRequestTests {
         let destination = URL(filePath: "/tmp/Server")
         let output = BuildOutput.export(to: destination)
 
-        #expect(output == .export(to: destination, replacingExisting: false, cleanup: .retain))
+        #expect(output == .export(to: destination, policy: .createNewDirectory, cleanup: .retain))
     }
 
 }
