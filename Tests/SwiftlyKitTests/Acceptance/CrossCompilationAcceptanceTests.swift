@@ -10,9 +10,13 @@ struct CrossCompilationAcceptanceTests {
         .enabled(
             if: ProcessInfo.processInfo.environment["SWIFTLYKIT_RUN_ACCEPTANCE"] == "1",
             "Run explicitly with SWIFTLYKIT_RUN_ACCEPTANCE=1."
-        )
+        ),
+        arguments: [
+            SwiftVersion(major: 6, minor: 3, patch: 3),
+            SwiftVersion(major: 6, minor: 4, patch: 0)
+        ]
     )
-    func packageBuildsBothArchitectures() async throws {
+    func packageBuildsBothArchitectures(swiftVersion: SwiftVersion) async throws {
 
         let resourceRoot = try #require(Bundle.module.resourceURL)
         let packageRoot = resourceRoot.appending(
@@ -25,7 +29,8 @@ struct CrossCompilationAcceptanceTests {
             for architecture in [LinuxArchitecture.arm64, .x86_64] {
                 let assessment = try await kit.assess(
                     packageRoot,
-                    for: .linux(architecture)
+                    for: .linux(architecture),
+                    toolchain: .exact(swiftVersion)
                 )
                 try #require(
                     !assessment.requiresInstallation,
@@ -58,19 +63,20 @@ struct CrossCompilationAcceptanceTests {
 
                 #expect(FileManager.default.isExecutableFile(atPath: result.executable.path(percentEncoded: false)))
                 #expect(result.executable == publication.appending(path: "CrossCompilationFixture"))
+                let bundleName = "ResourceDependency_ResourceDependency.resources"
                 #expect(result.resourceBundles == [
                     publication.appending(
-                        path: "ResourceDependency_ResourceDependency.resources",
+                        path: bundleName,
                         directoryHint: .isDirectory
                     )
                 ])
                 #expect(result.directory == publication)
                 #expect(Set(try FileManager.default.contentsOfDirectory(atPath: publication.path())) == [
                     "CrossCompilationFixture",
-                    "ResourceDependency_ResourceDependency.resources"
+                    bundleName
                 ])
                 let message = publication.appending(
-                    path: "ResourceDependency_ResourceDependency.resources/message.txt"
+                    path: "\(bundleName)/message.txt"
                 )
                 #expect(try String(contentsOf: message, encoding: .utf8).contains("SwiftlyKit cross-compilation fixture"))
             }

@@ -19,6 +19,11 @@ SwiftlyKit also needs Swiftly 1.0 or later. It can install Swiftly, the selected
 toolchain, and the matching SDK when the caller authorizes preparation. It does
 not install Xcode or change the active developer directory.
 
+Builds explicitly use SwiftPM's native build engine so executable and resource
+verification use a consistent output layout. Swift 6.4 supports this engine but
+marks it deprecated. SwiftlyKit does not yet support the default Swift Build
+engine's resource metadata layout.
+
 ## Installation
 
 In Xcode, select **File > Add Package Dependencies** and enter:

@@ -5,6 +5,22 @@ import Testing
 @Suite("SwiftPM build output inspection")
 struct SwiftPMBuildOutputTests {
 
+    @Test("Linked .bundle resources are included in the runnable output")
+    func bundleResources() throws {
+        try withTemporaryDirectory(prefix: "SwiftlyKit-BuildOutput") { directory in
+            let bundle = try createBundle(named: "Package_Assets.bundle", in: directory)
+            try Data("required asset".utf8).write(to: bundle.appending(path: "asset.txt"))
+            try createLinkMetadata(
+                product: "Tool",
+                modules: [("Assets", bundle.lastPathComponent)],
+                in: directory
+            )
+
+            let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            #expect(output.resourceBundles == [bundle])
+        }
+    }
+
     @Test("An output without resource candidates needs no private SwiftPM metadata")
     func noResources() throws {
 

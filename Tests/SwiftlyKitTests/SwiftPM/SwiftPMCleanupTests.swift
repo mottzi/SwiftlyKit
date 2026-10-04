@@ -135,8 +135,8 @@ struct SwiftPMCleanupTests {
     func cleanupUsesCustomEnvironmentStorage() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-Cleanup") { directory in
-            let storageRoot = directory.deletingLastPathComponent().appending(path: "swiftly")
-            let scratch = directory.deletingLastPathComponent().appending(path: "scratch")
+            let storageRoot = directory.deletingLastPathComponent().appending(path: "swiftly-\(UUID().uuidString)")
+            let scratch = directory.deletingLastPathComponent().appending(path: "scratch-\(UUID().uuidString)")
             let runner = RecordingSubprocessRunner(results: [.success(), .success()])
             let swiftPM = SwiftPM(testRunner: runner, validateEnvironment: { _ in })
             let environment = cleanupEnvironment(
@@ -366,7 +366,8 @@ private func argument(after option: String, in arguments: [String]) throws -> St
 }
 
 private func normalizedPath(_ path: String) -> String {
-    let normalized = URL(filePath: path).standardizedFileURL.path(percentEncoded: false)
+    let resolved = URL(filePath: path).resolvingSymlinksInPath().standardizedFileURL.path(percentEncoded: false)
+    let normalized = resolved.hasPrefix("/private/") ? String(resolved.dropFirst("/private".count)) : resolved
     guard normalized != "/" else { return normalized }
     return normalized.hasSuffix("/") ? String(normalized.dropLast()) : normalized
 }

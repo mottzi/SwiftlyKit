@@ -9,7 +9,7 @@ enum RuntimeResourceTreeValidator {
 
         let root = bundle.standardizedFileURL
         guard root.deletingLastPathComponent().pathComponents == directory.standardizedFileURL.pathComponents,
-              root.pathExtension == "resources"
+              ["resources", "bundle"].contains(root.pathExtension)
         else { throw SwiftPMError.runtimeResourceVerificationFailed }
 
         try validateDirectory(root, containedIn: directory.standardizedFileURL)

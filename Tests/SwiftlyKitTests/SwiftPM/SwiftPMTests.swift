@@ -120,6 +120,7 @@ struct SwiftPMTests {
             #expect(build.arguments.prefix(3) == ["run", "swift", "build"])
             #expect(build.arguments.suffix(1) == ["+6.2.1"])
             #expect(build.arguments.contains("--disable-automatic-resolution"))
+            #expect(try argument(after: "--build-system", in: build.arguments) == "native")
             #expect(build.arguments.contains("--swift-sdks-path"))
             #expect(build.arguments.contains("aarch64-swift-linux-musl"))
             #expect(build.arguments.contains("Tool"))
@@ -141,6 +142,7 @@ struct SwiftPMTests {
             #expect(dumpTraitsIndex < dumpIndex)
             #expect(commands[2].environment?["CUSTOM"] == "value")
             #expect(commands[2].arguments.contains("--show-bin-path"))
+            #expect(try argument(after: "--build-system", in: commands[2].arguments) == "native")
             #expect(try argument(after: "--jobs", in: commands[2].arguments) == "3")
 
             for command in commands {

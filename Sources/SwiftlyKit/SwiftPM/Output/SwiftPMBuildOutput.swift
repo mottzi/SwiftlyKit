@@ -8,7 +8,7 @@ struct SwiftPMBuildOutput {
 
     /// Finds the selected executable and verifies its exact linked resources in a SwiftPM binary directory.
     /// Returns an executable-only output when no resource candidates exist.
-    /// The method does not read private SwiftPM link metadata when the directory has no `.resources` candidates.
+    /// The method does not read private SwiftPM link metadata when the directory has no resource bundle candidates.
     static func inspect(product: String, in binaryDirectory: URL) throws -> SwiftPMBuildOutput {
 
         let directory = binaryDirectory.standardizedFileURL
@@ -53,7 +53,7 @@ extension SwiftPMBuildOutput {
         )
         var candidates: [String: URL] = [:]
 
-        for url in contents where url.pathExtension == "resources" {
+        for url in contents where ["resources", "bundle"].contains(url.pathExtension) {
             guard candidates.updateValue(url.standardizedFileURL, forKey: url.lastPathComponent) == nil
             else { throw SwiftPMError.runtimeResourceVerificationFailed }
         }
@@ -103,7 +103,7 @@ extension SwiftPMBuildOutput {
         do { source = try String(contentsOf: accessor, encoding: .utf8) }
         catch { throw SwiftPMError.runtimeResourceVerificationFailed }
 
-        let expression = try NSRegularExpression(pattern: #"\"([^\"\n\r\\]*\.resources)\""#)
+        let expression = try NSRegularExpression(pattern: #"\"([^\"\n\r\\]*\.(?:resources|bundle))\""#)
         let range = NSRange(source.startIndex..<source.endIndex, in: source)
         let values = expression.matches(in: source, range: range).compactMap { match -> String? in
             guard let range = Range(match.range(at: 1), in: source) else { return nil }
@@ -117,7 +117,7 @@ extension SwiftPMBuildOutput {
         for value in values {
             let url = URL(filePath: value)
             let name = url.lastPathComponent
-            guard url.pathExtension == "resources",
+            guard ["resources", "bundle"].contains(url.pathExtension),
                   !name.isEmpty
             else { throw SwiftPMError.runtimeResourceVerificationFailed }
 
