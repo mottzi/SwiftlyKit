@@ -26,6 +26,9 @@ extension OperationProgress {
         /// Removal of exact Swiftly-managed environment resources.
         case removingEnvironment
 
+        /// Evaluation of root and dependency manifests in the selected host environment.
+        case inspectingPackage
+
         /// Explicit SwiftPM package dependency resolution.
         case resolvingDependencies
 

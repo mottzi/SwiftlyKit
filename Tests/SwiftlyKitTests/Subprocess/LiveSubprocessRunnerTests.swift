@@ -109,7 +109,7 @@ struct LiveSubprocessRunnerTests {
             executableURL: URL(filePath: "/bin/sh"),
             arguments: [
                 "-c",
-                "/usr/bin/yes x | /usr/bin/tr -d '\\n' | /usr/bin/head -c 1200000 | /usr/bin/fold -w 100000"
+                "printf 'first error\\n'; /usr/bin/yes x | /usr/bin/tr -d '\\n' | /usr/bin/head -c 1200000 | /usr/bin/fold -w 100000; printf 'last error\\n'"
             ]
         )
 
@@ -120,10 +120,16 @@ struct LiveSubprocessRunnerTests {
 
         let streamed = await recorder.output[.standardOutput] ?? ""
         #expect(result.succeeded)
-        #expect(streamed.utf8.count == 1_200_011)
-        #expect(streamed.utf8.filter { $0 == 0x0A }.count == 11)
+        #expect(streamed.utf8.count == 1_200_034)
+        #expect(streamed.utf8.filter { $0 == 0x0A }.count == 13)
         #expect(result.standardOutput.utf8.count <= 1_048_576)
-        #expect(streamed.hasSuffix(result.standardOutput))
+        let retained = result.standardOutput.components(separatedBy: "\n[output truncated]\n")
+        #expect(retained.count == 2)
+        #expect(streamed.hasPrefix(try #require(retained.first)))
+        #expect(streamed.hasSuffix(try #require(retained.last)))
+        #expect(result.standardOutput.hasPrefix("first error\n"))
+        #expect(result.standardOutput.hasSuffix("last error\n"))
+        #expect(!streamed.contains("[output truncated]"))
     }
 
     @Test("Cancellation terminates child processes in the subprocess group")

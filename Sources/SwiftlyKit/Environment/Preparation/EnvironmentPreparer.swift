@@ -63,6 +63,7 @@ struct EnvironmentPreparer: Sendable {
 
         do {
             var prepared = try await preparationState.preflight(assessment)
+            let hostSDK = prepared.hostSDK
             try Task.checkCancellation()
 
             prepared = try await installRequiredComponents(
@@ -94,7 +95,8 @@ struct EnvironmentPreparer: Sendable {
                 swiftPMEnvironment: swiftPMEnvironment,
                 swiftPMTraits: swiftPMTraits,
                 swiftPMSharedStorage: sharedStorage,
-                environmentStorage: assessment.environmentStorage
+                environmentStorage: assessment.environmentStorage,
+                hostSDK: hostSDK
             )
         } catch is CancellationError {
             throw CancellationError()

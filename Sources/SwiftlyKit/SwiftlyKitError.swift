@@ -57,6 +57,10 @@ public enum SwiftlyKitError: Equatable, Sendable {
     /// SwiftPM could not return usable package metadata.
     case packageInspectionFailed(String)
 
+    /// The selected compiler could not inspect the package in any installed host SDK context.
+    /// The diagnostic retains attempted developer-tools paths and compiler failures.
+    case hostCompilationFailed(swiftVersion: SwiftVersion, detail: String)
+
     /// The build requires explicit package dependency resolution before a retry.
     case dependencyResolutionRequired
 
@@ -181,6 +185,10 @@ extension SwiftlyKitError: LocalizedError {
 
             case .packageInspectionFailed(let detail):
                 "SwiftPM could not inspect the package: \(detail)"
+
+            case .hostCompilationFailed(let version, let detail):
+                "Swift \(version) could not inspect the package with any installed macOS SDK. "
+                    + "Select another Swift release or install compatible developer tools.\n" + detail
 
             case .dependencyResolutionRequired:
                 "Package dependencies must be resolved explicitly before building."

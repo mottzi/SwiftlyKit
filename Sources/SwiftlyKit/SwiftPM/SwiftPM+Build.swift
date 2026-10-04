@@ -10,6 +10,27 @@ extension SwiftPM {
     ) async throws -> BuildResult {
         
         try request.validate()
+        let selected: LocalBuildEnvironment
+        if environment.hostSDK != nil {
+            let inspection = try await inspectPackage(
+                using: environment,
+                scratchStorage: request.scratchStorage,
+                onEvent: onEvent
+            )
+            selected = inspection.environment
+        } else {
+            selected = environment
+        }
+        return try await buildInspected(request, using: selected, onEvent: onEvent)
+    }
+
+    private func buildInspected(
+        _ request: BuildRequest,
+        using environment: LocalBuildEnvironment,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws -> BuildResult {
+
+        try request.validate()
         try validateEnvironment(environment)
 
         let scratchDirectory = try SwiftPMScratchDirectory(

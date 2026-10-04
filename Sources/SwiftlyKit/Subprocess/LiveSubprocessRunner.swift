@@ -108,7 +108,9 @@ extension LiveSubprocessRunner {
 
         collected.append(text)
         if collected.utf8.count > outputLimit {
-            collected = String(collected.suffix(outputLimit / 2))
+            collected = String(collected.prefix(outputLimit / 4))
+                + "\n[output truncated]\n"
+                + String(collected.suffix(outputLimit / 4))
         }
     }
 

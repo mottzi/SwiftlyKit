@@ -164,6 +164,31 @@ extension SwiftlyKit {
         try await executableProducts(using: environment, scratchStorage: .packageDefault)
     }
     
+    /// Inspects root and dependency manifests and returns the environment that successfully evaluated them.
+    /// Host SDK recovery preserves the requested Swift version. Resolution requires explicit opt-in.
+    public func inspectPackage(
+        using environment: LocalBuildEnvironment,
+        scratchStorage: SwiftPMScratchStorage = .packageDefault,
+        dependencies: DependencyResolutionPolicy = .requireResolved,
+        onEvent: SwiftlyKitEvent.Handler? = nil
+    ) async throws -> PackageInspection {
+
+        try await mutationGate.withAccess {
+            do {
+                return try await swiftPM.inspectPackage(
+                    using: environment,
+                    scratchStorage: scratchStorage,
+                    dependencies: dependencies,
+                    onEvent: onEvent
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as SwiftPMError {
+                throw error.swiftlyKitError
+            }
+        }
+    }
+
     /// Runs SwiftPM dependency resolution with the prepared toolchain and selected scratch storage.
     /// This operation can access the network and create or update `Package.resolved`.
     public func resolveDependencies(
@@ -320,20 +345,35 @@ extension SwiftlyKit {
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> BuildResult {
 
-        let assessment = try await assess(packageRoot, for: target, toolchain: toolchain)
-        let environment = try await prepareUnderLease(
-            assessment,
-            swiftPMEnvironment: swiftPMEnvironment,
-            swiftPMTraits: swiftPMTraits,
-            swiftPMSharedStorage: swiftPMSharedStorage,
-            recordRemovalPlan: recordRemovalPlan,
-            onEvent: onEvent
-        )
-        let products = try await executableProducts(
-            using: environment,
-            scratchStorage: scratchStorage,
-            onEvent: onEvent
-        )
+        let choices = try await compatibleEnvironments(packageRoot, for: target)
+        var assessment = try choices.select(toolchain)
+        let inspection: PackageInspection
+        while true {
+            let environment = try await prepareUnderLease(
+                assessment,
+                swiftPMEnvironment: swiftPMEnvironment,
+                swiftPMTraits: swiftPMTraits,
+                swiftPMSharedStorage: swiftPMSharedStorage,
+                recordRemovalPlan: recordRemovalPlan,
+                onEvent: onEvent
+            )
+            do {
+                inspection = try await swiftPM.inspectPackage(
+                    using: environment,
+                    scratchStorage: scratchStorage,
+                    dependencies: .resolveIfNeeded,
+                    onEvent: onEvent
+                )
+                break
+            } catch let error as SwiftlyKitError {
+                guard let recovery = choices.recoveryAssessment(after: error, for: toolchain) else { throw error }
+                assessment = recovery
+            } catch let error as SwiftPMError {
+                throw error.swiftlyKitError
+            }
+        }
+        let environment = inspection.environment
+        let products = inspection.products
         let product = try products.select(productName)
         let request = BuildRequest(
             product,

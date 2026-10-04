@@ -11,13 +11,15 @@ extension SwiftPM {
         scratchStorage: SwiftPMScratchStorage,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> [ExecutableProduct] {
-        try validateEnvironment(environment)
-        let package = try await packageDescription(
-            using: environment,
-            scratchStorage: scratchStorage,
-            onEvent: onEvent
-        )
-        return package.products
+        let (products, _) = try await withHostSDK(using: environment, onEvent: onEvent) { candidate in
+            let package = try await packageDescription(
+                using: candidate,
+                scratchStorage: scratchStorage,
+                onEvent: onEvent
+            )
+            return package.products
+        }
+        return products
     }
 
 }

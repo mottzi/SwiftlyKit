@@ -9,6 +9,17 @@ extension SwiftPM {
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws {
 
+        _ = try await withHostSDK(using: environment, onEvent: onEvent) { candidate in
+            try await resolveDependenciesDirect(in: scratchStorage, using: candidate, onEvent: onEvent)
+        }
+    }
+
+    func resolveDependenciesDirect(
+        in scratchStorage: SwiftPMScratchStorage,
+        using environment: LocalBuildEnvironment,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws {
+
         try validateEnvironment(environment)
 
         let scratchDirectory = try SwiftPMScratchDirectory(

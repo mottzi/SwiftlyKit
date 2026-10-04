@@ -32,11 +32,11 @@ In Xcode, select **File > Add Package Dependencies** and enter:
 https://github.com/mottzi/SwiftlyKit.git
 ```
 
-These examples use the `0.5.1` API. Export uses one method and an
+These examples use the `0.6.0` API. Export uses one method and an
 explicit destination policy. The previous replacement Boolean and `into:`
 overload have been removed without compatibility aliases.
 
-Select version `0.5.1` or later and add the `SwiftlyKit` library to your target.
+Select version `0.6.0` or later and add the `SwiftlyKit` library to your target.
 
 For a Swift package, add the package and product dependencies:
 
@@ -51,7 +51,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/mottzi/SwiftlyKit.git",
-            from: "0.5.1"
+            from: "0.6.0"
         )
     ],
     targets: [
@@ -304,11 +304,35 @@ also accepts `"6.3"` or `"6.3.3"` and normalizes a two-component version to a
 patch version of zero. SwiftlyKit does not select snapshots, development
 branches, custom SDKs, or arbitrary Swiftly selectors.
 
-Compatibility here means the package's Swift tools version and Linux target
-architecture. SwiftPM also compiles package manifests and host tools against the
-active macOS SDK. An older Swift compiler may be unable to use a newer host SDK,
-even with the correct Static Linux SDK installed. Selection does not certify
-host SDK compatibility or guarantee that the package will compile.
+Release eligibility covers the package's Swift tools version and Linux target
+architecture. Preparation also captures the active macOS SDK and developer tools
+for host manifests, plugins, and macros. `inspectPackage(using:)` evaluates the
+root and dependency manifests before returning products and a bound environment.
+If host compilation fails, it tries other installed macOS SDK contexts with the
+same Swift compiler. Attempts use fresh module caches and uncached manifests;
+SDK versions order attempts but never declare compatibility.
+
+```swift
+let inspection = try await kit.inspectPackage(
+    using: environment,
+    dependencies: .resolveIfNeeded
+)
+let product = try inspection.products.select("MyServer")
+let result = try await kit.build(BuildRequest(product), using: inspection.environment)
+```
+
+Inspection defaults to `.requireResolved`; `.resolveIfNeeded` explicitly permits
+dependency resolution. `environment.hostSDKVersion` reports the selected host SDK.
+Subsequent operations bind that SDK per process and reassess removed or replaced
+SDKs through fresh package inspection. SwiftlyKit never changes the global `xcode-select` setting.
+
+When no installed host context can inspect the package, unpinned Automatic can
+advance to a newer assessed official Swift release and matching Linux SDK.
+Staged callers use `choices.recoveryAssessment(after:for:)` and accept its
+installation requirements before preparation. Exact Swift selections and
+`.swift-version` pins remain authoritative. Ordinary manifest errors and network
+failures do not trigger environment recovery. Inspection establishes manifest
+readiness; plugins, macros, and application compilation can still fail later.
 
 ### SwiftPM environment and traits
 

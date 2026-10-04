@@ -4,8 +4,10 @@ extension SwiftPM {
 
     /// Returns one bounded diagnostic from a subprocess result.
     static func boundedDiagnostic(_ result: SubprocessResult) -> String {
-        String((result.standardError + "\n" + result.standardOutput).suffix(16_384))
+        let diagnostic = (result.standardError + "\n" + result.standardOutput)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard diagnostic.count > 16_384 else { return diagnostic }
+        return String(diagnostic.prefix(12_000)) + "\n[diagnostic truncated]\n" + String(diagnostic.suffix(4_000))
     }
 
     static func indicatesRequiredResolution(_ diagnostic: String) -> Bool {
@@ -25,6 +27,9 @@ extension SwiftPM {
     static func command(_ environment: LocalBuildEnvironment, swiftArguments: [String]) -> SubprocessCommand {
 
         var swiftArguments = swiftArguments
+        if environment.hostSDK != nil, !swiftArguments.isEmpty {
+            swiftArguments.insert(contentsOf: ["--manifest-cache", "none"], at: 1)
+        }
         if !swiftArguments.isEmpty {
             swiftArguments.insert(
                 contentsOf: environment.swiftPMSharedStorage.commandArguments,
@@ -69,7 +74,7 @@ extension SwiftPM {
         sensitiveEnvironmentKeys: Set<String>
     ) -> SubprocessCommand {
 
-        var processEnvironment = processEnvironment
+        var processEnvironment = environment.hostSDK?.applying(to: processEnvironment) ?? processEnvironment
 
         if environment.swiftly.location == nil {
             if case .directory = environment.environmentStorage,

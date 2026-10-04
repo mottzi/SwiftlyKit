@@ -42,6 +42,20 @@ public struct EnvironmentChoices: Sendable, RandomAccessCollection {
         self.inventory = inventory
     }
 
+    /// Returns a newer official environment after an observed host compiler failure.
+    /// Exact selections and package version pins never change; installations still require assessment acceptance.
+    public func recoveryAssessment(
+        after failure: SwiftlyKitError,
+        for selection: ToolchainSelection
+    ) -> EnvironmentAssessment? {
+
+        guard case .automatic = selection else { return nil }
+        guard swiftVersionPreference == nil else { return nil }
+        guard case .hostCompilationFailed(let version, _) = failure else { return nil }
+        let newer = assessments.filter { $0.swiftVersion > version }
+        return newer.first { !$0.requiresInstallation } ?? newer.first
+    }
+
     /// Applies an automatic or exact toolchain selection to the captured observation without more I/O.
     /// Throws if the selection is not valid for the package or target.
     public func select(_ selection: ToolchainSelection) throws(SwiftlyKitError) -> EnvironmentAssessment {

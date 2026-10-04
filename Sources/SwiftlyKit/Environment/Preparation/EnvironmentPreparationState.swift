@@ -6,6 +6,7 @@ struct EnvironmentPreparationState: Sendable {
     let swiftly: SwiftlyInstallation?
     let inventory: InstalledEnvironmentInventory
     let sdkBundleURL: URL?
+    var hostSDK: HostSDK? = nil
 
 }
 
@@ -35,7 +36,9 @@ struct LiveEnvironmentPreparationStateObserver: EnvironmentPreparationStateObser
         let readiness = try await HostPreflight().assess()
         try readiness.requireReady()
         try assessment.packageInputs.validateCurrent()
-        return try await refresh(assessment)
+        var state = try await refresh(assessment)
+        state.hostSDK = try await HostSDKDiscovery().active(in: SwiftPMEnvironment.inherited.snapshot().toolValues)
+        return state
     }
 
     func refresh(_ assessment: EnvironmentAssessment) async throws -> EnvironmentPreparationState {

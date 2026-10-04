@@ -6,6 +6,7 @@ enum SwiftPMEnvironmentValidator {
     /// Revalidates package requirements, storage paths, the Swiftly executable, and the selected SDK bundle.
     static func validate(_ environment: LocalBuildEnvironment, locateSDK: (String) -> URL?) throws {
 
+        try environment.hostSDK?.validate()
         let packageInputs = try PackageInputSnapshot.capture(at: environment.packageRoot)
         _ = try environment.swiftPMSharedStorage.validated()
         try environment.environmentStorage.validateNotOverlapping(packageInputs.packageRoot)
