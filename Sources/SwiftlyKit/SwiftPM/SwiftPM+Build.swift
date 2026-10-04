@@ -2,7 +2,7 @@ import Foundation
 
 extension SwiftPM {
     
-    /// Builds and verifies the executable and source stability before optional publication and cleanup.
+    /// Builds and verifies the executable and source stability before optional export and cleanup.
     func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
@@ -131,7 +131,7 @@ extension SwiftPM {
                 }
 
                 await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
-                let strippedExecutable = try await AtomicOutputPublisher.replaceBuildStorageExecutable(
+                let strippedExecutable = try await AtomicOutputExporter.replaceBuildStorageExecutable(
                     executable,
                     at: Self.strippedBuildStorageExecutable(for: executable),
                     prepare: { stagedExecutable in
@@ -149,15 +149,15 @@ extension SwiftPM {
                     architecture: environment.target.architecture
                 )
 
-            case .publish(let destination, let replacingExisting, let cleanup):
+            case .export(let destination, let replacingExisting, let cleanup):
                 if request.strip {
                     await report(.stripping, detail: "Stripping \(request.product.name).", to: onEvent)
                 }
 
                 if !request.strip {
-                    await report(.publishing, detail: "Publishing \(request.product.name).", to: onEvent)
+                    await report(.exporting, detail: "Exporting \(request.product.name).", to: onEvent)
                 }
-                let result = try await AtomicOutputPublisher.publish(
+                let result = try await AtomicOutputExporter.export(
                     executable: output.executable,
                     executableName: output.executable.lastPathComponent,
                     resourceBundles: output.resourceBundles,
@@ -177,7 +177,7 @@ extension SwiftPM {
                             architecture: environment.target.architecture
                         )
                         if request.strip {
-                            await report(.publishing, detail: "Publishing \(request.product.name).", to: onEvent)
+                            await report(.exporting, detail: "Exporting \(request.product.name).", to: onEvent)
                         }
                     }
                 )
@@ -236,7 +236,7 @@ extension SwiftPM {
         environmentStorage: EnvironmentStorage
     ) throws {
 
-        guard case .publish(let destination, _, let cleanup) = output else { return }
+        guard case .export(let destination, _, let cleanup) = output else { return }
 
         let resolvedScratchDirectory = scratchDirectory.resolvingSymlinksInPath().standardizedFileURL
         let resolvedDestination = destination

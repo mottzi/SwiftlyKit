@@ -7,8 +7,8 @@ public enum BuildOutput: Sendable, Equatable {
     /// Required runtime resource bundles remain beside the executable.
     case buildStorage
 
-    /// Atomically publishes the complete runnable directory, then performs the requested cleanup.
-    /// Replacement is opt-in. The parent must exist. Non-retaining cleanup requires publication outside build storage.
-    case publish(to: URL, replacingExisting: Bool = false, cleanup: BuildCleanup = .retain)
+    /// Atomically exports the complete runnable directory, then performs the requested cleanup.
+    /// Replacement is opt-in. The parent must exist. Non-retaining cleanup requires export outside build storage.
+    case export(to: URL, replacingExisting: Bool = false, cleanup: BuildCleanup = .retain)
 
 }

@@ -129,7 +129,7 @@ user.
 Preparation, removal, dependency resolution, builds, and explicit cleanup each hold one
 lease for their complete public operation. The static convenience API holds one lease
 across assessment, preparation, product discovery, dependency resolution, build,
-parent-side inspection, optional stripping, output publication, and requested
+parent-side inspection, optional stripping, output export, and requested
 cleanup. Its private under-lease mechanics do not reacquire the gate. Another
 consumer can run between staged calls.
 
@@ -167,7 +167,7 @@ change, a reverted change, an unreliable event stream, or a failed capture
 withholds the result. The selected scratch directory and each source root's
 top-level `.build`, `.git`, and `.swiftpm` entries are excluded, but resolved
 dependency roots nested inside scratch override that exclusion. Observation
-finishes before executable stripping, output publication, or cleanup. Those
+finishes before executable stripping, output export, or cleanup. Those
 steps read build output, not package source.
 
 Source evidence covers paths, bytes, executable permissions, and safe symbolic-
@@ -248,7 +248,7 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   selection policy.
 - `SwiftPM/Output` owns ELF verification, exact linked runtime-resource
   discovery, trusted-local resource-tree validation, staged executable
-  transformation, and atomic complete-directory publication.
+  transformation, and atomic complete-directory export.
 - `Filesystem` owns domain-independent canonical file identity and path-overlap
   comparison shared by environment and SwiftPM workflows.
 - `SwiftPM/SourceStability` owns resolved-graph source discovery, deterministic
@@ -286,7 +286,7 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   environments, and removal.
 - A custom environment root must be an absolute, dedicated local directory. It
   is disjoint from package sources, the effective SwiftPM scratch directory,
-  explicit SwiftPM shared storage, and publication destinations. SwiftlyKit may
+  explicit SwiftPM shared storage, and export destinations. SwiftlyKit may
   create and populate it, but never deletes it wholesale or removes Swiftly.
 - Standard bootstrap uses the official current-user installation path. Custom
   bootstrap verifies the official downloaded package's signature and Apple
@@ -363,7 +363,7 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - Internal SwiftPM failures are classified structurally before becoming public
   `SwiftlyKitError` values. Collected subprocess output and surfaced diagnostics
   are bounded.
-- A public `BuildResult` identifies the final executable, its publication name,
+- A public `BuildResult` identifies the final executable, its export name,
   its exact verified runtime resource bundles in stable name order, and their
   computed common directory. The executable must be a static, little-endian
   ELF64 file for the requested architecture. Stripped results are verified again.
@@ -388,16 +388,16 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   siblings. Its directory can contain unrelated SwiftPM output. The executable
   is not portable by itself, and callers use the result's exact resource list
   rather than enumerating the directory.
-- Requested output publication stages beside the destination and publishes one
+- Requested output export stages beside the destination and exports one
   complete directory with one executable and only its exact linked bundles. An
-  exclusive rename provides create-only publication. A rename swap provides
+  exclusive rename provides create-only export. A rename swap provides
   atomic replacement of an existing nonempty destination before the prior tree
-  is removed. `BuildResult.publish(to:replacingExisting:)` uses the same
+  is removed. `BuildResult.export(to:replacingExisting:)` uses the same
   implementation after a build without rebuilding or stripping again.
-  `BuildResult.publish(into:)` commits only if its existing destination is still
-  empty. A caller moves or deploys the published directory as one unit.
-- Cleanup starts only after successful publication. If cleanup fails, the
-  published directory remains and the error identifies that directory.
+  `BuildResult.export(into:)` commits only if its existing destination is still
+  empty. A caller moves or deploys the exported directory as one unit.
+- Cleanup starts only after successful export. If cleanup fails, the
+  exported directory remains and the error identifies that directory.
 - SwiftPM provides no stable runtime-resource enumeration interface. The output
   module deliberately couples to the observed link-file and generated-accessor
   layout in one place and fails closed if that private layout changes while

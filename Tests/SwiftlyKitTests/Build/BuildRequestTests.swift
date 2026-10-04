@@ -19,13 +19,13 @@ struct BuildRequestTests {
         #expect(request.strip == false)
     }
 
-    @Test("Published output retains build storage by default")
-    func publishedOutputDefault() {
+    @Test("Exported output retains build storage by default")
+    func exportedOutputDefault() {
 
         let destination = URL(filePath: "/tmp/Server")
-        let output = BuildOutput.publish(to: destination)
+        let output = BuildOutput.export(to: destination)
 
-        #expect(output == .publish(to: destination, replacingExisting: false, cleanup: .retain))
+        #expect(output == .export(to: destination, replacingExisting: false, cleanup: .retain))
     }
 
 }

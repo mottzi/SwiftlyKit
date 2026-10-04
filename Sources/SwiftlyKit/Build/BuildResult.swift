@@ -14,19 +14,19 @@ public struct BuildResult: Sendable {
 
     let architecture: LinuxArchitecture
 
-    /// Coordinates publication and revalidates the executable before it publishes the runnable directory.
+    /// Coordinates export and revalidates the executable before it exports the runnable directory.
     /// The parent must exist. The destination must not exist unless replacement is enabled.
-    public func publish(to destination: URL, replacingExisting: Bool = false) async throws -> BuildResult {
+    public func export(to destination: URL, replacingExisting: Bool = false) async throws -> BuildResult {
 
-        try await publish(
+        try await export(
             to: destination,
             destinationPolicy: replacingExisting ? .replace : .create
         )
     }
 
-    /// Coordinates publication into an existing empty directory and revalidates the executable.
-    public func publish(into destination: URL) async throws -> BuildResult {
-        try await publish(to: destination, destinationPolicy: .existingEmptyDirectory)
+    /// Coordinates export into an existing empty directory and revalidates the executable.
+    public func export(into destination: URL) async throws -> BuildResult {
+        try await export(to: destination, destinationPolicy: .existingEmptyDirectory)
     }
 
 }
@@ -43,14 +43,14 @@ extension BuildResult {
 
 extension BuildResult {
 
-    private func publish(
+    private func export(
         to destination: URL,
-        destinationPolicy: AtomicOutputPublisher.DestinationPolicy
+        destinationPolicy: AtomicOutputExporter.DestinationPolicy
     ) async throws -> BuildResult {
 
         try await MutationGate.shared.withAccess {
             do {
-                return try await AtomicOutputPublisher.publish(
+                return try await AtomicOutputExporter.export(
                     executable: executable,
                     executableName: executableName,
                     resourceBundles: resourceBundles,

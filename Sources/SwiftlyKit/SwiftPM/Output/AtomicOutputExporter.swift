@@ -1,11 +1,11 @@
 import Darwin
 import Foundation
 
-/// Atomic publication of complete runnable output and staged build-storage executable replacement.
-enum AtomicOutputPublisher {
+/// Atomic export of complete runnable output and staged build-storage executable replacement.
+enum AtomicOutputExporter {
 
-    /// Publishes one complete runnable directory without exposing a partial destination.
-    static func publish(
+    /// Exports one complete runnable directory without exposing a partial destination.
+    static func export(
         executable: URL,
         executableName: String,
         resourceBundles: [URL],
@@ -19,7 +19,7 @@ enum AtomicOutputPublisher {
               executable.isFileURL,
               !executableName.isEmpty,
               URL(filePath: executableName).lastPathComponent == executableName
-        else { throw SwiftPMError.outputPublicationFailed(destination) }
+        else { throw SwiftPMError.outputExportFailed(destination) }
 
         let parent = destination.deletingLastPathComponent()
         let staging = parent.appending(
@@ -58,18 +58,18 @@ enum AtomicOutputPublisher {
         } catch let error as SwiftPMError {
             throw error
         } catch {
-            throw SwiftPMError.outputPublicationFailed(destination)
+            throw SwiftPMError.outputExportFailed(destination)
         }
 
         try await prepareExecutable(stagedExecutable)
 
         do {
-            try validatePublication(
+            try validateExport(
                 staging,
                 executableName: executableName,
                 resourceBundles: resourceBundles
             )
-            try publish(
+            try export(
                 staging,
                 to: destination,
                 destinationPolicy: destinationPolicy,
@@ -78,7 +78,7 @@ enum AtomicOutputPublisher {
         } catch let error as SwiftPMError {
             throw error
         } catch {
-            throw SwiftPMError.outputPublicationFailed(destination)
+            throw SwiftPMError.outputExportFailed(destination)
         }
 
         return BuildResult(
@@ -112,7 +112,7 @@ enum AtomicOutputPublisher {
             try FileManager.default.copyItem(at: source, to: staging)
             stagingCanBeRemoved = true
         } catch {
-            throw SwiftPMError.outputPublicationFailed(destination)
+            throw SwiftPMError.outputExportFailed(destination)
         }
 
         try await prepare(staging)
@@ -126,7 +126,7 @@ enum AtomicOutputPublisher {
         } catch let error as SwiftPMError {
             throw error
         } catch {
-            throw SwiftPMError.outputPublicationFailed(destination)
+            throw SwiftPMError.outputExportFailed(destination)
         }
 
         return destination
@@ -134,9 +134,9 @@ enum AtomicOutputPublisher {
 
 }
 
-extension AtomicOutputPublisher {
+extension AtomicOutputExporter {
 
-    private static func validatePublication(_ directory: URL, executableName: String, resourceBundles: [URL]) throws {
+    private static func validateExport(_ directory: URL, executableName: String, resourceBundles: [URL]) throws {
 
         let expectedNames = Set([executableName] + resourceBundles.map(\.lastPathComponent))
         let contents = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
@@ -154,7 +154,7 @@ extension AtomicOutputPublisher {
         }
     }
 
-    private static func publish(
+    private static func export(
         _ staging: URL,
         to destination: URL,
         destinationPolicy: DestinationPolicy,
@@ -193,7 +193,7 @@ extension AtomicOutputPublisher {
             UInt32(RENAME_EXCL)
         )
         if status != 0 && errno == EEXIST { throw SwiftPMError.outputAlreadyExists(destination) }
-        guard status == 0 else { throw SwiftPMError.outputPublicationFailed(destination) }
+        guard status == 0 else { throw SwiftPMError.outputExportFailed(destination) }
         stagingCanBeRemoved = false
     }
 
@@ -223,11 +223,11 @@ extension AtomicOutputPublisher {
                         if rollbackStatus == 0 {
                             stagingCanBeRemoved = true
                         }
-                        throw SwiftPMError.outputPublicationFailed(destination)
+                        throw SwiftPMError.outputExportFailed(destination)
                     }
                     return
                 }
-                guard errno == ENOENT else { throw SwiftPMError.outputPublicationFailed(destination) }
+                guard errno == ENOENT else { throw SwiftPMError.outputExportFailed(destination) }
             }
 
             let status = renameatx_np(
@@ -241,7 +241,7 @@ extension AtomicOutputPublisher {
                 stagingCanBeRemoved = false
                 return
             }
-            guard errno == EEXIST else { throw SwiftPMError.outputPublicationFailed(destination) }
+            guard errno == EEXIST else { throw SwiftPMError.outputExportFailed(destination) }
         }
     }
 
@@ -255,7 +255,7 @@ extension AtomicOutputPublisher {
             if errno == ENOTEMPTY || errno == EEXIST {
                 throw SwiftPMError.outputAlreadyExists(destination)
             }
-            throw SwiftPMError.outputPublicationFailed(destination)
+            throw SwiftPMError.outputExportFailed(destination)
         }
 
         let status = renameatx_np(
@@ -274,7 +274,7 @@ extension AtomicOutputPublisher {
                 )
             }
             if failure == EEXIST { throw SwiftPMError.outputAlreadyExists(destination) }
-            throw SwiftPMError.outputPublicationFailed(destination)
+            throw SwiftPMError.outputExportFailed(destination)
         }
         stagingCanBeRemoved = false
     }
@@ -286,7 +286,7 @@ extension AtomicOutputPublisher {
 
 }
 
-extension AtomicOutputPublisher {
+extension AtomicOutputExporter {
 
     /// Destination mutation allowed when staged output is committed.
     enum DestinationPolicy {

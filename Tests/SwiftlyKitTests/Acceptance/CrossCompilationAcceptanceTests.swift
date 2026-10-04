@@ -47,8 +47,8 @@ struct CrossCompilationAcceptanceTests {
                     path: String(describing: architecture),
                     directoryHint: .isDirectory
                 )
-                let publication = scratchRoot.appending(
-                    path: "Published-\(String(describing: architecture))",
+                let export = scratchRoot.appending(
+                    path: "Exported-\(String(describing: architecture))",
                     directoryHint: .isDirectory
                 )
                 let result = try await kit.build(
@@ -56,26 +56,26 @@ struct CrossCompilationAcceptanceTests {
                         product,
                         configuration: .release,
                         scratchStorage: .directory(scratchDirectory),
-                        output: .publish(to: publication)
+                        output: .export(to: export)
                     ),
                     using: environment
                 )
 
                 #expect(FileManager.default.isExecutableFile(atPath: result.executable.path(percentEncoded: false)))
-                #expect(result.executable == publication.appending(path: "CrossCompilationFixture"))
+                #expect(result.executable == export.appending(path: "CrossCompilationFixture"))
                 let bundleName = "ResourceDependency_ResourceDependency.resources"
                 #expect(result.resourceBundles == [
-                    publication.appending(
+                    export.appending(
                         path: bundleName,
                         directoryHint: .isDirectory
                     )
                 ])
-                #expect(result.directory == publication)
-                #expect(Set(try FileManager.default.contentsOfDirectory(atPath: publication.path())) == [
+                #expect(result.directory == export)
+                #expect(Set(try FileManager.default.contentsOfDirectory(atPath: export.path())) == [
                     "CrossCompilationFixture",
                     bundleName
                 ])
-                let message = publication.appending(
+                let message = export.appending(
                     path: "\(bundleName)/message.txt"
                 )
                 #expect(try String(contentsOf: message, encoding: .utf8).contains("SwiftlyKit cross-compilation fixture"))

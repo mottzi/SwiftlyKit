@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Trusted-local validation for a runtime resource tree that SwiftlyKit can publish.
+/// Trusted-local validation for a runtime resource tree that SwiftlyKit can export.
 enum RuntimeResourceTreeValidator {
 
     /// Verifies one immediate runtime resource bundle and all entries below it.

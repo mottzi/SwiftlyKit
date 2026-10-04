@@ -64,26 +64,26 @@ struct PublicInterfaceTests {
                 scratchStorage: .directory(
                     destination.deletingLastPathComponent().appending(path: "scratch")
                 ),
-                output: .publish(to: destination, replacingExisting: true, cleanup: .reset),
+                output: .export(to: destination, replacingExisting: true, cleanup: .reset),
                 strip: true
             )
         }
         let remove: @Sendable (EnvironmentRemovalPlan) async throws -> Void = {
             try await SwiftlyKit.remove($0, onEvent: observe)
         }
-        let publish: @Sendable (BuildResult, URL) async throws -> BuildResult = {
-            try await $0.publish(to: $1)
+        let export: @Sendable (BuildResult, URL) async throws -> BuildResult = {
+            try await $0.export(to: $1)
         }
-        let publishIntoDirectory: @Sendable (BuildResult, URL) async throws -> BuildResult = {
-            try await $0.publish(into: $1)
+        let exportIntoDirectory: @Sendable (BuildResult, URL) async throws -> BuildResult = {
+            try await $0.export(into: $1)
         }
 
         _ = losslessVersion
         _ = decoded.storage
         _ = request
         _ = remove
-        _ = publish
-        _ = publishIntoDirectory
+        _ = export
+        _ = exportIntoDirectory
         _ = SwiftPMSharedStorage.standard
         _ = SwiftPMScratchStorage.packageDefault
         _ = SwiftPMTraits.packageDefaults
@@ -106,7 +106,7 @@ private func configuredWorkflow(packageRoot: URL, destination: URL, token: Strin
         configuration: .release,
         jobs: 2,
         scratchStorage: .directory(stateRoot.appending(path: "scratch")),
-        output: .publish(to: destination, replacingExisting: true, cleanup: .reset),
+        output: .export(to: destination, replacingExisting: true, cleanup: .reset),
         strip: true,
         swiftPMEnvironment: try SwiftPMEnvironment([
             "PACKAGE_FLAVOR": .plain("production"),
@@ -155,7 +155,7 @@ private func stagedWorkflow(packageRoot: URL, destination: URL) async throws -> 
     let request = BuildRequest(
         product,
         scratchStorage: scratch,
-        output: .publish(to: destination)
+        output: .export(to: destination)
     )
 
     let result: BuildResult

@@ -350,7 +350,7 @@ struct SwiftlyKitConvenienceTests {
         }
     }
 
-    @Test("The convenience API forwards custom storage, published output, and cleanup")
+    @Test("The convenience API forwards custom storage, exported output, and cleanup")
     func outputAndCleanup() async throws {
 
         try await withConvenienceTemporaryDirectory { packageRoot in
@@ -377,8 +377,8 @@ struct SwiftlyKitConvenienceTests {
                 configuration: .release,
                 jobs: 2,
                 scratchStorage: .directory(scratch),
-                output: .publish(to: output, replacingExisting: true, cleanup: .reset),
-                swiftPMTraits: try SwiftPMTraits(["PublishFeature"], includingDefaults: false),
+                output: .export(to: output, replacingExisting: true, cleanup: .reset),
+                swiftPMTraits: try SwiftPMTraits(["ExportFeature"], includingDefaults: false),
                 onEvent: { await events.record($0) }
             )
 
@@ -390,9 +390,9 @@ struct SwiftlyKitConvenienceTests {
             let buildScratchArgument = try #require(commands[2].arguments.dropFirst(buildScratchOption + 1).first)
             #expect(URL(filePath: buildScratchArgument).pathComponents == scratch.pathComponents)
             #expect(try argument(after: "--jobs", in: commands[2].arguments) == "2")
-            #expect(try argument(after: "--traits", in: commands[2].arguments) == "PublishFeature")
+            #expect(try argument(after: "--traits", in: commands[2].arguments) == "ExportFeature")
             #expect(commands[4].arguments.contains("reset"))
-            #expect(try argument(after: "--traits", in: commands[4].arguments) == "PublishFeature")
+            #expect(try argument(after: "--traits", in: commands[4].arguments) == "ExportFeature")
             let resetScratchOption = try #require(commands[4].arguments.firstIndex(of: "--scratch-path"))
             let resetScratchArgument = try #require(commands[4].arguments.dropFirst(resetScratchOption + 1).first)
             #expect(URL(filePath: resetScratchArgument).pathComponents == scratch.pathComponents)
@@ -465,7 +465,7 @@ struct SwiftlyKitConvenienceTests {
                 product: nil,
                 for: .linux(.x86_64),
                 configuration: .release,
-                output: .publish(to: output),
+                output: .export(to: output),
                 strip: true,
                 onEvent: nil
             )

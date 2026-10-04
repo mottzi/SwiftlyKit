@@ -3,18 +3,18 @@ import Foundation
 import Testing
 @testable import SwiftlyKit
 
-@Suite("Atomic runnable output publication")
-struct AtomicOutputPublisherTests {
+@Suite("Atomic runnable output export")
+struct AtomicOutputExporterTests {
 
-    @Test("Publishes one executable-only directory and returns its build result")
+    @Test("Exports one executable-only directory and returns its build result")
     func executableOnly() async throws {
 
-        try await withTemporaryDirectory(prefix: "SwiftlyKit-Publisher") { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Exporter") { directory in
             let source = directory.appending(path: "Tool")
-            let destination = directory.appending(path: "Published", directoryHint: .isDirectory)
+            let destination = directory.appending(path: "Exported", directoryHint: .isDirectory)
             try Data("executable".utf8).write(to: source)
 
-            let result = try await AtomicOutputPublisher.publish(
+            let result = try await AtomicOutputExporter.export(
                 executable: source,
                 executableName: "Tool",
                 resourceBundles: [],
@@ -31,19 +31,19 @@ struct AtomicOutputPublisherTests {
         }
     }
 
-    @Test("Publishes the executable and exact resource bundles as siblings")
+    @Test("Exports the executable and exact resource bundles as siblings")
     func resources() async throws {
 
-        try await withTemporaryDirectory(prefix: "SwiftlyKit-Publisher") { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Exporter") { directory in
             let build = directory.appending(path: "build", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: build, withIntermediateDirectories: false)
             let executable = build.appending(path: "Tool")
             try Data("executable".utf8).write(to: executable)
-            let bundle = try createPublisherBundle(named: "Package_Assets.resources", in: build)
+            let bundle = try createExporterBundle(named: "Package_Assets.resources", in: build)
             try Data("asset".utf8).write(to: bundle.appending(path: "asset.txt"))
-            let destination = directory.appending(path: "Published", directoryHint: .isDirectory)
+            let destination = directory.appending(path: "Exported", directoryHint: .isDirectory)
 
-            let result = try await AtomicOutputPublisher.publish(
+            let result = try await AtomicOutputExporter.export(
                 executable: executable,
                 executableName: "Tool",
                 resourceBundles: [bundle],
@@ -64,32 +64,32 @@ struct AtomicOutputPublisherTests {
                 "Package_Assets.resources"
             ])
             #expect(try Data(contentsOf: result.executable) == Data("prepared executable".utf8))
-            let publishedAsset = destination.appending(path: "Package_Assets.resources/asset.txt")
-            #expect(try Data(contentsOf: publishedAsset) == Data("asset".utf8))
+            let exportedAsset = destination.appending(path: "Package_Assets.resources/asset.txt")
+            #expect(try Data(contentsOf: exportedAsset) == Data("asset".utf8))
             #expect(try Data(contentsOf: bundle.appending(path: "asset.txt")) == Data("asset".utf8))
         }
     }
 
-    @Test("Concurrent create-only publications have one winner")
+    @Test("Concurrent create-only exports have one winner")
     func concurrentCreate() async throws {
 
-        try await withTemporaryDirectory(prefix: "SwiftlyKit-Publisher") { directory in
-            let destination = directory.appending(path: "Published", directoryHint: .isDirectory)
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Exporter") { directory in
+            let destination = directory.appending(path: "Exported", directoryHint: .isDirectory)
             let sources = ["first", "second"].map { directory.appending(path: $0) }
             for source in sources { try Data(source.lastPathComponent.utf8).write(to: source) }
 
-            let attempts = await withTaskGroup(of: PublicationAttempt.self) { group in
+            let attempts = await withTaskGroup(of: ExportAttempt.self) { group in
                 for source in sources {
                     group.addTask {
                         do {
-                            _ = try await AtomicOutputPublisher.publish(
+                            _ = try await AtomicOutputExporter.export(
                                 executable: source,
                                 executableName: "Tool",
                                 resourceBundles: [],
                                 architecture: .x86_64,
                                 to: destination
                             )
-                            return .published
+                            return .exported
                         } catch let error as SwiftPMError {
                             return .rejected(error)
                         } catch {
@@ -101,7 +101,7 @@ struct AtomicOutputPublisherTests {
                 return await group.reduce(into: []) { $0.append($1) }
             }
 
-            #expect(attempts.filter(\.wasPublished).count == 1)
+            #expect(attempts.filter(\.wasExported).count == 1)
             #expect(attempts.filter(\.wasRejectedAsExisting).count == 1)
         }
     }
@@ -109,14 +109,14 @@ struct AtomicOutputPublisherTests {
     @Test("Replacement atomically swaps a nonempty prior directory")
     func replacement() async throws {
 
-        try await withTemporaryDirectory(prefix: "SwiftlyKit-Publisher") { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Exporter") { directory in
             let source = directory.appending(path: "Tool")
             try Data("new".utf8).write(to: source)
-            let destination = directory.appending(path: "Published", directoryHint: .isDirectory)
+            let destination = directory.appending(path: "Exported", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
             try Data("old".utf8).write(to: destination.appending(path: "OldTool"))
 
-            _ = try await AtomicOutputPublisher.publish(
+            _ = try await AtomicOutputExporter.export(
                 executable: source,
                 executableName: "Tool",
                 resourceBundles: [],
@@ -133,49 +133,49 @@ struct AtomicOutputPublisherTests {
     @Test("Preparation failure preserves the prior destination and removes staging")
     func preparationFailure() async throws {
 
-        try await withTemporaryDirectory(prefix: "SwiftlyKit-Publisher") { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Exporter") { directory in
             let source = directory.appending(path: "Tool")
             try Data("new".utf8).write(to: source)
-            let destination = directory.appending(path: "Published", directoryHint: .isDirectory)
+            let destination = directory.appending(path: "Exported", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
             try Data("old".utf8).write(to: destination.appending(path: "Tool"))
 
-            await #expect(throws: PublicationPreparationError.failed) {
-                try await AtomicOutputPublisher.publish(
+            await #expect(throws: ExportPreparationError.failed) {
+                try await AtomicOutputExporter.export(
                     executable: source,
                     executableName: "Tool",
                     resourceBundles: [],
                     architecture: .x86_64,
                     to: destination,
                     destinationPolicy: .replace,
-                    prepareExecutable: { _ in throw PublicationPreparationError.failed }
+                    prepareExecutable: { _ in throw ExportPreparationError.failed }
                 )
             }
 
             #expect(try Data(contentsOf: destination.appending(path: "Tool")) == Data("old".utf8))
             #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path()).allSatisfy {
-                !$0.hasPrefix(".Published.swiftlykit-")
+                !$0.hasPrefix(".Exported.swiftlykit-")
             })
         }
     }
 
-    @Test("Symbolic links, hard links, and special resource entries are rejected before publication")
+    @Test("Symbolic links, hard links, and special resource entries are rejected before export")
     func unsafeResource() async throws {
 
-        try await withTemporaryDirectory(prefix: "SwiftlyKit-Publisher") { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Exporter") { directory in
             let build = directory.appending(path: "build", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: build, withIntermediateDirectories: false)
             let executable = build.appending(path: "Tool")
             try Data("executable".utf8).write(to: executable)
-            let bundle = try createPublisherBundle(named: "Package_Assets.resources", in: build)
+            let bundle = try createExporterBundle(named: "Package_Assets.resources", in: build)
             try FileManager.default.createSymbolicLink(
                 at: bundle.appending(path: "linked"),
                 withDestinationURL: executable
             )
-            let destination = directory.appending(path: "Published", directoryHint: .isDirectory)
+            let destination = directory.appending(path: "Exported", directoryHint: .isDirectory)
 
             await #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try await AtomicOutputPublisher.publish(
+                try await AtomicOutputExporter.export(
                     executable: executable,
                     executableName: "Tool",
                     resourceBundles: [bundle],
@@ -190,7 +190,7 @@ struct AtomicOutputPublisherTests {
             try Data("asset".utf8).write(to: asset)
             try FileManager.default.linkItem(at: asset, to: bundle.appending(path: "hard-linked"))
             await #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try await AtomicOutputPublisher.publish(
+                try await AtomicOutputExporter.export(
                     executable: executable,
                     executableName: "Tool",
                     resourceBundles: [bundle],
@@ -203,7 +203,7 @@ struct AtomicOutputPublisherTests {
             let pipe = bundle.appending(path: "pipe")
             #expect(mkfifo(pipe.path(percentEncoded: false), 0o600) == 0)
             await #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try await AtomicOutputPublisher.publish(
+                try await AtomicOutputExporter.export(
                     executable: executable,
                     executableName: "Tool",
                     resourceBundles: [bundle],
@@ -218,17 +218,17 @@ struct AtomicOutputPublisherTests {
     @Test("Staged resource validation withholds a tree changed during executable preparation")
     func stagedValidation() async throws {
 
-        try await withTemporaryDirectory(prefix: "SwiftlyKit-Publisher") { directory in
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Exporter") { directory in
             let build = directory.appending(path: "build", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: build, withIntermediateDirectories: false)
             let executable = build.appending(path: "Tool")
             try Data("executable".utf8).write(to: executable)
-            let bundle = try createPublisherBundle(named: "Package_Assets.resources", in: build)
+            let bundle = try createExporterBundle(named: "Package_Assets.resources", in: build)
             try Data("asset".utf8).write(to: bundle.appending(path: "asset"))
-            let destination = directory.appending(path: "Published", directoryHint: .isDirectory)
+            let destination = directory.appending(path: "Exported", directoryHint: .isDirectory)
 
             await #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try await AtomicOutputPublisher.publish(
+                try await AtomicOutputExporter.export(
                     executable: executable,
                     executableName: "Tool",
                     resourceBundles: [bundle],
@@ -252,25 +252,25 @@ struct AtomicOutputPublisherTests {
 
 }
 
-private func createPublisherBundle(named name: String, in directory: URL) throws -> URL {
+private func createExporterBundle(named name: String, in directory: URL) throws -> URL {
 
     let bundle = directory.appending(path: name, directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
     return bundle
 }
 
-private enum PublicationPreparationError: Error {
+private enum ExportPreparationError: Error {
     case failed
 }
 
-private enum PublicationAttempt {
+private enum ExportAttempt {
 
-    case published
+    case exported
     case rejected(SwiftPMError)
     case unexpected
 
-    var wasPublished: Bool {
-        if case .published = self { return true }
+    var wasExported: Bool {
+        if case .exported = self { return true }
         return false
     }
 

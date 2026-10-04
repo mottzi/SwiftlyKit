@@ -183,7 +183,7 @@ extension SwiftlyKit {
     
     /// Builds and verifies one executable with the prepared toolchain and SDK, and returns its runnable result.
     /// Disables automatic resolution and throws `dependencyResolutionRequired` if resolution is necessary.
-    /// Rejects source or resolved-dependency changes, then applies requested stripping, publication, and cleanup.
+    /// Rejects source or resolved-dependency changes, then applies requested stripping, export, and cleanup.
     public func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,

@@ -32,7 +32,10 @@ In Xcode, select **File > Add Package Dependencies** and enter:
 https://github.com/mottzi/SwiftlyKit.git
 ```
 
-Select version `0.4.0` or later and add the `SwiftlyKit` library to your target.
+These examples use the upcoming `0.5.0` API. It renames `.publish` to `.export`
+without compatibility aliases.
+
+Select version `0.5.0` or later and add the `SwiftlyKit` library to your target.
 
 For a Swift package, add the package and product dependencies:
 
@@ -47,7 +50,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/mottzi/SwiftlyKit.git",
-            from: "0.4.0"
+            from: "0.5.0"
         )
     ],
     targets: [
@@ -92,9 +95,9 @@ let result = try await SwiftlyKit.build(
 )
 ```
 
-### Publish a runnable directory
+### Export a runnable directory
 
-Use `.publish` to copy the verified executable and its resource bundles out of
+Use `.export` to copy the verified executable and its resource bundles out of
 SwiftPM build storage:
 
 ```swift
@@ -102,30 +105,30 @@ let destination = URL(filePath: "/path/to/output/MyTool")
 let result = try await SwiftlyKit.build(
     packageRoot,
     product: "MyTool",
-    output: .publish(to: destination),
+    output: .export(to: destination),
     strip: true
 )
 ```
 
-You can also publish an existing build result without rebuilding:
+You can also export an existing build result without rebuilding:
 
 ```swift
 let built = try await SwiftlyKit.build(packageRoot, product: "MyTool", strip: true)
-let result = try await built.publish(to: destination)
+let result = try await built.export(to: destination)
 ```
 
 The destination's parent directory must exist. Both paths stage and validate the
-complete directory before publishing it. SwiftlyKit refuses to replace an
+complete directory before exporting it. SwiftlyKit refuses to replace an
 existing destination unless you pass `replacingExisting: true`.
 
-To publish into an existing empty folder, call `built.publish(into: destination)`.
-The folder must still be empty when publication commits. SwiftlyKit preserves
-its contents if another process adds a file first.
+To export into an existing empty folder, call `built.export(into: destination)`.
+The folder must still be empty when SwiftlyKit completes the export. SwiftlyKit
+preserves its contents if another process adds a file first.
 
-Keep `result.executable` and every URL in `result.resourceBundles` together. A
-published `result.directory` contains only those runnable files. A result in
+Keep `result.executable` and every URL in `result.resourceBundles` together. An
+exported `result.directory` contains only those runnable files. A result in
 SwiftPM build storage can share its directory with unrelated build output.
-`result.executableName` is the filename used when publishing, even if stripping
+`result.executableName` is the filename used when exporting, even if stripping
 changed the filename in build storage.
 
 > [!IMPORTANT]
@@ -222,7 +225,7 @@ let request = BuildRequest(
     configuration: .release,
     jobs: 4,
     scratchStorage: scratch,
-    output: .publish(
+    output: .export(
         to: URL(filePath: "/path/to/output/MyTool"),
         cleanup: .reset
     ),
@@ -255,7 +258,7 @@ The convenience call and `BuildRequest` share these build choices:
 | `configuration` | `.release` | Selects a SwiftPM debug or release build. |
 | `jobs` | `nil` | Uses SwiftPM's default concurrency. A positive value sets a limit. |
 | `scratchStorage` | `.packageDefault` | Uses `.build` or an explicit SwiftPM scratch directory. |
-| `output` | `.buildStorage` | Keeps output in build storage or publishes a runnable directory. |
+| `output` | `.buildStorage` | Keeps output in build storage or exports a runnable directory. |
 | `strip` | `false` | Strips a SwiftlyKit-owned copy, then verifies it again. |
 
 Use `BuildTarget.allCases`, `LinuxArchitecture.allCases`, and
@@ -321,16 +324,16 @@ Use `.packageDefaults`, `.none`, or `.all` for common trait policies.
 | `SwiftPMSharedStorage` | Selects SwiftPM cache, configuration, and security directories shared across packages. |
 
 Custom directories must be absolute local paths. An environment root must not
-overlap the package, scratch storage, or publication destination. SwiftlyKit can
+overlap the package, scratch storage, or export destination. SwiftlyKit can
 create a custom environment root but never deletes the root or Swiftly itself.
 It ignores inherited `SWIFTLY_*` variables. A custom root does not create a
 private `HOME` or move SwiftPM scratch, cache, configuration, or security files.
 
-`BuildOutput.publish` accepts `.retain`, `.clean`, or `.reset` for cleanup. `.clean`
+`BuildOutput.export` accepts `.retain`, `.clean`, or `.reset` for cleanup. `.clean`
 removes compiled output and keeps dependency state. `.reset` removes the complete
-effective scratch directory. SwiftlyKit starts cleanup only after it publishes
+effective scratch directory. SwiftlyKit starts cleanup only after it exports
 the runnable directory. If cleanup then fails, SwiftlyKit throws
-`postBuildCleanupFailed` and leaves the published directory available.
+`postBuildCleanupFailed` and leaves the exported directory available.
 
 For cleanup outside a build, use `cleanBuildArtifacts(in:using:)` or
 `resetBuildStorage(in:using:)`. Never select a scratch directory that contains
@@ -399,7 +402,7 @@ Monitoring excludes top-level `.build`, `.git`, and `.swiftpm` directories and
 the selected scratch directory. It accepts at most 200,000 files and symbolic
 links and 8 GiB of regular-file contents. SwiftlyKit throws
 `packageSourceStabilityUnavailable` when it cannot establish or repeat the
-observation. Monitoring ends before stripping, publication, and cleanup.
+observation. Monitoring ends before stripping, export, and cleanup.
 
 ## Host recovery and environment removal
 
@@ -474,10 +477,10 @@ Other errors that commonly need a distinct response include
 `unsafeBuildStorage`, `unsafeEnvironmentStorage`, `unsafeEnvironmentRemoval`,
 and `unsupportedHost`.
 
-Only one preparation, removal, dependency resolution, build, publication, or
+Only one preparation, removal, dependency resolution, build, export, or
 cleanup runs at a time for cooperating SwiftlyKit processes owned by one macOS
 user. Cancel the calling task to terminate its subprocess group and discard
-transient publication files. Direct `swift` and `swiftly` commands do not join
+transient export files. Direct `swift` and `swiftly` commands do not join
 this coordination. Do not use them to modify the same installation, package, storage, SDK, or output
 while SwiftlyKit is working. A tool launched by SwiftlyKit can survive if its
 parent process ends abruptly. Stop that tool or wait for it before retrying.

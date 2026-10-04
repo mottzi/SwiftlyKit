@@ -25,7 +25,7 @@ struct SwiftPMTests {
             (.unsafeSwiftPMSharedStorage(output), .unsafeSwiftPMSharedStorage(output)),
             (.outputInsideBuildStorage(output), .outputInsideBuildStorage(output)),
             (.outputAlreadyExists(output), .outputAlreadyExists(output)),
-            (.outputPublicationFailed(output), .outputPublicationFailed(output)),
+            (.outputExportFailed(output), .outputExportFailed(output)),
             (
                 .postBuildCleanupFailed(output: output, diagnostic: "cleanup failed"),
                 .postBuildCleanupFailed(output: output, detail: "cleanup failed")
@@ -423,11 +423,11 @@ struct SwiftPMTests {
                         SwiftPMSharedStorage(cacheDirectory: root),
                         BuildOutput.buildStorage
                     )
-                case .publication:
+                case .export:
                     (
                         SwiftPMScratchStorage.directory(scratchOutsidePackage),
                         SwiftPMSharedStorage.standard,
-                        BuildOutput.publish(to: root)
+                        BuildOutput.export(to: root)
                     )
             }
             let runner = RecordingSubprocessRunner(results: [
@@ -554,13 +554,13 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("A source mutation withholds published output and reports a typed failure")
+    @Test("A source mutation withholds exported output and reports a typed failure")
     func sourceMutationWithholdsOutput() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let source = directory.appending(path: "Sources/Tool/main.swift")
             let executable = directory.appending(path: "Tool")
-            let output = directory.appending(path: "PublishedTool")
+            let output = directory.appending(path: "ExportedTool")
             try FileManager.default.createDirectory(
                 at: source.deletingLastPathComponent(),
                 withIntermediateDirectories: true
@@ -586,7 +586,7 @@ struct SwiftPMTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        output: .publish(to: output)
+                        output: .export(to: output)
                     ),
                     using: buildEnvironment(in: directory)
                 )
@@ -738,8 +738,8 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Publication returns the complete exact build result")
-    func publishesResources() async throws {
+    @Test("Export returns the complete exact build result")
+    func exportsResources() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
@@ -754,7 +754,7 @@ struct SwiftPMTests {
                 bundle: resources.lastPathComponent,
                 in: directory
             )
-            let publication = directory.appending(path: "Published", directoryHint: .isDirectory)
+            let export = directory.appending(path: "Exported", directoryHint: .isDirectory)
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
                 .success(output: "built"),
@@ -765,18 +765,18 @@ struct SwiftPMTests {
             let result = try await swiftPM.build(
                 BuildRequest(
                     ExecutableProduct(name: "Tool"),
-                    output: .publish(to: publication)
+                    output: .export(to: export)
                 ),
                 using: buildEnvironment(in: directory)
             )
 
-            #expect(result.executable == publication.appending(path: "Tool"))
+            #expect(result.executable == export.appending(path: "Tool"))
             #expect(result.executableName == "Tool")
             #expect(result.resourceBundles == [
-                publication.appending(path: "Dependency_Assets.resources", directoryHint: .isDirectory)
+                export.appending(path: "Dependency_Assets.resources", directoryHint: .isDirectory)
             ])
-            #expect(result.directory == publication)
-            #expect(Set(try FileManager.default.contentsOfDirectory(atPath: publication.path())) == [
+            #expect(result.directory == export)
+            #expect(Set(try FileManager.default.contentsOfDirectory(atPath: export.path())) == [
                 "Tool",
                 "Dependency_Assets.resources"
             ])
@@ -902,12 +902,12 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Explicit stripping prepares staged publication and preserves build storage")
-    func stripAndPublish() async throws {
+    @Test("Explicit stripping prepares staged export and preserves build storage")
+    func stripAndExport() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
-            let output = directory.appending(path: "PublishedTool")
+            let output = directory.appending(path: "ExportedTool")
             try writeELF(to: executable, architecture: .arm64)
             try Data("previous output".utf8).write(to: output)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
@@ -921,7 +921,7 @@ struct SwiftPMTests {
             let request = BuildRequest(
                 ExecutableProduct(name: "Tool"),
                 configuration: .release,
-                output: .publish(to: output, replacingExisting: true),
+                output: .export(to: output, replacingExisting: true),
                 strip: true
             )
             let values = try SwiftPMEnvironment([
@@ -952,18 +952,18 @@ struct SwiftPMTests {
                 onEvent: { await events.record($0) }
             )
 
-            let publishedExecutable = output.appending(path: "Tool")
-            #expect(result.executable == publishedExecutable)
+            let exportedExecutable = output.appending(path: "Tool")
+            #expect(result.executable == exportedExecutable)
             #expect(result.resourceBundles.isEmpty)
-            #expect(try Data(contentsOf: publishedExecutable) == Data(contentsOf: executable))
+            #expect(try Data(contentsOf: exportedExecutable) == Data(contentsOf: executable))
             let commands = await runner.commands
             #expect(commands.count == 4)
             let strippedExecutable = commands[3].arguments[3]
             #expect(commands[3].arguments.prefix(3) == ["run", "llvm-objcopy", "--strip-all"])
             #expect(commands[3].arguments.suffix(1) == ["+6.2.1"])
             #expect(strippedExecutable != executable.path(percentEncoded: false))
-            #expect(strippedExecutable != publishedExecutable.path(percentEncoded: false))
-            #expect(strippedExecutable.hasPrefix(directory.path(percentEncoded: false) + "/.PublishedTool.swiftlykit-"))
+            #expect(strippedExecutable != exportedExecutable.path(percentEncoded: false))
+            #expect(strippedExecutable.hasPrefix(directory.path(percentEncoded: false) + "/.ExportedTool.swiftlykit-"))
             #expect(!FileManager.default.fileExists(atPath: strippedExecutable))
             #expect(commands[0...2].allSatisfy { $0.environment?["BUILD_SECRET"] == "private" })
             #expect(commands[0...2].allSatisfy { $0.sensitiveEnvironmentKeys == ["BUILD_SECRET"] })
@@ -995,7 +995,7 @@ struct SwiftPMTests {
                 #expect(commands[2].arguments.contains(option))
                 #expect(!commands[3].arguments.contains(option))
             }
-            #expect(await events.operations == [.building, .stripping, .publishing])
+            #expect(await events.operations == [.building, .stripping, .exporting])
             #expect(await events.outputs == [
                 EventOutput(stream: .standardOutput, text: "built"),
                 EventOutput(stream: .standardOutput, text: "stripped")
@@ -1014,15 +1014,15 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Published output refuses replacement by default")
-    func publicationRefusesReplacementByDefault() async throws {
+    @Test("Exported output refuses replacement by default")
+    func exportRefusesReplacementByDefault() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
-            let output = directory.appending(path: "PublishedTool")
+            let output = directory.appending(path: "ExportedTool")
             try writeELF(to: executable, architecture: .arm64)
-            let publishedBytes = Data("previous output".utf8)
-            try publishedBytes.write(to: output)
+            let exportedBytes = Data("previous output".utf8)
+            try exportedBytes.write(to: output)
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
                 .success(output: "built"),
@@ -1034,15 +1034,15 @@ struct SwiftPMTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        output: .publish(to: output)
+                        output: .export(to: output)
                     ),
                     using: buildEnvironment(in: directory)
                 )
             }
 
-            #expect(try Data(contentsOf: output) == publishedBytes)
+            #expect(try Data(contentsOf: output) == exportedBytes)
             #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false)).allSatisfy {
-                !$0.hasPrefix(".PublishedTool.swiftlykit-")
+                !$0.hasPrefix(".ExportedTool.swiftlykit-")
             })
         }
     }
@@ -1092,16 +1092,16 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Strip failure preserves build storage and publishes no output")
+    @Test("Strip failure preserves build storage and exports no output")
     func stripFailure() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
-            let output = directory.appending(path: "PublishedTool")
+            let output = directory.appending(path: "ExportedTool")
             try writeELF(to: executable, architecture: .arm64)
             let originalBytes = try Data(contentsOf: executable)
-            let publishedBytes = Data("previous output".utf8)
-            try publishedBytes.write(to: output)
+            let exportedBytes = Data("previous output".utf8)
+            try exportedBytes.write(to: output)
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: try packageDescriptionJSON(executableProducts: ["Tool"])),
                 .success(output: "built"),
@@ -1117,7 +1117,7 @@ struct SwiftPMTests {
                 try await swiftPM.build(
                     BuildRequest(
                         ExecutableProduct(name: "Tool"),
-                        output: .publish(to: output, replacingExisting: true),
+                        output: .export(to: output, replacingExisting: true),
                         strip: true
                     ),
                     using: buildEnvironment(in: directory)
@@ -1125,9 +1125,9 @@ struct SwiftPMTests {
             }
 
             #expect(try Data(contentsOf: executable) == originalBytes)
-            #expect(try Data(contentsOf: output) == publishedBytes)
+            #expect(try Data(contentsOf: output) == exportedBytes)
             #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false)).allSatisfy {
-                !$0.hasPrefix(".PublishedTool.swiftlykit-")
+                !$0.hasPrefix(".ExportedTool.swiftlykit-")
             })
         }
     }
@@ -1138,7 +1138,7 @@ enum EnvironmentStorageOverlap: String, CaseIterable, Sendable {
 
     case scratch
     case shared
-    case publication
+    case export
 
 }
 

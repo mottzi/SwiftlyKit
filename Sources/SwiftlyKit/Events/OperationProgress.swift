@@ -35,8 +35,8 @@ extension OperationProgress {
         /// Symbol removal from the verified executable.
         case stripping
 
-        /// Atomic publication of the verified runnable directory to the requested output URL.
-        case publishing
+        /// Atomic export of the verified runnable directory to the requested output URL.
+        case exporting
 
         /// Removal of compiled products and intermediate build artifacts.
         case cleaningBuildArtifacts

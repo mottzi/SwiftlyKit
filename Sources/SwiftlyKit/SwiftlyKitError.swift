@@ -103,13 +103,13 @@ public enum SwiftlyKitError: Equatable, Sendable {
     /// Automatic cleanup cannot preserve an output located inside build storage.
     case outputInsideBuildStorage(URL)
 
-    /// The publication destination already exists and was not replaced.
+    /// The export destination already exists and was not replaced.
     case outputAlreadyExists(URL)
 
-    /// SwiftlyKit could not atomically publish the runnable directory to the destination.
-    case outputPublicationFailed(URL)
+    /// SwiftlyKit could not atomically export the runnable directory to the destination.
+    case outputExportFailed(URL)
 
-    /// The published directory remains at the associated output URL, but the requested post-build cleanup failed.
+    /// The exported directory remains at the associated output URL, but the requested post-build cleanup failed.
     case postBuildCleanupFailed(output: URL, detail: String)
 
     /// SwiftPM could not remove compiled products and intermediate build artifacts.
@@ -236,12 +236,12 @@ extension SwiftlyKitError: LocalizedError {
             case .outputAlreadyExists(let url):
                 "The output already exists at \(url.path(percentEncoded: false))."
 
-            case .outputPublicationFailed(let url):
-                "The runnable output could not be published to \(url.path(percentEncoded: false))."
+            case .outputExportFailed(let url):
+                "The runnable output could not be exported to \(url.path(percentEncoded: false))."
 
             case .postBuildCleanupFailed(let output, let detail):
                 """
-                The runnable directory was published to \(output.path(percentEncoded: false)), \
+                The runnable directory was exported to \(output.path(percentEncoded: false)), \
                 but build storage cleanup failed: \(detail)
                 """
 

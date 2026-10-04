@@ -15,7 +15,7 @@ enum SwiftPMError: Error, Equatable {
     case unsafeEnvironmentStorage(URL)
     case outputInsideBuildStorage(URL)
     case outputAlreadyExists(URL)
-    case outputPublicationFailed(URL)
+    case outputExportFailed(URL)
     case postBuildCleanupFailed(output: URL, diagnostic: String)
 }
 
@@ -62,8 +62,8 @@ extension SwiftPMError {
             case .outputAlreadyExists(let url):
                 .outputAlreadyExists(url)
 
-            case .outputPublicationFailed(let url):
-                .outputPublicationFailed(url)
+            case .outputExportFailed(let url):
+                .outputExportFailed(url)
 
             case .postBuildCleanupFailed(let output, let diagnostic):
                 .postBuildCleanupFailed(output: output, detail: diagnostic)
