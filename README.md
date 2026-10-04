@@ -32,7 +32,7 @@ In Xcode, select **File > Add Package Dependencies** and enter:
 https://github.com/mottzi/SwiftlyKit.git
 ```
 
-These examples use the upcoming `0.5.0` API. It renames `.publish` to `.export`
+These examples use the `0.5.0` API. It renames `.publish` to `.export`
 without compatibility aliases.
 
 Select version `0.5.0` or later and add the `SwiftlyKit` library to your target.
