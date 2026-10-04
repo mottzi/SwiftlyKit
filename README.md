@@ -32,7 +32,7 @@ In Xcode, select **File > Add Package Dependencies** and enter:
 https://github.com/mottzi/SwiftlyKit.git
 ```
 
-These examples use the upcoming `0.5.1` API. Export uses one method and an
+These examples use the `0.5.1` API. Export uses one method and an
 explicit destination policy. The previous replacement Boolean and `into:`
 overload have been removed without compatibility aliases.
 
