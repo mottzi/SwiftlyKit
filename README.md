@@ -309,8 +309,12 @@ architecture. Preparation also captures the active macOS SDK and developer tools
 for host manifests, plugins, and macros. `inspectPackage(using:)` evaluates the
 root and dependency manifests before returning products and a bound environment.
 If host compilation fails, it tries other installed macOS SDK contexts with the
-same Swift compiler. Attempts use fresh module caches and uncached manifests;
-SDK versions order attempts but never declare compatibility.
+same Swift compiler. Manifest caching includes an identity of the installed
+compiler binaries, manifest library, SDK paths, and SDK metadata. Replaced
+compiler or SDK contexts cannot reuse a prior context's manifest results.
+If that identity cannot be inspected, manifest caching stays disabled. The
+compiler's module cache is retained. SDK versions order attempts but never
+declare compatibility.
 
 ```swift
 let inspection = try await kit.inspectPackage(

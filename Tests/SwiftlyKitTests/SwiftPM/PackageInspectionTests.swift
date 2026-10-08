@@ -42,8 +42,8 @@ struct PackageInspectionTests {
             #expect(commands[2].environment?["SDKROOT"] == older.directory.path(percentEncoded: false))
             #expect(commands.allSatisfy { $0.arguments.last == "+6.3.3" })
             #expect(commands.allSatisfy { $0.arguments.contains("--manifest-cache") })
-            #expect(commands[0].environment?["SWIFTPM_MODULECACHE_OVERRIDE"]
-                != commands[2].environment?["SWIFTPM_MODULECACHE_OVERRIDE"])
+            #expect(commands.allSatisfy { $0.environment?["SWIFTPM_MODULECACHE_OVERRIDE"] == nil })
+            #expect(commands.allSatisfy { $0.environment?["CLANG_MODULE_CACHE_PATH"] == nil })
             let build = SwiftPM.command(inspection.environment, swiftArguments: ["build"])
             #expect(build.environment?["SDKROOT"] == older.directory.path(percentEncoded: false))
             #expect(build.environment?["DEVELOPER_DIR"] == older.developerDirectory.path(percentEncoded: false))

@@ -58,18 +58,6 @@ extension LocalBuildEnvironment {
         replacing(hostSDK: hostSDK, snapshot: swiftPMEnvironment)
     }
 
-    func using(moduleCache: URL) -> LocalBuildEnvironment {
-        var values = swiftPMEnvironment.values
-        values["SWIFTPM_MODULECACHE_OVERRIDE"] = moduleCache.path(percentEncoded: false)
-        values["CLANG_MODULE_CACHE_PATH"] = moduleCache.path(percentEncoded: false)
-        let snapshot = SwiftPMEnvironment.Snapshot(
-            values: values,
-            sensitiveNames: swiftPMEnvironment.sensitiveNames,
-            toolValues: swiftPMEnvironment.toolValues
-        )
-        return replacing(hostSDK: hostSDK, snapshot: snapshot)
-    }
-
     private func replacing(hostSDK: HostSDK?, snapshot: SwiftPMEnvironment.Snapshot) -> LocalBuildEnvironment {
         LocalBuildEnvironment(
             swiftVersion: swiftVersion,

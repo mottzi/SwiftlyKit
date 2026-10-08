@@ -51,7 +51,7 @@ extension SwiftPM {
             to: onEvent
         )
         do {
-            return (try await inspectWithFreshCache(environment, operation: operation), environment)
+            return (try await operation(environment), environment)
         } catch let error as SwiftPMError {
             guard Self.isHostCompilerFailure(error) else { throw error }
             let alternatives = try hostSDKAlternatives(active)
@@ -66,7 +66,7 @@ extension SwiftPM {
                     to: onEvent
                 )
                 do {
-                    let value = try await inspectWithFreshCache(candidate, operation: operation)
+                    let value = try await operation(candidate)
                     await report(
                         .inspectingPackage,
                         detail: "Package dependencies inspected successfully. Using macOS SDK \(sdk.version) "
@@ -106,17 +106,6 @@ extension SwiftPM {
             let active = try await activeHostSDK(environment.swiftPMEnvironment.toolValues)
             return environment.using(hostSDK: active)
         }
-    }
-
-    private func inspectWithFreshCache<Value>(
-        _ environment: LocalBuildEnvironment,
-        operation: (LocalBuildEnvironment) async throws -> Value
-    ) async throws -> Value {
-
-        let directory = FileManager.default.temporaryDirectory.appending(path: "SwiftlyKit-host-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        return try await operation(environment.using(moduleCache: directory))
     }
 
     private static func isHostCompilerFailure(_ error: SwiftPMError) -> Bool {

@@ -27,8 +27,11 @@ extension SwiftPM {
     static func command(_ environment: LocalBuildEnvironment, swiftArguments: [String]) -> SubprocessCommand {
 
         var swiftArguments = swiftArguments
+        var processEnvironment = environment.swiftPMEnvironment.values
         if environment.hostSDK != nil, !swiftArguments.isEmpty {
-            swiftArguments.insert(contentsOf: ["--manifest-cache", "none"], at: 1)
+            let context = HostManifestCache.context(for: environment)
+            processEnvironment[HostManifestCache.environmentKey] = context
+            swiftArguments.insert(contentsOf: ["--manifest-cache", context == nil ? "none" : "shared"], at: 1)
         }
         if !swiftArguments.isEmpty {
             swiftArguments.insert(
@@ -41,7 +44,7 @@ extension SwiftPM {
             environment,
             tool: "swift",
             toolArguments: swiftArguments,
-            processEnvironment: environment.swiftPMEnvironment.values,
+            processEnvironment: processEnvironment,
             sensitiveEnvironmentKeys: environment.swiftPMEnvironment.sensitiveNames
         )
     }

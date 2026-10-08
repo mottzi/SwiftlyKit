@@ -55,6 +55,7 @@ struct SwiftPMEnvironmentTests {
     func inheritedOverridesAreRemoved() {
 
         let removedNames = [
+            "SWIFTLYKIT_HOST_CACHE_CONTEXT",
             "ADDITIONAL_SWIFT_DRIVER_FLAGS", "AR", "CC", "CLANG_PATH", "CXX", "LD", "LIBTOOL", "SDKROOT",
             "SDK_ROOT", "SWIFT_DRIVER_CLANG_EXEC", "SWIFT_DRIVER_SWIFT_FRONTEND_EXEC",
             "SWIFTPM_CUSTOM_BINDIR", "SWIFTPM_CUSTOM_BIN_DIR", "SWIFTPM_CUSTOM_LIBS_DIR",
@@ -72,6 +73,7 @@ struct SwiftPMEnvironmentTests {
     @Test(
         "Protected process values are rejected",
         arguments: [
+            "SWIFTLYKIT_HOST_CACHE_CONTEXT",
             "CFFIXED_USER_HOME",
             "ADDITIONAL_SWIFT_DRIVER_FLAGS",
             "DEVELOPER_DIR",

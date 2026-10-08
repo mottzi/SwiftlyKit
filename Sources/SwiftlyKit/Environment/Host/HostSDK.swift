@@ -42,6 +42,11 @@ struct HostSDK: Sendable, Equatable {
         return values
     }
 
+    /// Cache identity of the captured SDK paths and installed metadata.
+    var cacheIdentity: String {
+        directory.path(percentEncoded: false) + "\n" + developerDirectory.path(percentEncoded: false) + "\n" + fingerprint
+    }
+
 }
 
 extension HostSDK {

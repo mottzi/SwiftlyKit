@@ -149,6 +149,7 @@ extension SwiftPMEnvironment {
     ])
 
     private static let removedInheritedNames = Set([
+        "SWIFTLYKIT_HOST_CACHE_CONTEXT",
         "AR",
         "CC",
         "CLANG_PATH",
