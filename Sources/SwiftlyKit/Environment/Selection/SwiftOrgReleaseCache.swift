@@ -12,7 +12,14 @@ struct SwiftOrgReleaseCache: Sendable {
     /// Returns the cached payload only if its path contains a bounded regular file.
     func read() throws -> Data? {
 
-        guard let fileURL else { return nil }
+        try readObservation()?.data
+    }
+
+    /// Associates raw data with its original atomic snapshot time. Missing times cannot authorize fresh reuse.
+    func readObservation() throws -> Observation? {
+
+        guard var fileURL else { return nil }
+        fileURL.removeAllCachedResourceValues()
 
         let directoryURL = fileURL.deletingLastPathComponent()
         guard FileManager.default.fileExists(atPath: directoryURL.path(percentEncoded: false)) else { return nil }
@@ -24,20 +31,28 @@ struct SwiftOrgReleaseCache: Sendable {
         let values = try fileURL.resourceValues(forKeys: [
             .fileSizeKey,
             .isRegularFileKey,
-            .isSymbolicLinkKey
+            .isSymbolicLinkKey,
+            .contentModificationDateKey
         ])
 
         guard values.isSymbolicLink != true,
               values.isRegularFile == true
         else { throw CacheError.unsafePath }
         guard let size = values.fileSize else { throw CacheError.invalidPayload }
-        guard size <= Self.maximumPayloadSize else { throw CacheError.invalidPayload }
+        guard size >= 0, size <= Self.maximumPayloadSize else { throw CacheError.invalidPayload }
 
-        return try Data(contentsOf: fileURL)
+        let data = try Data(contentsOf: fileURL)
+        guard data.count <= Self.maximumPayloadSize else { throw CacheError.invalidPayload }
+        fileURL.removeAllCachedResourceValues()
+        let current = try fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        guard current.fileSize == values.fileSize,
+              current.contentModificationDate == values.contentModificationDate
+        else { return nil }
+        return Observation(data: data, modifiedAt: values.contentModificationDate)
     }
 
     /// Atomically replaces the cache with one bounded payload and private permissions.
-    func write(_ data: Data) throws {
+    func write(_ data: Data, observedAt: Date? = nil) throws {
 
         guard let fileURL else { return }
         guard data.count <= Self.maximumPayloadSize else { throw CacheError.invalidPayload }
@@ -57,10 +72,9 @@ struct SwiftOrgReleaseCache: Sendable {
         }
 
         try data.write(to: fileURL, options: .atomic)
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o600],
-            ofItemAtPath: fileURL.path(percentEncoded: false)
-        )
+        var attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
+        if let observedAt { attributes[.modificationDate] = observedAt }
+        try FileManager.default.setAttributes(attributes, ofItemAtPath: fileURL.path(percentEncoded: false))
     }
 
 }
@@ -121,6 +135,11 @@ extension SwiftOrgReleaseCache {
 }
 
 extension SwiftOrgReleaseCache {
+
+    struct Observation: Sendable {
+        let data: Data
+        let modifiedAt: Date?
+    }
 
     private enum CacheError: Error {
         case invalidPayload

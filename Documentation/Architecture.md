@@ -2,7 +2,7 @@
 
 SwiftlyKit exposes one public facade with a convenience API and a staged
 workflow. Each facade captures one immutable `EnvironmentStorage` choice. Both
-routes use the same internal workflow components:
+routes use the same internal workflow modules:
 `EnvironmentAssessor`, `EnvironmentPreparer`, `EnvironmentRemover`, and `SwiftPM`.
 
 ```mermaid
@@ -21,13 +21,16 @@ flowchart LR
     Preparer -.->|recordRemovalPlan| RemovalPlan[EnvironmentRemovalPlan]
     Environment --> SwiftPM
     SwiftPM --> Products[ExecutableProducts]
+    SwiftPM -->|root manifest only| Configuration[PackageConfiguration]
+    SwiftPM -->|complete graph| Inspection[PackageInspection]
     Products -->|select| Product[ExecutableProduct]
     SwiftPM --> Stability[PackageSourceStability]
-    Facade -->|prepare / remove / resolve / build| Gate[MutationGate]
+    Facade -->|installed tools and affected directories| Gate[MutationGate]
     Gate --> Preparer
     Gate --> Remover
     Gate --> SwiftPM
     Facade -->|executableProducts| SwiftPM
+    Facade -->|configurePackage| Gate
     Assessor --> Subprocess[SubprocessRunning]
     Requester --> Subprocess
     Preparer --> Subprocess
@@ -37,13 +40,16 @@ flowchart LR
 
 ## Public workflows
 
-The static convenience API, `SwiftlyKit.build`, creates a `SwiftlyKit` value with its
-`environmentStorage` choice and runs the staged operations in order: assess,
-prepare, discover products, select one, and build. If the build reports that
-dependency resolution is required, the convenience API resolves once and retries
-the build. It is orchestration over the staged interface, not a separate build
-pipeline. Both paths accept the same optional `recordRemovalPlan` callback for
-toolchain and SDK installation, and retain their natural throwing result types.
+The static convenience API, `SwiftlyKit.build`, creates a `SwiftlyKit` value with
+its `environmentStorage` choice, captures compatible assessments, prepares one
+selected environment, inspects the complete package graph, selects a product,
+and builds it. Preparation and package work hold separate coordination leases.
+The inspected products, source roots, and recovered host SDK pass directly to
+compilation within that build operation. They are not inspected a second time
+unconditionally or cached as permanent build readiness. If resolution becomes
+necessary, the workflow resolves explicitly and obtains fresh graph evidence.
+Both convenience and staged builds accept the same optional `recordRemovalPlan`
+callback for toolchain and SDK installation.
 
 The staged API keeps authorization and build choices explicit. Assessment is
 read-only: it captures the canonical package root and package-input bytes,
@@ -57,6 +63,17 @@ installation command.
 The callback can persist that plan across failure, cancellation, and abrupt
 termination. `BuildRequest` then contains only the choices for one product
 build.
+
+`configurePackage` evaluates only the root manifest and returns a
+`PackageConfiguration` with executable products and the exact environment that
+succeeded. Its default scratch directory is stable storage under the user's
+cache directory, independent of package build storage and resets. It never
+loads the dependency graph or resolves dependencies. Root configuration allows
+the consumer to present product choices while a build has not yet validated its
+dependencies. The caller must not treat it as full build readiness. Both staged
+and convenience builds still inspect all required dependency manifests before
+compilation, recover host SDK compilation with the exact selected Swift version,
+and recheck the requested product under the final environment.
 
 `EnvironmentRemovalPlan` describes an exact toolchain, SDK, or paired
 environment scope together with its environment storage namespace. Plans can be
@@ -72,15 +89,21 @@ Manual SDK plans use only the exact registry identifier. Full-environment plans
 carry both the exact toolchain version and SDK identifier; neither requires
 release-catalog metadata.
 
-Release-catalog observation is process-wide and single-flight. One validated
-live result remains in memory for one hour and atomically replaces one raw,
-disposable snapshot in the user's cache directory. A catalog network failure
-can use that persistent snapshot only to assess a toolchain and matching SDK
-that the same installed-state observation reports as complete. This fallback
-cannot authorize installation. Cancellation and invalid live metadata never
-fall back. The cache contains no package or credential data and does not defend
-against a process that can modify files as the same user. Cache replacement does
-not change package or installed environment state.
+Release-catalog observation is process-wide and single-flight. Valid metadata
+remains fresh for one hour. A fresh raw disk snapshot passes the same parser as
+live metadata and can populate memory without a network request. Its original
+modification date remains the freshness origin, so launching a consumer again
+does not extend that hour. Future dates, expired snapshots, unreadable files, and
+invalid metadata cannot satisfy a fresh catalog request. Live downloads use an
+ephemeral session with five-second request and resource timeouts. A valid live
+result atomically replaces the disposable snapshot.
+
+A network failure can use an expired but valid snapshot only to assess a
+toolchain and matching SDK that the installed-state observation reports as
+complete. This fallback cannot authorize installation. Cancellation and invalid
+live metadata never fall back. The cache contains no package or credential data
+and does not defend against a process that can modify files as the same user.
+Cache replacement does not change package or installed environment state.
 
 Compatible-environment discovery uses the same read-only observation and
 materializes each exact compatible assessment once in newest-first order.
@@ -97,16 +120,33 @@ returns when macOS accepts the request; it cannot observe license acceptance or
 installation completion. The consumer retries readiness inspection or
 assessment after the user finishes the system interaction.
 
-For one macOS user, every production `SwiftlyKit` facade value and static
-convenience API call that uses coordination protocol v1 admits at most one mutating
-public operation at a time. One cancellation-aware `MutationGate` provides FIFO
-admission inside one process. Before an admitted mutation starts, the gate opens
-the stable user-scoped file at
-`~/Library/Application Support/SwiftlyKit/Coordination/v1/mutation.lock` and
-acquires an exclusive advisory `flock`. Each open normalizes the file to
-user-only permissions. The file remains in place between operations and is never
-removed or replaced. A persistent inode prevents two cooperating processes from
-locking different files during release and acquisition.
+Production facades share one installed-tools reader/writer lease at
+`~/Library/Application Support/SwiftlyKit/Coordination/v1/mutation.lock`.
+Assessment, installed-only preparation, root configuration, and package work
+hold shared access. Authorized installation and environment removal hold
+exclusive access. Installed-only preparation refuses unauthorized installation
+if its accepted assessment becomes stale. Concurrent readers can use installed
+tools, while removal waits until every reader leaves. The local gate batches
+readers and respects queued writers. Older cooperating processes that use an
+exclusive protocol-v1 lease still exclude newer readers and writers safely.
+
+Package work separately reserves canonical filesystem paths. Package roots,
+scratch directories, and inline export destinations use one lock namespace.
+Requested directories have exclusive claims; their ancestors have shared
+claims. An exclusive ancestor subsumes its descendant claims. The workflow
+merges all claims and acquires them in lexical order before work begins, so
+crossed resource requests cannot create a lock-order cycle. A parent reset
+therefore excludes a nested scratch directory or export, while disjoint packages
+and their isolated configuration directories can proceed concurrently.
+
+Path identity resolves symbolic links, folds case conservatively, normalizes
+Unicode, and removes trailing separators except for the root. Folding may
+serialize distinct names on case-sensitive volumes; it cannot change the actual
+filesystem URLs used by operations. Persistent `path-<digest>.lock` files sit
+beside the installed-tools lock. Every open normalizes file permissions to the
+current user. Lock files remain in place and are never removed or replaced.
+Persistent inodes prevent cooperating processes from locking different files
+during release and acquisition.
 
 Lock acquisition uses nonblocking attempts and an asynchronous polling interval
 so a waiting task remains cancellable. The descriptor uses `O_CLOEXEC`, which
@@ -121,33 +161,25 @@ detached task does not inherit that context. An awaited event handler or removal
 plan recorder must not await another mutating SwiftlyKit operation, directly or
 through detached work.
 
-The lease is deliberately user-wide even when a facade selects a custom
-environment storage root. Standard and custom environment namespaces therefore
-cannot be mutated concurrently by cooperating SwiftlyKit processes for the same
-user.
+The installed-tools lease remains user-wide even for a custom environment root.
+Tool installation and removal therefore remain exclusive across standard and
+custom namespaces. Package operations hold a shared tools lease and their
+filesystem claims across resolution, inspection, compilation, verification,
+inline export, and cleanup. Standalone `BuildResult.export` retains a
+conservative exclusive user-wide lease.
 
-Preparation, removal, dependency resolution, builds, and explicit cleanup each hold one
-lease for their complete public operation. The static convenience API holds one lease
-across assessment, preparation, product discovery, dependency resolution, build,
-parent-side inspection, optional stripping, output export, and requested
-cleanup. Its private under-lease mechanics do not reacquire the gate. Another
-consumer can run between staged calls.
-
-Read-only assessment and product discovery remain concurrent. Their installed
-inventory can change while it is observed or before the result is used, so the
-results are not transactional snapshots. Preparation reinspects installed state
-and revalidates captured package selection inputs before it mutates anything.
+The static convenience workflow releases assessment and preparation leases
+before reserving package paths. Private mechanics do not reacquire active
+leases. Another consumer can run between staged calls. Captured results do not
+freeze future installed state; preparation reinspects it and revalidates package
+selection inputs before any authorized mutation. Installed SDK inventory probes
+run with structured concurrency, retain deterministic version ordering, and
+propagate cancellation. A failed individual SDK probe does not discard other
+installed toolchains.
 
 The Command Line Tools installation request does not use this coordinator. It
 starts machine-level system interaction and returns before installation
 finishes, so concurrent consumers can submit duplicate requests.
-
-The lock is intentionally user-wide instead of resource-keyed. Preparation can
-change shared Swiftly, toolchain, and SDK state, and one lock avoids canonical
-resource identities and multi-lock ordering. It conservatively serializes
-mutations that use disjoint packages and scratch directories. Resource-keyed
-coordination is an optimization to consider only if measured contention earns
-the added interface and deadlock risk.
 
 The kernel lock is advisory. It coordinates cooperating SwiftlyKit processes for
 the same user environment, but an independently launched `swift` or `swiftly`
@@ -169,6 +201,13 @@ top-level `.build`, `.git`, and `.swiftpm` entries are excluded, but resolved
 dependency roots nested inside scratch override that exclusion. Observation
 finishes before executable stripping, output export, or cleanup. Those
 steps read build output, not package source.
+
+FSEvents uses at most two multi-root streams, separating outer roots from
+nested dependency roots. Sibling checkouts share watch anchors to avoid repeated
+ancestor descriptors under normal desktop process limits. Kernel exclusions are
+limited to eight per stream and never hide a semantic source root in that stream;
+the callback filters the remaining excluded paths. Moving or replacing a watch
+ancestor, including a root-change notification, invalidates the evidence.
 
 Source evidence covers paths, bytes, executable permissions, and safe symbolic-
 link destinations across the root package and resolved local or checkout
@@ -199,8 +238,9 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 
 - `SwiftlyKit.swift` is the public facade, convenience API orchestrator, and interface
   that maps internal failures to `SwiftlyKitError`.
-- `MutationGate.swift` combines process-local FIFO admission with a persistent
-  user-scoped advisory file lock for complete public mutating workflows.
+- `MutationGate.swift` combines installed-tools reader/writer admission with
+  persistent hierarchical filesystem claims. It hides canonical path identity,
+  overlap exclusion, lock ordering, and cancellation from public callers.
 - `Environment/Host` represents host readiness explicitly, lets readiness-required
   operations reject unsupported hosts or missing developer tools before other
   work proceeds, and owns the adapter that requests Apple's interactive Command
@@ -239,9 +279,11 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   `Environment/SwiftPMSharedStorage` validate and normalize workflow-scoped
   SwiftPM process, package-graph, and shared-storage configuration.
 - `Build` contains the public build value types.
-- `SwiftPM` validates a prepared capability and coordinates product discovery,
-  explicit dependency resolution, build execution, optional stripping, and
-  build-storage cleanup.
+- `SwiftPM` validates a prepared capability and separates root-only
+  configuration from complete graph inspection. It coordinates explicit
+  resolution, exact-compiler host SDK recovery, build execution, optional
+  stripping, and cleanup. Build-scoped inspection evidence passes directly to
+  compilation; it is never persisted as proof of readiness.
 - `SwiftPM/PackageDescription` decodes SwiftPM package metadata into executable
   products. The facade wraps
   the name-ordered products in `ExecutableProducts`, which owns named and sole
@@ -266,10 +308,19 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 
 - Test seams and infrastructure are internal and cannot configure production
   callers.
-- All production facade values and cooperating SwiftlyKit processes for one user
-  share one mutation lease. Uncooperative tools do not share this invariant.
-- The static convenience API holds one lease for its complete workflow. Staged
-  mutations each hold one lease for the duration of that public call.
+- All production facade values and cooperating processes share installed-tools
+  reader/writer coordination. Installation and removal exclude readers using
+  those tools. Uncooperative tools do not share this invariant.
+- Package operations acquire all canonical hierarchical filesystem claims in a
+  fixed order. Parent and child paths exclude conflicting work across packages,
+  scratch directories, and inline exports. Disjoint work can overlap.
+- Root configuration uses isolated stable scratch storage and evaluates only
+  the root manifest. It does not prove dependency compatibility. Every build
+  still validates the complete graph using the exact selected compiler and the
+  host SDK that succeeds.
+- Inspection evidence is reused only within one coordinated build operation.
+  A later operation obtains new evidence; compiler, SDK, environment, manifest,
+  traits, and dependency changes cannot reuse a permanent readiness token.
 - The Command Line Tools installer is requested only through the explicit public
   recovery operation. It is not part of assessment or preparation, and success
   means only that macOS accepted the request.
@@ -292,10 +343,10 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   bootstrap verifies the official downloaded package's signature and Apple
   trust, then uses a dedicated extraction path for the selected namespace; it
   does not overwrite the standard installation.
-- Persistent release metadata is parsed with the live catalog parser and can
-  recover assessment only for one exact pair that Swiftly reports as fully
-  installed. It cannot authorize a download or installation. Cache failure is
-  nonfatal after a valid live observation.
+- Fresh persistent release metadata uses the live catalog parser and its
+  original timestamp. Expired valid metadata can recover assessment during an
+  outage only for a pair observed fully installed; it cannot authorize
+  installation. Cache failure is nonfatal after a valid live observation.
 - Compatible environment choices are unique by Swift version, ordered newest
   first, and derived from one package, catalog, target, and installed-state
   observation. Selection from the snapshot performs no I/O.
@@ -353,10 +404,10 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 - SDK selection resolves only after the retained directory is verified. If
   another process wins atomic link creation, SwiftlyKit verifies and reuses that
   exact selection; conflicting filesystem state is never accepted.
-- Product discovery and builds disable automatic dependency resolution. Staged
-  builds surface a structured resolution-required error; only the convenience API
-  performs the explicit resolve-and-retry sequence. Staged resolution accepts
-  its own scratch selection, while the convenience API reuses its build scratch.
+- Root configuration and build commands disable automatic dependency resolution.
+  Full inspection and staged builds resolve only with explicit
+  `.resolveIfNeeded` policy. The convenience workflow opts into that policy and
+  reuses its build scratch storage for inspection, resolution, and compilation.
 - Executable products are unique and ordered by name. Named and sole-product
   selection use the same `ExecutableProducts.select` behavior in staged and
   convenience workflows.

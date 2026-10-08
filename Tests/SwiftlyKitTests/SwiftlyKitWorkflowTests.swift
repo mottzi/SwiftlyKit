@@ -265,7 +265,7 @@ struct SwiftlyKitWorkflowTests {
         }
     }
 
-    @Test("Independent facades serialize public mutating workflows within one process")
+    @Test("Independent facades serialize mutating workflows for the same package")
     func mutatingWorkflowsAreSerialized() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in
@@ -318,7 +318,7 @@ struct SwiftlyKitWorkflowTests {
         }
     }
 
-    @Test("The convenience API holds one mutation lease for its complete workflow")
+    @Test("The convenience API serializes inspection and compilation with mutations to the same package")
     func convenienceMutationLease() async throws {
 
         try await withTemporaryDirectory(prefix: "SwiftlyKit-Workflow") { packageRoot in

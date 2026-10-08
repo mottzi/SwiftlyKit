@@ -230,12 +230,13 @@ assessment, assess again.
 ### 3. Select an executable product
 
 ```swift
-let products = try await kit.executableProducts(using: environment)
-let product = try products.select("MyTool")
+let configuration = try await kit.configurePackage(using: environment)
+let product = try configuration.products.select("MyTool")
 ```
 
 Pass no name to `select()` only when the package has one executable product.
-Product discovery does not resolve dependencies.
+Configuration evaluates only the root manifest and does not resolve dependencies.
+Use `configuration.environment` for the build to retain any root SDK recovery.
 
 ### 4. Build
 
@@ -255,17 +256,15 @@ let request = BuildRequest(
     strip: true
 )
 
-let result: BuildResult
-
-do {
-    result = try await kit.build(request, using: environment)
-} catch SwiftlyKitError.dependencyResolutionRequired {
-    try await kit.resolveDependencies(in: scratch, using: environment)
-    result = try await kit.build(request, using: environment)
-}
+let result = try await kit.build(
+    request,
+    using: configuration.environment,
+    dependencies: .resolveIfNeeded
+)
 ```
 
-A staged build never resolves dependencies on its own.
+A staged build defaults to requiring existing resolved dependencies. The explicit
+`.resolveIfNeeded` policy authorizes resolution within the same build operation.
 `resolveDependencies(in:using:)` can access the network and update
 `Package.resolved`.
 
@@ -315,6 +314,14 @@ compiler or SDK contexts cannot reuse a prior context's manifest results.
 If that identity cannot be inspected, manifest caching stays disabled. The
 compiler's module cache is retained. SDK versions order attempts but never
 declare compatibility.
+
+`configurePackage(using:)` evaluates only the root manifest and returns products
+with the environment that succeeded. It uses separate stable scratch storage
+under the user's cache directory, so configuration can proceed during another
+build. Its result does not establish dependency readiness. Builds always evaluate
+the full dependency graph before compilation and reuse that graph only within
+the same build operation. Pass `dependencies: .resolveIfNeeded` to a staged build
+to authorize resolution when required.
 
 ```swift
 let inspection = try await kit.inspectPackage(

@@ -42,12 +42,22 @@ actor SwiftOrgReleaseCatalog {
         self.refreshInterval = refreshInterval
     }
 
-    /// Returns one recent validated observation and coalesces concurrent refreshes.
+    /// Returns one observation less than an hour old across processes and coalesces concurrent refreshes.
+    /// Disk promotion preserves the observation's original timestamp; launches never extend freshness.
     func stableReleases() async throws -> [OfficialStableRelease] {
 
         try Task.checkCancellation()
 
         if let snapshot, isFresh(snapshot) { return snapshot.releases }
+        if let observation = try? cache.readObservation(),
+           let modifiedAt = observation.modifiedAt,
+           let releases = try? Self.parse(observation.data) {
+            let persisted = Snapshot(releases: releases, loadedAt: modifiedAt)
+            if isFresh(persisted) {
+                snapshot = persisted
+                return releases
+            }
+        }
 
         let waiter = UUID()
         let outcome = await withTaskCancellationHandler {
@@ -90,7 +100,7 @@ extension SwiftOrgReleaseCatalog {
     private func isFresh(_ snapshot: Snapshot) -> Bool {
 
         let age = now().timeIntervalSince(snapshot.loadedAt)
-        return age >= 0 && age < refreshInterval
+        return age.isFinite && age >= 0 && age < refreshInterval
     }
 
     private func beginRefreshIfNeeded() {
@@ -114,11 +124,12 @@ extension SwiftOrgReleaseCatalog {
         refresh = nil
 
         if case .success(let data, let releases) = outcome {
+            let observedAt = now()
             snapshot = Snapshot(
                 releases: releases,
-                loadedAt: now()
+                loadedAt: observedAt
             )
-            try? cache.write(data)
+            try? cache.write(data, observedAt: observedAt)
         }
 
         let continuations = waiters.values
@@ -234,11 +245,20 @@ extension SwiftOrgReleaseCatalog {
 
     private static func liveLoad(_ url: URL) async throws -> Response {
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 5)
+        let (data, response) = try await networkSession.data(for: request)
         let statusCode = (response as? HTTPURLResponse)?.statusCode
 
         return Response(data: data, statusCode: statusCode)
     }
+
+    /// Bound both stalled transfers and total request duration, including slow partial responses.
+    private static let networkSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForResource = 5
+        return URLSession(configuration: configuration)
+    }()
 
 }
 

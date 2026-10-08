@@ -1,14 +1,15 @@
 import Darwin
 import Foundation
+import CryptoKit
 
-/// Mutation gate for one user. It queues local operations and excludes other SwiftlyKit processes.
+/// Reader/writer admission for installed tools and exclusive admission for individual package resources.
 actor MutationGate {
 
     /// Lock that excludes other SwiftlyKit processes after local admission.
     private let processLock: ProcessMutationLock
 
-    /// True if a local operation has admission.
-    private var isOccupied = false
+    private var activeAccess: Access?
+    private var occupants = 0
 
     /// Local callers that wait in FIFO order.
     private var waiters: [Waiter] = []
@@ -30,6 +31,20 @@ actor MutationGate {
     /// Throws `CancellationError` if the task is canceled while it waits.
     func withAccess<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
 
+        try await withAccess(.exclusive, operation: operation)
+    }
+
+    /// Protects installed tools from removal while allowing concurrent use of them.
+    func withReadAccess<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
+
+        try await withAccess(.shared, operation: operation)
+    }
+
+    private func withAccess<Result: Sendable>(
+        _ access: Access,
+        operation: @Sendable () async throws -> Result
+    ) async throws -> Result {
+
         for lease in MutationLeaseContext.leases {
             guard !(await lease.isActive(for: processLock.identity)) else {
                 throw SwiftlyKitError.mutationCoordinationFailed(
@@ -38,9 +53,9 @@ actor MutationGate {
             }
         }
 
-        try await acquire()
+        try await acquire(access)
         defer { release() }
-        return try await processLock.withAccess {
+        return try await processLock.withAccess(shared: access == .shared) {
             let lease = MutationLease(identity: processLock.identity)
 
             do {
@@ -63,12 +78,13 @@ actor MutationGate {
 extension MutationGate {
 
     /// Gets local admission or waits in FIFO order until admission or cancellation.
-    private func acquire() async throws {
+    private func acquire(_ access: Access) async throws {
 
         try Task.checkCancellation()
 
-        guard isOccupied else {
-            isOccupied = true
+        if occupants == 0 || access == .shared && activeAccess == .shared && waiters.isEmpty {
+            activeAccess = access
+            occupants += 1
             return
         }
 
@@ -80,7 +96,7 @@ extension MutationGate {
                 if cancelledWaiters.remove(id) != nil {
                     continuation.resume(returning: false)
                 } else {
-                    waiters.append(Waiter(id: id, continuation: continuation))
+                    waiters.append(Waiter(id: id, access: access, continuation: continuation))
                 }
             }
         } onCancel: {
@@ -118,6 +134,10 @@ extension MutationGate {
     /// Gives admission to the first waiter not canceled. Makes the gate idle if no waiter remains.
     private func release() {
 
+        occupants -= 1
+        guard occupants == 0 else { return }
+        activeAccess = nil
+
         while !waiters.isEmpty {
             let waiter = waiters.removeFirst()
 
@@ -127,12 +147,22 @@ extension MutationGate {
             }
 
             grantedWaiters.insert(waiter.id)
+            activeAccess = waiter.access
+            occupants = 1
             waiter.continuation.resume(returning: true)
+
+            if waiter.access == .shared {
+                while waiters.first?.access == .shared {
+                    let reader = waiters.removeFirst()
+                    grantedWaiters.insert(reader.id)
+                    occupants += 1
+                    reader.continuation.resume(returning: true)
+                }
+            }
             
             return
         }
 
-        isOccupied = false
     }
 
 }
@@ -152,9 +182,12 @@ private struct ProcessMutationLock: Sendable {
     }
 
     /// Locks the file for the operation. Always unlocks and closes the file descriptor.
-    func withAccess<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
+    func withAccess<Result: Sendable>(
+        shared: Bool,
+        _ operation: @Sendable () async throws -> Result
+    ) async throws -> Result {
 
-        let descriptor = try await acquire()
+        let descriptor = try await acquire(shared: shared)
         defer {
             flock(descriptor, LOCK_UN)
             close(descriptor)
@@ -168,7 +201,7 @@ extension ProcessMutationLock {
 
     /// Opens the user-only file without following a final symlink and waits for an exclusive lock.
     /// The wait supports cancellation, and child processes do not inherit the file descriptor.
-    private func acquire() async throws -> CInt {
+    private func acquire(shared: Bool) async throws -> CInt {
 
         do { try prepareDirectory() }
         catch {
@@ -190,7 +223,7 @@ extension ProcessMutationLock {
             while true {
                 try Task.checkCancellation()
 
-                if flock(descriptor, LOCK_EX | LOCK_NB) == 0 {
+                if flock(descriptor, (shared ? LOCK_SH : LOCK_EX) | LOCK_NB) == 0 {
                     try Task.checkCancellation()
                     return descriptor
                 }
@@ -285,10 +318,16 @@ extension MutationGate {
 
         /// ID used to coordinate cancellation.
         let id: UUID
+        let access: Access
 
         /// Returns true for admission and false for cancellation.
         let continuation: CheckedContinuation<Bool, Never>
 
+    }
+
+    private enum Access {
+        case shared
+        case exclusive
     }
     
 }
@@ -297,5 +336,128 @@ extension MutationGate {
 
     /// Gate used by default SwiftlyKit values and static workflows.
     static let shared = MutationGate()
+
+}
+
+extension MutationGate {
+
+    /// Installed-only preparation cannot mutate tools; authorized installations require exclusive access.
+    func withPreparationAccess<Result: Sendable>(
+        _ assessment: EnvironmentAssessment,
+        _ operation: @Sendable () async throws -> Result
+    ) async throws -> Result {
+
+        if assessment.requiresInstallation {
+            return try await withAccess(operation)
+        }
+        return try await withReadAccess(operation)
+    }
+
+    /// Protects installed tools and every affected directory, including overlapping scratch and export paths.
+    func withPackageAccess<Result: Sendable>(
+        using environment: LocalBuildEnvironment,
+        scratchStorage: SwiftPMScratchStorage,
+        output: BuildOutput = .buildStorage,
+        _ operation: @Sendable () async throws -> Result
+    ) async throws -> Result {
+
+        let scratch = try scratchDirectory(using: environment, storage: scratchStorage)
+        var directories = [environment.packageRoot, scratch.url]
+        if case .export(let destination, _, _) = output { directories.append(destination) }
+        let claims = try pathClaims(for: directories)
+        return try await withReadAccess {
+            try await self.withPathAccess(claims, operation: operation)
+        }
+    }
+
+    /// Root configuration uses its own scratch directory and can overlap a package build.
+    func withConfigurationAccess<Result: Sendable>(
+        using environment: LocalBuildEnvironment,
+        scratchStorage: SwiftPMScratchStorage,
+        _ operation: @Sendable () async throws -> Result
+    ) async throws -> Result {
+
+        let scratch = try scratchDirectory(using: environment, storage: scratchStorage)
+        let claims = try pathClaims(for: [scratch.url])
+        return try await withReadAccess {
+            try await self.withPathAccess(claims, operation: operation)
+        }
+    }
+
+    /// Merges exclusive directories and shared ancestors, then orders all claims before acquisition.
+    private func pathClaims(for directories: [URL]) throws -> [PathClaim] {
+
+        var claims: [String: Access] = [:]
+        for directory in directories {
+            let canonical: URL
+            do { canonical = try CanonicalFileURL.resolve(directory) }
+            catch { throw SwiftlyKitError.mutationCoordinationFailed("Could not identify a coordination directory.") }
+            let path = Self.pathIdentity(canonical)
+            claims[path] = .exclusive
+            var ancestor = canonical.deletingLastPathComponent()
+            while true {
+                let parent = Self.pathIdentity(ancestor)
+                if claims[parent] == nil { claims[parent] = .shared }
+                if parent == "/" { break }
+                ancestor.deleteLastPathComponent()
+            }
+        }
+        let exclusive = claims.filter { $0.value == .exclusive }.map(\.key)
+        return claims.keys.sorted().compactMap { path in
+            guard !exclusive.contains(where: { ancestor in
+                ancestor != path && (ancestor == "/" || path.hasPrefix(ancestor + "/"))
+            }) else { return nil }
+            return PathClaim(path: path, access: claims[path]!)
+        }
+    }
+
+    /// Conservative case folding also excludes case and Unicode aliases on default macOS volumes.
+    private static func pathIdentity(_ url: URL) -> String {
+
+        var path = url.path(percentEncoded: false)
+            .folding(options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+            .precomposedStringWithCanonicalMapping
+        while path.count > 1 && path.hasSuffix("/") { path.removeLast() }
+        return path
+    }
+
+    /// One namespace makes parent resets exclude nested scratches and exports across resource kinds.
+    private func withPathAccess<Result: Sendable>(
+        _ claims: [PathClaim],
+        index: Int = 0,
+        operation: @Sendable () async throws -> Result
+    ) async throws -> Result {
+
+        guard index < claims.count else { return try await operation() }
+        let claim = claims[index]
+        let digest = SHA256.hash(data: Data(claim.path.utf8)).map { String(format: "%02x", $0) }.joined()
+        let gate = MutationGate(lockFile: processLock.file.deletingLastPathComponent()
+            .appending(path: "path-\(digest).lock"))
+        return try await gate.withAccess(claim.access) {
+            try await self.withPathAccess(claims, index: index + 1, operation: operation)
+        }
+    }
+
+    private struct PathClaim: Sendable {
+        let path: String
+        let access: Access
+    }
+
+    private func scratchDirectory(
+        using environment: LocalBuildEnvironment,
+        storage: SwiftPMScratchStorage
+    ) throws -> SwiftPMScratchDirectory {
+
+        do {
+            return try SwiftPMScratchDirectory(
+                storage: storage,
+                packageRoot: environment.packageRoot,
+                sharedStorage: environment.swiftPMSharedStorage,
+                environmentStorage: environment.environmentStorage
+            )
+        } catch let error {
+            throw error.swiftlyKitError
+        }
+    }
 
 }

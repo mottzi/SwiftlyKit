@@ -20,12 +20,26 @@ struct PublicInterfaceTests {
             _ = try await SwiftlyKit.hostReadiness()
             try await SwiftlyKit.requestCommandLineToolsInstallation()
         }
+        let rootConfiguration: @Sendable (LocalBuildEnvironment) async throws -> PackageConfiguration = {
+            try await SwiftlyKit().configurePackage(using: $0, onEvent: observe)
+        }
+        let configuredBuild: @Sendable (PackageConfiguration) async throws -> BuildResult = { configuration in
+            let product = try configuration.products.select()
+            return try await SwiftlyKit().build(
+                BuildRequest(product),
+                using: configuration.environment,
+                dependencies: .resolveIfNeeded,
+                onEvent: observe
+            )
+        }
 
         _ = convenienceDefaults
         _ = configured
         _ = staged
         _ = assessment
         _ = hostRecovery
+        _ = rootConfiguration
+        _ = configuredBuild
     }
 
     @Test("Public build and removal values compile without testable access")

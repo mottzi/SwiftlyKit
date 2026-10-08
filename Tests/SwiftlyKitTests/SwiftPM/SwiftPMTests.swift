@@ -1035,8 +1035,8 @@ struct SwiftPMTests {
                 EventOutput(stream: .standardOutput, text: "stripped")
             ])
             #expect(await events.sequence == [
-                .progress,
                 .command,
+                .progress,
                 .command,
                 .output,
                 .command,

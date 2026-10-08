@@ -9,16 +9,7 @@ struct InstalledEnvironmentInspectorTests {
     func completeInventoryReadsRegistryOnce() async throws {
 
         let swiftly = SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
-        let recorder = RecordingSubprocessRunner(results: [
-            .success(output: """
-                    {"toolchains":[
-                        {"version":{"name":"6.2.1","type":"stable"}},
-                        {"version":{"name":"6.3.0","type":"stable"}}
-                    ]}
-                    """),
-            .success(output: "swift-6.3.0-RELEASE_static-linux-0.0.1\n"),
-            .success(output: "swift-6.2.1-RELEASE_static-linux-0.0.1\n")
-        ])
+        let recorder = ParallelSDKInventoryRunner(versions: [inspectorVersion("6.2.1"), inspectorVersion("6.3.0")])
 
         let inspector = InstalledEnvironmentInspector(
             runner: recorder,
@@ -32,9 +23,51 @@ struct InstalledEnvironmentInspectorTests {
             SwiftVersion(major: 6, minor: 2, patch: 1)
         ])
         #expect(inventory.sdks.count == 2)
+        #expect(inventory.sdks.map(\.toolchainVersion) == inventory.toolchains)
+        #expect(inventory.sdks.map(\.identifier) == [
+            "swift-6.3.0-RELEASE_static-linux-0.0.1",
+            "swift-6.2.1-RELEASE_static-linux-0.0.1"
+        ])
+        #expect(await recorder.maximumConcurrentSDKProbes == 2)
         let commands = await recorder.commands
         #expect(commands.count == 3)
         #expect(commands.filter { $0.arguments == ["list", "--format", "json"] }.count == 1)
+    }
+
+    @Test("One failed SDK probe preserves other installed compiler observations")
+    func concurrentProbeFailureIsIsolated() async throws {
+
+        let older = inspectorVersion("6.2.1")
+        let newer = inspectorVersion("6.3.0")
+        let runner = ParallelSDKInventoryRunner(versions: [older, newer], failing: [newer])
+        let inspector = InstalledEnvironmentInspector(runner: runner, isToolchainUsable: { _ in true })
+        let inventory = try await inspector.inspectAll(
+            swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+        )
+
+        #expect(inventory.toolchains == [newer, older])
+        #expect(inventory.sdks.map(\.toolchainVersion) == [older])
+        #expect(await runner.maximumConcurrentSDKProbes == 2)
+    }
+
+    @Test("Cancelling full inventory cancels its structured SDK probes")
+    func concurrentProbeCancellation() async throws {
+
+        let runner = ParallelSDKInventoryRunner(
+            versions: [inspectorVersion("6.2.1"), inspectorVersion("6.3.0")],
+            waitsForCancellation: true
+        )
+        let inspector = InstalledEnvironmentInspector(runner: runner, isToolchainUsable: { _ in true })
+        let request = Task {
+            try await inspector.inspectAll(
+                swiftly: SwiftlyInstallation(executableURL: URL(filePath: "/tmp/swiftly"))
+            )
+        }
+        await runner.waitUntilSDKProbesStarted()
+        request.cancel()
+
+        await #expect(throws: CancellationError.self) { try await request.value }
+        #expect(await runner.activeSDKProbes == 0)
     }
 
     @Test("Lists stable toolchains and SDKs through the exact selected toolchain")
@@ -510,6 +543,70 @@ struct InstalledEnvironmentInspectorTests {
         #expect(inventory.sdks.isEmpty)
         #expect(inventory.sdkInspection == .unavailable)
         #expect(await recorder.commands.count == 1)
+    }
+
+}
+
+/// Keys responses by exact compiler and holds SDK probes until all children have started.
+private actor ParallelSDKInventoryRunner: SubprocessRunning {
+
+    private let versions: [SwiftVersion]
+    private let failing: Set<SwiftVersion>
+    private let waitsForCancellation: Bool
+    private var startedSDKProbes = 0
+    private var completionWaiters: [CheckedContinuation<Void, Never>] = []
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var commands: [SubprocessCommand] = []
+    private(set) var maximumConcurrentSDKProbes = 0
+    private(set) var activeSDKProbes = 0
+
+    init(versions: [SwiftVersion], failing: Set<SwiftVersion> = [], waitsForCancellation: Bool = false) {
+        self.versions = versions
+        self.failing = failing
+        self.waitsForCancellation = waitsForCancellation
+    }
+
+    func run(_ command: SubprocessCommand, onOutput: SubprocessOutputHandler?) async throws -> SubprocessResult {
+
+        commands.append(command)
+        if command.arguments == ["list", "--format", "json"] {
+            let entries = versions.map { #"{"version":{"name":""# + $0.description + #"","type":"stable"}}"# }
+            return .success(output: #"{"toolchains":["# + entries.joined(separator: ",") + "]}")
+        }
+
+        let selection = try #require(command.arguments.last)
+        let version = try #require(SwiftVersion(String(selection.dropFirst())))
+        activeSDKProbes += 1
+        maximumConcurrentSDKProbes = max(maximumConcurrentSDKProbes, activeSDKProbes)
+        defer { activeSDKProbes -= 1 }
+        startedSDKProbes += 1
+        if startedSDKProbes == versions.count {
+            let startWaiters = startWaiters
+            self.startWaiters.removeAll()
+            startWaiters.forEach { $0.resume() }
+        }
+
+        if waitsForCancellation {
+            try await Task.sleep(for: .seconds(30))
+            Issue.record("Inventory should have cancelled all probes")
+        } else {
+            await withCheckedContinuation { continuation in
+                completionWaiters.append(continuation)
+                if startedSDKProbes == versions.count {
+                    let completionWaiters = completionWaiters
+                    self.completionWaiters.removeAll()
+                    completionWaiters.forEach { $0.resume() }
+                }
+            }
+        }
+
+        if failing.contains(version) { return .failure(standardError: "SDK manager unavailable") }
+        return .success(output: "swift-\(version)-RELEASE_static-linux-0.0.1\n")
+    }
+
+    func waitUntilSDKProbesStarted() async {
+        guard startedSDKProbes < versions.count else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
     }
 
 }

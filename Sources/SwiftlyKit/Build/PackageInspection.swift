@@ -1,3 +1,5 @@
+import Foundation
+
 /// A package whose root and dependency manifests were inspected using one bound environment.
 public struct PackageInspection: Sendable {
 
@@ -6,6 +8,9 @@ public struct PackageInspection: Sendable {
 
     /// The executable products declared by the inspected package.
     public let products: ExecutableProducts
+
+    /// Graph roots reused only while the inspection's owning build operation holds its lease.
+    let sourceRoots: [URL]
 
 }
 

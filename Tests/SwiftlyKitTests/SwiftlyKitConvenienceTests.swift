@@ -14,7 +14,6 @@ struct SwiftlyKitConvenienceTests {
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
-                .success(output: packageJSON),
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
@@ -32,11 +31,11 @@ struct SwiftlyKitConvenienceTests {
             #expect(result.executable == executable)
             #expect(result.resourceBundles.isEmpty)
             let commands = await runner.commands
-            #expect(commands[2].arguments.contains("x86_64-swift-linux-musl"))
-            #expect(commands[2].arguments.contains("Tool"))
-            #expect(commands[2].arguments.contains("release"))
+            #expect(commands[1].arguments.contains("x86_64-swift-linux-musl"))
+            #expect(commands[1].arguments.contains("Tool"))
+            #expect(commands[1].arguments.contains("release"))
+            #expect(try argument(after: "--jobs", in: commands[1].arguments) == "2")
             #expect(try argument(after: "--jobs", in: commands[2].arguments) == "2")
-            #expect(try argument(after: "--jobs", in: commands[3].arguments) == "2")
         }
     }
 
@@ -131,7 +130,6 @@ struct SwiftlyKitConvenienceTests {
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
-                .success(output: packageJSON),
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
@@ -151,7 +149,7 @@ struct SwiftlyKitConvenienceTests {
             )
 
             let commands = await runner.commands
-            #expect(commands.count == 4)
+            #expect(commands.count == 3)
             #expect(commands.allSatisfy { $0.environment?["BUILD_MODE"] == "production" })
             #expect(commands.allSatisfy { $0.environment?["BUILD_TOKEN"] == "private" })
             #expect(commands.allSatisfy { $0.sensitiveEnvironmentKeys == ["BUILD_TOKEN"] })
@@ -179,7 +177,6 @@ struct SwiftlyKitConvenienceTests {
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
-                .success(output: packageJSON),
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
@@ -199,7 +196,7 @@ struct SwiftlyKitConvenienceTests {
             )
 
             let commands = await runner.commands
-            #expect(commands.count == 4)
+            #expect(commands.count == 3)
             #expect(commands.allSatisfy {
                 normalizedPath(URL(filePath: $0.environment?["SWIFTLY_HOME_DIR"] ?? ""))
                     == normalizedPath(swiftlyRoot)
@@ -251,7 +248,6 @@ struct SwiftlyKitConvenienceTests {
             let packageJSON = try packageDescriptionJSON(executableProducts: ["First", "Second"])
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
-                .success(output: packageJSON),
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
@@ -267,7 +263,7 @@ struct SwiftlyKitConvenienceTests {
 
             #expect(result.executable == executable)
             #expect(result.resourceBundles.isEmpty)
-            #expect(await runner.commands[2].arguments.contains("Second"))
+            #expect(await runner.commands[1].arguments.contains("Second"))
         }
     }
 
@@ -279,7 +275,6 @@ struct SwiftlyKitConvenienceTests {
             try writeELF(to: executable, architecture: .x86_64)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
-                .success(output: packageJSON),
                 .success(output: packageJSON),
                 .failure(standardError: "automatic resolution is disabled"),
                 .success(output: "resolved"),
@@ -313,8 +308,8 @@ struct SwiftlyKitConvenienceTests {
             #expect(result.executable == executable)
             #expect(result.resourceBundles.isEmpty)
             let commands = await runner.commands
-            #expect(commands[3].arguments.contains("resolve"))
-            #expect(commands.count == 7)
+            #expect(commands[2].arguments.contains("resolve"))
+            #expect(commands.count == 6)
             #expect(commands.allSatisfy { $0.arguments.contains("--traits") })
             #expect(commands.allSatisfy { $0.arguments.contains("RetryFeature,default") })
             for command in commands {
@@ -332,19 +327,19 @@ struct SwiftlyKitConvenienceTests {
                 )
             }
             #expect(
+                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[1].arguments)))
+                    == normalizedPath(scratch)
+            )
+            #expect(
                 normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[2].arguments)))
                     == normalizedPath(scratch)
             )
             #expect(
-                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[3].arguments)))
+                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[4].arguments)))
                     == normalizedPath(scratch)
             )
             #expect(
                 normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[5].arguments)))
-                    == normalizedPath(scratch)
-            )
-            #expect(
-                normalizedPath(URL(filePath: try argument(after: "--scratch-path", in: commands[6].arguments)))
                     == normalizedPath(scratch)
             )
         }
@@ -361,7 +356,6 @@ struct SwiftlyKitConvenienceTests {
             try Data("previous output".utf8).write(to: output)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
-                .success(output: packageJSON),
                 .success(output: packageJSON),
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n"),
@@ -385,16 +379,16 @@ struct SwiftlyKitConvenienceTests {
             #expect(result.executable == output.appending(path: "Tool"))
             #expect(result.resourceBundles.isEmpty)
             let commands = await runner.commands
-            #expect(commands.count == 5)
-            let buildScratchOption = try #require(commands[2].arguments.firstIndex(of: "--scratch-path"))
-            let buildScratchArgument = try #require(commands[2].arguments.dropFirst(buildScratchOption + 1).first)
+            #expect(commands.count == 4)
+            let buildScratchOption = try #require(commands[1].arguments.firstIndex(of: "--scratch-path"))
+            let buildScratchArgument = try #require(commands[1].arguments.dropFirst(buildScratchOption + 1).first)
             #expect(URL(filePath: buildScratchArgument).pathComponents == scratch.pathComponents)
-            #expect(try argument(after: "--jobs", in: commands[2].arguments) == "2")
-            #expect(try argument(after: "--traits", in: commands[2].arguments) == "ExportFeature")
-            #expect(commands[4].arguments.contains("reset"))
-            #expect(try argument(after: "--traits", in: commands[4].arguments) == "ExportFeature")
-            let resetScratchOption = try #require(commands[4].arguments.firstIndex(of: "--scratch-path"))
-            let resetScratchArgument = try #require(commands[4].arguments.dropFirst(resetScratchOption + 1).first)
+            #expect(try argument(after: "--jobs", in: commands[1].arguments) == "2")
+            #expect(try argument(after: "--traits", in: commands[1].arguments) == "ExportFeature")
+            #expect(commands[3].arguments.contains("reset"))
+            #expect(try argument(after: "--traits", in: commands[3].arguments) == "ExportFeature")
+            let resetScratchOption = try #require(commands[3].arguments.firstIndex(of: "--scratch-path"))
+            let resetScratchArgument = try #require(commands[3].arguments.dropFirst(resetScratchOption + 1).first)
             #expect(URL(filePath: resetScratchArgument).pathComponents == scratch.pathComponents)
             let observed = await events.commands
             #expect(observed.count == commands.count)
@@ -418,7 +412,6 @@ struct SwiftlyKitConvenienceTests {
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
                 .success(output: packageJSON),
-                .success(output: packageJSON),
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n")
             ])
@@ -438,7 +431,7 @@ struct SwiftlyKitConvenienceTests {
             )
 
             let commands = await runner.commands
-            #expect(commands[2].arguments.suffix(1) == ["+6.2.1"])
+            #expect(commands[1].arguments.suffix(1) == ["+6.2.1"])
         }
     }
 
@@ -452,7 +445,6 @@ struct SwiftlyKitConvenienceTests {
             let originalBytes = try Data(contentsOf: executable)
             let packageJSON = try packageDescriptionJSON(executableProducts: ["Tool"])
             let runner = RecordingSubprocessRunner(results: [
-                .success(output: packageJSON),
                 .success(output: packageJSON),
                 .success(output: "built"),
                 .success(output: packageRoot.path(percentEncoded: false) + "\n"),
@@ -474,9 +466,9 @@ struct SwiftlyKitConvenienceTests {
             #expect(result.resourceBundles.isEmpty)
             #expect(try Data(contentsOf: executable) == originalBytes)
             let commands = await runner.commands
-            #expect(commands.count == 5)
-            #expect(commands[4].arguments.prefix(3) == ["run", "llvm-objcopy", "--strip-all"])
-            #expect(commands[4].arguments[3] != executable.path(percentEncoded: false))
+            #expect(commands.count == 4)
+            #expect(commands[3].arguments.prefix(3) == ["run", "llvm-objcopy", "--strip-all"])
+            #expect(commands[3].arguments[3] != executable.path(percentEncoded: false))
         }
     }
 

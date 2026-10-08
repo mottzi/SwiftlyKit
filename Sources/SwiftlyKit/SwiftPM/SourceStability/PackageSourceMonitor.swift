@@ -14,7 +14,7 @@ final class PackageSourceMonitor: @unchecked Sendable {
         cancel()
     }
 
-    /// Starts separate source streams so excluded storage cannot hide nested dependency roots.
+    /// Starts at most two multi-root streams so large graphs do not allocate one stream per dependency.
     static func start(roots: [URL], excluding excludedRoots: [URL] = []) throws -> PackageSourceMonitor {
 
         let storage = try Storage(roots: roots, excludedRoots: excludedRoots)
@@ -62,8 +62,8 @@ extension PackageSourceMonitor {
             guard !scope.roots.isEmpty else { throw Error.streamCreationFailed }
 
             do {
-                for root in scope.roots {
-                    let stream = try startStream(for: root)
+                for group in scope.eventStreamGroups {
+                    let stream = try startStream(for: group)
                     lock.withLock { streams.append(stream) }
                 }
             } catch {
@@ -99,6 +99,10 @@ extension PackageSourceMonitor {
                 return
             }
             let url = parent.appending(path: eventURL.lastPathComponent).standardized
+            if flags & directoryStructuralFlags != 0, scope.containsSourceRoot(beneath: url) {
+                lock.withLock { didChange = true }
+                return
+            }
             guard scope.isRelevantEvent(url) else { return }
             lock.withLock { didChange = true }
         }
@@ -132,7 +136,7 @@ extension PackageSourceMonitor {
 
 extension PackageSourceMonitor.Storage {
 
-    private func startStream(for root: URL) throws -> FSEventStreamRef {
+    private func startStream(for group: PackageSourceScope.EventStreamGroup) throws -> FSEventStreamRef {
 
         var context = FSEventStreamContext(
             version: 0,
@@ -146,7 +150,7 @@ extension PackageSourceMonitor.Storage {
                 | kFSEventStreamCreateFlagWatchRoot
                 | kFSEventStreamCreateFlagNoDefer
         )
-        let paths = [root.path(percentEncoded: false)]
+        let paths = group.watchRoots.map { $0.path(percentEncoded: false) }
 
         guard let stream = FSEventStreamCreate(
             nil,
@@ -158,7 +162,7 @@ extension PackageSourceMonitor.Storage {
             flags
         ) else { throw PackageSourceMonitor.Error.streamCreationFailed }
 
-        let exclusions = scope.eventExclusions(for: root).map { $0.path(percentEncoded: false) }
+        let exclusions = group.exclusions.map { $0.path(percentEncoded: false) }
         guard FSEventStreamSetExclusionPaths(stream, exclusions as CFArray) else {
             FSEventStreamInvalidate(stream)
             FSEventStreamRelease(stream)
@@ -238,6 +242,7 @@ extension PackageSourceMonitor.Storage {
 
     private static let unreliableEventFlags = FSEventStreamEventFlags(
         kFSEventStreamEventFlagEventIdsWrapped
+            | kFSEventStreamEventFlagRootChanged
             | kFSEventStreamEventFlagKernelDropped
             | kFSEventStreamEventFlagMustScanSubDirs
             | kFSEventStreamEventFlagUserDropped

@@ -1,9 +1,83 @@
+import Darwin
 import Foundation
 import Testing
 @testable import SwiftlyKit
 
 @Suite("Package source stability")
 struct PackageSourceStabilityTests {
+
+    @Test("Large graphs retain source checks and nested exclusions with a normal app descriptor limit", .serialized, arguments: [false, true])
+    func largeGraphObservation(changesSource: Bool) async throws {
+
+        var previousLimit: rlimit?
+        defer { if var previousLimit { _ = setrlimit(RLIMIT_NOFILE, &previousLimit) } }
+        if let expected = ProcessInfo.processInfo.environment["SWIFTLYKIT_TEST_SOURCE_DESCRIPTOR_LIMIT"].flatMap(UInt64.init) {
+            var limit = rlimit()
+            try #require(getrlimit(RLIMIT_NOFILE, &limit) == 0)
+            previousLimit = limit
+            limit.rlim_cur = min(limit.rlim_cur, expected)
+            try #require(setrlimit(RLIMIT_NOFILE, &limit) == 0)
+            try #require(getrlimit(RLIMIT_NOFILE, &limit) == 0)
+            #expect(limit.rlim_cur <= expected)
+        }
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-LargeSourceGraph") { directory in
+            let scratch = directory.appending(path: ".build")
+            var roots = [directory]
+            for index in 0..<120 {
+                let dependency = scratch.appending(path: "checkouts/Dependency-\(index)")
+                try FileManager.default.createDirectory(at: dependency, withIntermediateDirectories: true)
+                try Data("print(1)\n".utf8).write(to: dependency.appending(path: "source.swift"))
+                roots.append(dependency)
+            }
+            let last = try #require(roots.last)
+            let nested = last.appending(path: ".build/NestedDependency")
+            try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+            let source = nested.appending(path: "source.swift")
+            let original = Data("print(1)\n".utf8)
+            try original.write(to: source)
+            roots.append(nested)
+            if previousLimit != nil {
+                let scope = try PackageSourceScope(roots: roots, excluding: [scratch])
+                print("SOURCE_MONITOR_ANCHOR_COUNTS \(scope.eventStreamGroups.map { $0.watchRoots.count })")
+            }
+            let stability = try await PackageSourceStability.start(roots: roots, excluding: [scratch])
+
+            let git = last.appending(path: ".git")
+            try FileManager.default.createDirectory(at: git, withIntermediateDirectories: true)
+            try Data("ignored metadata".utf8).write(to: git.appending(path: "HEAD"))
+            try Data("ignored artifact".utf8).write(to: scratch.appending(path: "output.o"))
+            if changesSource {
+                try Data("print(2)\n".utf8).write(to: source)
+                try original.write(to: source)
+                await #expect(throws: PackageSourceStabilityError.sourceChanged) {
+                    try await stability.finish()
+                }
+            } else {
+                try await stability.finish()
+            }
+        }
+    }
+
+    @Test("Moving and restoring a coalesced watch ancestor invalidates the source evidence")
+    func coalescedAncestorChanges() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-SourceAncestor") { directory in
+            let parent = directory.appending(path: "Checkouts")
+            let first = parent.appending(path: "First")
+            let second = parent.appending(path: "Second")
+            for root in [first, second] {
+                try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+                try Data("print(1)\n".utf8).write(to: root.appending(path: "source.swift"))
+            }
+            let stability = try await PackageSourceStability.start(roots: [directory, first, second])
+            let moved = directory.appending(path: "MovedCheckouts")
+            try FileManager.default.moveItem(at: parent, to: moved)
+            try FileManager.default.moveItem(at: moved, to: parent)
+            await #expect(throws: PackageSourceStabilityError.self) {
+                try await stability.finish()
+            }
+        }
+    }
 
     @Test("A source change followed by restoration still fails the observation")
     func changeThenRestore() async throws {

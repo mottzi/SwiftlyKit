@@ -1,7 +1,7 @@
 import Foundation
 
 /// Inspects Swiftly and SwiftPM without changing selection or installed state.
-struct InstalledEnvironmentInspector {
+struct InstalledEnvironmentInspector: Sendable {
 
     private(set) var runner: any SubprocessRunning = LiveSubprocessRunner()
     private(set) var isToolchainUsable: @Sendable (SwiftVersion) -> Bool = Self.liveToolchainUsability
@@ -26,11 +26,28 @@ struct InstalledEnvironmentInspector {
 
         let toolchains = try await installedToolchains(swiftly: swiftly)
 
-        var sdks: [InstalledStaticLinuxSDK] = []
-        for toolchain in toolchains {
-            do { sdks += try await installedSDKs(swiftly: swiftly, toolchain: toolchain) }
-            catch is CancellationError { throw CancellationError() }
-            catch { continue }
+        try Task.checkCancellation()
+        let sdks = try await withThrowingTaskGroup(of: (Int, [InstalledStaticLinuxSDK]).self) { group in
+            for (index, toolchain) in toolchains.enumerated() {
+                group.addTask {
+                    try Task.checkCancellation()
+                    do {
+                        let values = try await installedSDKs(swiftly: swiftly, toolchain: toolchain)
+                        try Task.checkCancellation()
+                        return (index, values)
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        try Task.checkCancellation()
+                        return (index, [])
+                    }
+                }
+            }
+            var observations = Array(repeating: [InstalledStaticLinuxSDK](), count: toolchains.count)
+            for try await (index, values) in group {
+                observations[index] = values
+            }
+            return observations.flatMap { $0 }
         }
 
         return InstalledEnvironmentInventory(toolchains: toolchains, sdks: sdks)

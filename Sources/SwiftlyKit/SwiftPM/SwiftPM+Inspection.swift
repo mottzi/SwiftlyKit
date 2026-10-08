@@ -2,6 +2,29 @@ import Foundation
 
 extension SwiftPM {
 
+    /// Evaluates only the root manifest for configuration without loading or resolving dependencies.
+    func configurePackage(
+        using environment: LocalBuildEnvironment,
+        scratchStorage: SwiftPMScratchStorage? = nil,
+        onEvent: SwiftlyKitEvent.Handler? = nil
+    ) async throws -> PackageConfiguration {
+
+        let storage = scratchStorage ?? .configuration(for: environment.packageRoot)
+        let (products, selected) = try await withHostSDK(
+            using: environment,
+            onEvent: onEvent,
+            subject: "the root package manifest"
+        ) { candidate in
+            let package = try await packageDescription(
+                using: candidate,
+                scratchStorage: storage,
+                onEvent: onEvent
+            )
+            return ExecutableProducts(package.products)
+        }
+        return PackageConfiguration(environment: selected, products: products)
+    }
+
     /// Inspects the real package graph, recovering host compilation without changing the Swift selection.
     func inspectPackage(
         using environment: LocalBuildEnvironment,
@@ -10,7 +33,7 @@ extension SwiftPM {
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> PackageInspection {
 
-        let (products, selected) = try await withHostSDK(using: environment, onEvent: onEvent) { candidate in
+        let (inspection, selected) = try await withHostSDK(using: environment, onEvent: onEvent) { candidate in
             let package = try await packageDescription(
                 using: candidate,
                 scratchStorage: scratchStorage,
@@ -22,22 +45,24 @@ extension SwiftPM {
                 sharedStorage: candidate.swiftPMSharedStorage,
                 environmentStorage: candidate.environmentStorage
             )
+            let roots: [URL]
             do {
-                _ = try await sourceRoots(candidate, scratchDirectory, onEvent)
+                roots = try await sourceRoots(candidate, scratchDirectory, onEvent)
             } catch SwiftPMError.dependencyResolutionRequired {
                 guard case .resolveIfNeeded = dependencies else { throw SwiftPMError.dependencyResolutionRequired }
                 try await resolveDependenciesDirect(in: scratchStorage, using: candidate, onEvent: onEvent)
-                _ = try await sourceRoots(candidate, scratchDirectory, onEvent)
+                roots = try await sourceRoots(candidate, scratchDirectory, onEvent)
             }
-            return ExecutableProducts(package.products)
+            return (ExecutableProducts(package.products), roots)
         }
-        return PackageInspection(environment: selected, products: products)
+        return PackageInspection(environment: selected, products: inspection.0, sourceRoots: inspection.1)
     }
 
     /// Attempts the bound SDK first, then installed alternatives only for host compiler failures.
     func withHostSDK<Value: Sendable>(
         using environment: LocalBuildEnvironment,
         onEvent: SwiftlyKitEvent.Handler?,
+        subject: String = "package dependencies",
         operation: (LocalBuildEnvironment) async throws -> Value
     ) async throws -> (Value, LocalBuildEnvironment) {
 
@@ -46,7 +71,7 @@ extension SwiftPM {
         guard let active = environment.hostSDK else { return (try await operation(environment), environment) }
         await report(
             .inspectingPackage,
-            detail: "Inspecting package dependencies with Swift \(environment.swiftVersion) "
+            detail: "Inspecting \(subject) with Swift \(environment.swiftVersion) "
                 + "and macOS SDK \(active.version).",
             to: onEvent
         )
@@ -61,7 +86,7 @@ extension SwiftPM {
                 let candidate = environment.using(hostSDK: sdk)
                 await report(
                     .inspectingPackage,
-                    detail: "Retrying package inspection with installed macOS SDK \(sdk.version); "
+                    detail: "Retrying inspection of \(subject) with installed macOS SDK \(sdk.version); "
                         + "keeping Swift \(environment.swiftVersion).",
                     to: onEvent
                 )
@@ -69,7 +94,7 @@ extension SwiftPM {
                     let value = try await operation(candidate)
                     await report(
                         .inspectingPackage,
-                        detail: "Package dependencies inspected successfully. Using macOS SDK \(sdk.version) "
+                        detail: "Successfully inspected \(subject). Using macOS SDK \(sdk.version) "
                             + "with Swift \(environment.swiftVersion).",
                         to: onEvent
                     )

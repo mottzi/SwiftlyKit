@@ -111,6 +111,118 @@ struct SwiftOrgReleaseCatalogTests {
         #expect(await counter.count == 1)
     }
 
+    @Test("A recent persisted observation skips the network and retains its original timestamp")
+    func reusesRecentPersistentObservation() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Catalog") { directory in
+            let observedAt = Date(timeIntervalSince1970: 1_800_000_000)
+            let cache = SwiftOrgReleaseCache(fileURL: directory.appending(path: "cache/releases.json"))
+            try cache.write(catalogData(), observedAt: observedAt)
+            let counter = CatalogLoadCounter(data: catalogData("6.4.0"))
+            let catalog = SwiftOrgReleaseCatalog(
+                load: { _ in await counter.response() },
+                cache: cache,
+                now: { observedAt.addingTimeInterval(900) }
+            )
+
+            let releases = try await catalog.stableReleases()
+            _ = try await catalog.stableReleases()
+
+            #expect(releases.map(\.version) == [swiftVersion("6.3.3")])
+            #expect(await counter.count == 0)
+            #expect(try cache.readObservation()?.modifiedAt == observedAt)
+        }
+    }
+
+    @Test("Promoting disk data into memory does not restart its freshness budget")
+    func diskPromotionDoesNotExtendFreshness() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Catalog") { directory in
+            let observedAt = Date(timeIntervalSince1970: 1_800_000_000)
+            let cache = SwiftOrgReleaseCache(fileURL: directory.appending(path: "cache/releases.json"))
+            try cache.write(catalogData(), observedAt: observedAt)
+            let clock = CatalogTestClock(observedAt.addingTimeInterval(3_599))
+            let counter = CatalogLoadCounter(data: catalogData("6.4.0"))
+            let catalog = SwiftOrgReleaseCatalog(
+                load: { _ in await counter.response() },
+                cache: cache,
+                now: { clock.read() }
+            )
+
+            _ = try await catalog.stableReleases()
+            #expect(await counter.count == 0)
+            clock.advance(by: 2)
+            let updated = try await catalog.stableReleases()
+
+            #expect(updated.map(\.version) == [swiftVersion("6.4.0")])
+            #expect(await counter.count == 1)
+            #expect(try cache.readObservation()?.modifiedAt == clock.read())
+        }
+    }
+
+    @Test("Expired and future persisted timestamps require a current request", arguments: [-1.0, 3_600.0, 3_601.0])
+    func rejectsPersistentFreshness(age: TimeInterval) async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Catalog") { directory in
+            let observedAt = Date(timeIntervalSince1970: 1_800_000_000)
+            let cache = SwiftOrgReleaseCache(fileURL: directory.appending(path: "cache/releases.json"))
+            try cache.write(catalogData(), observedAt: observedAt)
+            let counter = CatalogLoadCounter(data: catalogData("6.4.0"))
+            let catalog = SwiftOrgReleaseCatalog(
+                load: { _ in await counter.response() },
+                cache: cache,
+                now: { observedAt.addingTimeInterval(age) }
+            )
+
+            let updated = try await catalog.stableReleases()
+
+            #expect(updated.map(\.version) == [swiftVersion("6.4.0")])
+            #expect(await counter.count == 1)
+        }
+    }
+
+    @Test("Expired valid disk data remains an outage fallback without becoming current")
+    func expiredObservationRemainsFallback() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Catalog") { directory in
+            let observedAt = Date(timeIntervalSince1970: 1_800_000_000)
+            let cache = SwiftOrgReleaseCache(fileURL: directory.appending(path: "cache/releases.json"))
+            try cache.write(catalogData(), observedAt: observedAt)
+            let catalog = SwiftOrgReleaseCatalog(
+                load: { _ in throw SwiftOrgReleaseCatalog.CatalogError.networkFailure },
+                cache: cache,
+                now: { observedAt.addingTimeInterval(3_601) }
+            )
+
+            await #expect(throws: SwiftOrgReleaseCatalog.CatalogError.networkFailure) {
+                try await catalog.stableReleases()
+            }
+            #expect(await catalog.cachedReleases()?.map(\.version) == [swiftVersion("6.3.3")])
+            #expect(try cache.readObservation()?.modifiedAt == observedAt)
+        }
+    }
+
+    @Test("A recent corrupt snapshot cannot prevent a valid live refresh")
+    func refreshesCorruptRecentObservation() async throws {
+
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-Catalog") { directory in
+            let observedAt = Date(timeIntervalSince1970: 1_800_000_000)
+            let cache = SwiftOrgReleaseCache(fileURL: directory.appending(path: "cache/releases.json"))
+            try cache.write(Data("not json".utf8), observedAt: observedAt)
+            let counter = CatalogLoadCounter(data: catalogData("6.4.0"))
+            let catalog = SwiftOrgReleaseCatalog(
+                load: { _ in await counter.response() },
+                cache: cache,
+                now: { observedAt.addingTimeInterval(900) }
+            )
+
+            let releases = try await catalog.stableReleases()
+
+            #expect(releases.map(\.version) == [swiftVersion("6.4.0")])
+            #expect(await counter.count == 1)
+        }
+    }
+
     @Test("An expired observation causes a new live request")
     func refreshesExpiredObservation() async throws {
 
@@ -294,6 +406,22 @@ struct SwiftOrgReleaseCatalogTests {
 
             #expect(await catalog.cachedReleases() == nil)
         }
+    }
+
+}
+
+/// Every date read and mutation holds the lock. Replace with Mutex when the test deployment target supports macOS 15.
+private final class CatalogTestClock: @unchecked Sendable {
+
+    private let lock = NSLock()
+    private var date: Date
+
+    init(_ date: Date) { self.date = date }
+
+    func read() -> Date { lock.withLock { date } }
+
+    func advance(by interval: TimeInterval) {
+        lock.withLock { date = date.addingTimeInterval(interval) }
     }
 
 }

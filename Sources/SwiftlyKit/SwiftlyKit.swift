@@ -1,7 +1,7 @@
 import Foundation
 
 /// Cross-compilation API that builds verified static Linux executables from trusted local Swift packages.
-/// Mutating operations for one user coordinate across values and cooperating processes.
+/// Installed-tool changes and package operations coordinate across values and cooperating processes.
 public struct SwiftlyKit: Sendable {
     
     private let mutationGate: MutationGate
@@ -107,7 +107,9 @@ extension SwiftlyKit {
     /// During a catalog outage, results are limited to complete installed environments in validated cached metadata.
     public func compatibleEnvironments(_ packageRoot: URL, for target: BuildTarget) async throws -> EnvironmentChoices {
         
-        try await assessor.compatibleEnvironments(packageRoot, for: target)
+        try await mutationGate.withReadAccess {
+            try await assessor.compatibleEnvironments(packageRoot, for: target)
+        }
     }
 
     /// Selects an exact official toolchain and matching Static Linux SDK without changing package or installed state.
@@ -119,7 +121,9 @@ extension SwiftlyKit {
         toolchain: ToolchainSelection = .automatic
     ) async throws -> EnvironmentAssessment {
         
-        try await assessor.assess(packageRoot, for: target, toolchain: toolchain)
+        try await mutationGate.withReadAccess {
+            try await assessor.assess(packageRoot, for: target, toolchain: toolchain)
+        }
     }
     
     /// Prepares accepted components and binds SwiftPM configuration to later operations.
@@ -137,7 +141,7 @@ extension SwiftlyKit {
         let snapshot = swiftPMEnvironment.snapshot()
 
         do {
-            return try await mutationGate.withAccess {
+            return try await mutationGate.withPreparationAccess(assessment) {
                 try await prepareUnderLease(
                     assessment,
                     swiftPMEnvironment: snapshot,
@@ -161,7 +165,36 @@ extension SwiftlyKit {
     /// Returns explicit and implicit executable products in name order without resolving package dependencies.
     public func executableProducts(using environment: LocalBuildEnvironment) async throws -> ExecutableProducts {
 
-        try await executableProducts(using: environment, scratchStorage: .packageDefault)
+        try await configurePackage(using: environment, scratchStorage: .packageDefault).products
+    }
+
+    /// Evaluates the root manifest and returns products with the exact environment that succeeded.
+    /// Does not load or resolve dependencies. Builds still validate the complete graph before compilation.
+    /// By default, uses stable configuration storage outside the package and its build scratch directory.
+    public func configurePackage(
+        using environment: LocalBuildEnvironment,
+        scratchStorage: SwiftPMScratchStorage? = nil,
+        onEvent: SwiftlyKitEvent.Handler? = nil
+    ) async throws -> PackageConfiguration {
+
+        let storage = scratchStorage ?? .configuration(for: environment.packageRoot)
+        do {
+            return try await mutationGate.withConfigurationAccess(using: environment, scratchStorage: storage) {
+                try await swiftPM.configurePackage(
+                    using: environment,
+                    scratchStorage: storage,
+                    onEvent: onEvent
+                )
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as SwiftlyKitError {
+            throw error
+        } catch let error as SwiftPMError {
+            throw error.swiftlyKitError
+        } catch {
+            throw SwiftlyKitError.packageInspectionFailed("An unexpected package error occurred.")
+        }
     }
     
     /// Inspects root and dependency manifests and returns the environment that successfully evaluated them.
@@ -173,7 +206,7 @@ extension SwiftlyKit {
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> PackageInspection {
 
-        try await mutationGate.withAccess {
+        try await mutationGate.withPackageAccess(using: environment, scratchStorage: scratchStorage) {
             do {
                 return try await swiftPM.inspectPackage(
                     using: environment,
@@ -197,7 +230,7 @@ extension SwiftlyKit {
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws {
 
-        try await mutationGate.withAccess {
+        try await mutationGate.withPackageAccess(using: environment, scratchStorage: scratchStorage) {
             try await resolveDependenciesUnderLease(
                 in: scratchStorage,
                 using: environment,
@@ -207,17 +240,20 @@ extension SwiftlyKit {
     }
     
     /// Builds and verifies one executable with the prepared toolchain and SDK, and returns its runnable result.
-    /// Disables automatic resolution and throws `dependencyResolutionRequired` if resolution is necessary.
+    /// Always disables automatic resolution; explicit resolution requires `.resolveIfNeeded`.
     /// Rejects source or resolved-dependency changes, then applies requested stripping, export, and cleanup.
     public func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
+        dependencies: DependencyResolutionPolicy = .requireResolved,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> BuildResult {
 
         try request.validate()
-        return try await mutationGate.withAccess {
-            try await buildUnderLease(request, using: environment, onEvent: onEvent)
+        return try await mutationGate.withPackageAccess(
+            using: environment, scratchStorage: request.scratchStorage, output: request.output
+        ) {
+            try await buildUnderLease(request, using: environment, dependencies: dependencies, onEvent: onEvent)
         }
     }
 
@@ -229,7 +265,7 @@ extension SwiftlyKit {
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws {
 
-        try await mutationGate.withAccess {
+        try await mutationGate.withPackageAccess(using: environment, scratchStorage: storage) {
             try await cleanBuildArtifactsUnderLease(in: storage, using: environment, onEvent: onEvent)
         }
     }
@@ -241,7 +277,7 @@ extension SwiftlyKit {
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws {
 
-        try await mutationGate.withAccess {
+        try await mutationGate.withPackageAccess(using: environment, scratchStorage: storage) {
             try await resetBuildStorageUnderLease(in: storage, using: environment, onEvent: onEvent)
         }
     }
@@ -266,7 +302,7 @@ extension SwiftlyKit {
 
 extension SwiftlyKit {
 
-    /// Runs the convenience workflow with this facade's dependencies under one mutation lease.
+    /// Runs preparation and package work under separate coordination leases.
     func build(
         _ packageRoot: URL,
         product productName: String?,
@@ -287,8 +323,7 @@ extension SwiftlyKit {
         try BuildRequest.validate(jobs: jobs)
         let snapshot = swiftPMEnvironment.snapshot()
         do {
-            return try await mutationGate.withAccess {
-                try await buildUnderLease(
+            return try await buildPrepared(
                     packageRoot,
                     product: productName,
                     for: target,
@@ -304,7 +339,6 @@ extension SwiftlyKit {
                     recordRemovalPlan: recordRemovalPlan,
                     onEvent: onEvent
                 )
-            }
         } catch let error as EnvironmentPlanRecordingError {
             throw error.underlying
         }
@@ -328,7 +362,7 @@ extension SwiftlyKit {
 
 extension SwiftlyKit {
 
-    private func buildUnderLease(
+    private func buildPrepared(
         _ packageRoot: URL,
         product productName: String?,
         for target: BuildTarget,
@@ -347,52 +381,50 @@ extension SwiftlyKit {
 
         let choices = try await compatibleEnvironments(packageRoot, for: target)
         var assessment = try choices.select(toolchain)
-        let inspection: PackageInspection
         while true {
-            let environment = try await prepareUnderLease(
-                assessment,
-                swiftPMEnvironment: swiftPMEnvironment,
-                swiftPMTraits: swiftPMTraits,
-                swiftPMSharedStorage: swiftPMSharedStorage,
-                recordRemovalPlan: recordRemovalPlan,
-                onEvent: onEvent
-            )
-            do {
-                inspection = try await swiftPM.inspectPackage(
-                    using: environment,
-                    scratchStorage: scratchStorage,
-                    dependencies: .resolveIfNeeded,
+            let selectedAssessment = assessment
+            let environment = try await mutationGate.withPreparationAccess(selectedAssessment) {
+                try await prepareUnderLease(
+                    selectedAssessment,
+                    swiftPMEnvironment: swiftPMEnvironment,
+                    swiftPMTraits: swiftPMTraits,
+                    swiftPMSharedStorage: swiftPMSharedStorage,
+                    recordRemovalPlan: recordRemovalPlan,
                     onEvent: onEvent
                 )
-                break
+            }
+            do {
+                return try await mutationGate.withPackageAccess(
+                    using: environment, scratchStorage: scratchStorage, output: output
+                ) {
+                    let inspection = try await swiftPM.inspectPackage(
+                        using: environment,
+                        scratchStorage: scratchStorage,
+                        dependencies: .resolveIfNeeded,
+                        onEvent: onEvent
+                    )
+                    let product = try inspection.products.select(productName)
+                    let request = BuildRequest(
+                        product,
+                        configuration: configuration,
+                        jobs: jobs,
+                        scratchStorage: scratchStorage,
+                        output: output,
+                        strip: strip
+                    )
+                    return try await swiftPM.buildInspected(
+                        request,
+                        inspection: inspection,
+                        dependencies: .resolveIfNeeded,
+                        onEvent: onEvent
+                    )
+                }
             } catch let error as SwiftlyKitError {
                 guard let recovery = choices.recoveryAssessment(after: error, for: toolchain) else { throw error }
                 assessment = recovery
             } catch let error as SwiftPMError {
                 throw error.swiftlyKitError
             }
-        }
-        let environment = inspection.environment
-        let products = inspection.products
-        let product = try products.select(productName)
-        let request = BuildRequest(
-            product,
-            configuration: configuration,
-            jobs: jobs,
-            scratchStorage: scratchStorage,
-            output: output,
-            strip: strip
-        )
-
-        do {
-            return try await buildUnderLease(request, using: environment, onEvent: onEvent)
-        } catch SwiftlyKitError.dependencyResolutionRequired {
-            try await resolveDependenciesUnderLease(
-                in: scratchStorage,
-                using: environment,
-                onEvent: onEvent
-            )
-            return try await buildUnderLease(request, using: environment, onEvent: onEvent)
         }
     }
 
@@ -419,25 +451,6 @@ extension SwiftlyKit {
         )
     }
 
-    private func executableProducts(
-        using environment: LocalBuildEnvironment,
-        scratchStorage: SwiftPMScratchStorage,
-        onEvent: SwiftlyKitEvent.Handler? = nil
-    ) async throws -> ExecutableProducts {
-
-        do {
-            return ExecutableProducts(try await swiftPM.executableProducts(
-                using: environment,
-                scratchStorage: scratchStorage,
-                onEvent: onEvent
-            ))
-        }
-        catch is CancellationError { throw CancellationError() }
-        catch let error as SwiftlyKitError { throw error }
-        catch let error as SwiftPMError { throw error.swiftlyKitError }
-        catch { throw SwiftlyKitError.packageInspectionFailed("An unexpected package error occurred.") }
-    }
-
     private func resolveDependenciesUnderLease(
         in scratchStorage: SwiftPMScratchStorage,
         using environment: LocalBuildEnvironment,
@@ -460,10 +473,18 @@ extension SwiftlyKit {
     private func buildUnderLease(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
+        dependencies: DependencyResolutionPolicy,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> BuildResult {
 
-        do { return try await swiftPM.build(request, using: environment, onEvent: onEvent) }
+        do {
+            return try await swiftPM.build(
+                request,
+                using: environment,
+                dependencies: dependencies,
+                onEvent: onEvent
+            )
+        }
         catch is CancellationError { throw CancellationError() }
         catch let error as SwiftlyKitError { throw error }
         catch let error as SwiftPMError { throw error.swiftlyKitError }

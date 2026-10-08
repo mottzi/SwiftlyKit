@@ -48,7 +48,64 @@ struct PackageSourceScope: Sendable {
         }
     }
 
-    /// Excludes generated storage from one root's stream; nested source roots use separate streams.
+    /// Keeps outer roots separate from roots that their ignored storage could hide.
+    /// Stream count does not grow with the number of dependency checkouts.
+    var eventStreamGroups: [EventStreamGroup] {
+
+        let outer = roots.filter { root in
+            !roots.contains { other in
+                other != root && root.pathComponents.starts(with: other.pathComponents)
+            }
+        }
+        let nested = roots.filter { !outer.contains($0) }
+        return [outer, nested].filter { !$0.isEmpty }.map { watchedRoots in
+            let candidates = Array(Set(watchedRoots.flatMap(eventExclusions)))
+                .filter { candidate in
+                    !watchedRoots.contains { $0.pathComponents.starts(with: candidate.pathComponents) }
+                }
+            let exclusions = candidates.filter { candidate in
+                !candidates.contains { other in
+                    other != candidate && candidate.pathComponents.starts(with: other.pathComponents)
+                }
+            }.sorted { first, second in
+                if first.pathComponents.count != second.pathComponents.count {
+                    return first.pathComponents.count < second.pathComponents.count
+                }
+                return first.path(percentEncoded: false) < second.path(percentEncoded: false)
+            }
+            // FSEvents accepts at most eight exclusions. The callback filters every omitted path.
+            return EventStreamGroup(watchRoots: watchRoots(for: watchedRoots), exclusions: Array(exclusions.prefix(8)))
+        }
+    }
+
+    /// Coalesces sibling checkouts without changing the semantic roots or inclusion rules.
+    /// WatchRoot otherwise allocates ancestor watches repeatedly for every checkout.
+    private func watchRoots(for roots: [URL]) -> [URL] {
+
+        let outer = roots.filter { root in
+            !roots.contains { other in
+                other != root && root.pathComponents.starts(with: other.pathComponents)
+            }
+        }
+        let siblings = Dictionary(grouping: outer) { $0.deletingLastPathComponent().path(percentEncoded: false) }
+        let anchors = siblings.flatMap { path, children in
+            let parent = URL(filePath: path, directoryHint: .isDirectory)
+            let hasObservedAncestor = self.roots.contains { parent.pathComponents.starts(with: $0.pathComponents) }
+            return children.count > 1 && hasObservedAncestor ? [parent] : children
+        }
+        return anchors.filter { anchor in
+            !anchors.contains { other in
+                other != anchor && anchor.pathComponents.starts(with: other.pathComponents)
+            }
+        }.sorted { $0.path(percentEncoded: false) < $1.path(percentEncoded: false) }
+    }
+
+    /// A moved or replaced watch ancestor invalidates every semantic root beneath it.
+    func containsSourceRoot(beneath url: URL) -> Bool {
+        roots.contains { $0.pathComponents.starts(with: url.pathComponents) }
+    }
+
+    /// Native exclusion candidates for one root; grouping protects nested roots before applying them.
     func eventExclusions(for root: URL) -> [URL] {
 
         let candidates = Self.ignoredTopLevelNames.map { root.appending(path: $0) }
@@ -65,6 +122,15 @@ struct PackageSourceScope: Sendable {
     /// Whether a child at this relative path should be traversed or hashed.
     func includesEntry(named name: String, relativePath: String) -> Bool {
         !relativePath.isEmpty || !Self.ignoredTopLevelNames.contains(name)
+    }
+
+}
+
+extension PackageSourceScope {
+
+    struct EventStreamGroup: Sendable {
+        let watchRoots: [URL]
+        let exclusions: [URL]
     }
 
 }

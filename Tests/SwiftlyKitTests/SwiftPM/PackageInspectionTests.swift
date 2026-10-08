@@ -5,6 +5,160 @@ import Testing
 @Suite("Package inspection")
 struct PackageInspectionTests {
 
+    @Test("Configuration returns root products without loading or resolving the dependency graph")
+    func rootConfiguration() async throws {
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-config-test") { directory in
+            let sdk = try makeSDK(in: directory, version: "27.0")
+            let runner = RecordingSubprocessRunner(results: [.success(output: Self.packageJSON)])
+            let swiftPM = SwiftPM(
+                runner: runner,
+                validateEnvironment: { _ in },
+                sourceRoots: { _, _ in
+                    Issue.record("Configuration must not load the dependency graph")
+                    return []
+                }
+            )
+            let kit = SwiftlyKit(
+                mutationGate: MutationGate(lockFile: directory.appending(path: "mutation.lock")),
+                assessor: EnvironmentAssessor(),
+                preparer: EnvironmentPreparer(),
+                swiftPM: swiftPM,
+                remover: EnvironmentRemover()
+            )
+            let environment = Self.environment(in: directory, sdk: sdk)
+            let configuration = try await kit.configurePackage(using: environment)
+
+            #expect(configuration.environment.swiftVersion == environment.swiftVersion)
+            #expect(configuration.environment.hostSDK == sdk)
+            #expect(configuration.products.map(\.name) == ["Tool"])
+            let commands = await runner.commands
+            #expect(commands.count == 1)
+            let command = try #require(commands.first)
+            #expect(command.arguments.contains("dump-package"))
+            #expect(!command.arguments.contains("show-dependencies"))
+            #expect(!command.arguments.contains("resolve"))
+            let scratchIndex = try #require(command.arguments.firstIndex(of: "--scratch-path"))
+            let scratch = URL(filePath: command.arguments[scratchIndex + 1])
+            #expect(!fileURLsOverlap(scratch, directory))
+            #expect(SwiftPMScratchStorage.configuration(for: directory) == .directory(scratch))
+        }
+    }
+
+    @Test("Configuration retains the SDK that recovered root evaluation without changing Swift")
+    func rootConfigurationRecovery() async throws {
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-config-test") { directory in
+            let active = try makeSDK(in: directory, version: "27.0")
+            let older = try makeSDK(in: directory, version: "26.5")
+            let runner = RecordingSubprocessRunner(results: [
+                .failure(standardError: "compile command failed due to signal 11"),
+                .success(output: Self.packageJSON)
+            ])
+            let scratch = directory.appending(path: "configuration-scratch")
+            let configuration = try await Self.swiftPM(runner: runner, alternatives: [older]).configurePackage(
+                using: Self.environment(in: directory, sdk: active),
+                scratchStorage: .directory(scratch)
+            )
+
+            #expect(configuration.environment.hostSDK == older)
+            #expect(configuration.environment.swiftVersion == SwiftVersion(major: 6, minor: 3, patch: 3))
+            let commands = await runner.commands
+            #expect(commands.count == 2)
+            #expect(commands.allSatisfy { $0.arguments.contains("dump-package") && $0.arguments.last == "+6.3.3" })
+            #expect(commands.allSatisfy { $0.arguments.contains(scratch.path(percentEncoded: false)) })
+        }
+    }
+
+    @Test("A build loads one successful graph before compilation and retains the recovering SDK")
+    func buildUsesOneGraph() async throws {
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-build-graph-test") { directory in
+            let active = try makeSDK(in: directory, version: "27.0")
+            let older = try makeSDK(in: directory, version: "26.5")
+            try writeELF(to: directory.appending(path: "Tool"), architecture: .x86_64)
+            let graph = try Self.graphJSON(root: directory)
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: Self.packageJSON),
+                .failure(standardError: "compile command failed due to signal 11"),
+                .success(output: Self.packageJSON),
+                .success(output: graph),
+                .success(output: "built"),
+                .success(output: directory.path(percentEncoded: false))
+            ])
+            let swiftPM = Self.swiftPM(runner: runner, alternatives: [older])
+            let result = try await swiftPM.build(
+                BuildRequest(ExecutableProduct(name: "Tool")),
+                using: Self.environment(in: directory, sdk: active)
+            )
+
+            #expect(result.executable == directory.appending(path: "Tool"))
+            let commands = await runner.commands
+            #expect(commands.count == 6)
+            #expect(commands[1].arguments.contains("show-dependencies"))
+            #expect(commands[3].arguments.contains("show-dependencies"))
+            #expect(commands[4].arguments.contains("build"))
+            #expect(commands[5].arguments.contains("--show-bin-path"))
+            #expect(commands.suffix(4).allSatisfy {
+                $0.environment?["SDKROOT"] == older.directory.path(percentEncoded: false)
+            })
+            #expect(commands.allSatisfy { $0.arguments.last == "+6.3.3" })
+        }
+    }
+
+    @Test("Graph errors stop compilation even when root products are available")
+    func invalidGraphStopsBuild() async throws {
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-build-graph-test") { directory in
+            let sdk = try makeSDK(in: directory, version: "26.5")
+            let runner = RecordingSubprocessRunner(results: [
+                .success(output: Self.packageJSON),
+                .failure(standardError: "Dependency/Package.swift: error: cannot find 'missingDeclaration' in scope")
+            ])
+            await #expect(throws: SwiftPMError.self) {
+                try await Self.swiftPM(runner: runner, alternatives: []).build(
+                    BuildRequest(ExecutableProduct(name: "Tool")),
+                    using: Self.environment(in: directory, sdk: sdk)
+                )
+            }
+            let commands = await runner.commands
+            #expect(commands.count == 2)
+            #expect(commands.allSatisfy { !$0.arguments.contains("build") })
+        }
+    }
+
+    @Test("Build resolution is explicit and a successful graph is reused after resolution")
+    func buildResolutionPolicy() async throws {
+        try await withTemporaryDirectory(prefix: "SwiftlyKit-build-graph-test") { directory in
+            let sdk = try makeSDK(in: directory, version: "26.5")
+            try writeELF(to: directory.appending(path: "Tool"), architecture: .x86_64)
+            let results: [SubprocessResult] = [
+                .success(output: Self.packageJSON),
+                .failure(standardError: "automatic resolution is disabled"),
+                .success(output: "resolved"),
+                .success(output: try Self.graphJSON(root: directory)),
+                .success(output: "built"),
+                .success(output: directory.path(percentEncoded: false))
+            ]
+            let strictRunner = RecordingSubprocessRunner(results: Array(results.prefix(2)))
+            await #expect(throws: SwiftPMError.dependencyResolutionRequired) {
+                try await Self.swiftPM(runner: strictRunner, alternatives: []).build(
+                    BuildRequest(ExecutableProduct(name: "Tool")),
+                    using: Self.environment(in: directory, sdk: sdk)
+                )
+            }
+            #expect(await strictRunner.commands.count == 2)
+
+            let runner = RecordingSubprocessRunner(results: results)
+            _ = try await Self.swiftPM(runner: runner, alternatives: []).build(
+                BuildRequest(ExecutableProduct(name: "Tool")),
+                using: Self.environment(in: directory, sdk: sdk),
+                dependencies: .resolveIfNeeded
+            )
+            let commands = await runner.commands
+            #expect(commands.count == 6)
+            #expect(commands[2].arguments.contains("resolve"))
+            #expect(commands[3].arguments.contains("show-dependencies"))
+            #expect(commands[4].arguments.contains("build"))
+        }
+    }
+
     @Test("Compiler crash diagnostics retain the leading error before a long backtrace")
     func leadingDiagnostic() {
         let result = SubprocessResult(
@@ -152,6 +306,14 @@ struct PackageInspectionTests {
 }
 
 extension PackageInspectionTests {
+
+    private static func graphJSON(root: URL) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "path": root.path(percentEncoded: false),
+            "dependencies": []
+        ])
+        return String(decoding: data, as: UTF8.self)
+    }
 
     private static func swiftPM(runner: RecordingSubprocessRunner, alternatives: [HostSDK]) -> SwiftPM {
         SwiftPM(

@@ -6,30 +6,67 @@ extension SwiftPM {
     func build(
         _ request: BuildRequest,
         using environment: LocalBuildEnvironment,
+        dependencies: DependencyResolutionPolicy = .requireResolved,
         onEvent: SwiftlyKitEvent.Handler? = nil
     ) async throws -> BuildResult {
         
         try request.validate()
-        let selected: LocalBuildEnvironment
-        if environment.hostSDK != nil {
-            let inspection = try await inspectPackage(
+        let scratchDirectory = try SwiftPMScratchDirectory(
+            storage: request.scratchStorage,
+            packageRoot: environment.packageRoot,
+            sharedStorage: environment.swiftPMSharedStorage,
+            environmentStorage: environment.environmentStorage
+        )
+        try Self.validate(
+            request.output,
+            outside: scratchDirectory.url,
+            environmentStorage: environment.environmentStorage
+        )
+        let inspection = try await inspectPackage(
+            using: environment,
+            scratchStorage: request.scratchStorage,
+            dependencies: dependencies,
+            onEvent: onEvent
+        )
+        return try await buildInspected(
+            request,
+            inspection: inspection,
+            dependencies: dependencies,
+            onEvent: onEvent
+        )
+    }
+
+    /// Consumes graph evidence produced inside this build operation, never cached across operations.
+    func buildInspected(
+        _ request: BuildRequest,
+        inspection: PackageInspection,
+        dependencies: DependencyResolutionPolicy = .requireResolved,
+        onEvent: SwiftlyKitEvent.Handler?
+    ) async throws -> BuildResult {
+
+        do {
+            return try await buildValidated(request, inspection: inspection, onEvent: onEvent)
+        } catch SwiftPMError.dependencyResolutionRequired {
+            guard case .resolveIfNeeded = dependencies else { throw SwiftPMError.dependencyResolutionRequired }
+            let (_, environment) = try await withHostSDK(using: inspection.environment, onEvent: onEvent) { candidate in
+                try await resolveDependenciesDirect(in: request.scratchStorage, using: candidate, onEvent: onEvent)
+            }
+            let refreshed = try await inspectPackage(
                 using: environment,
                 scratchStorage: request.scratchStorage,
                 onEvent: onEvent
             )
-            selected = inspection.environment
-        } else {
-            selected = environment
+            return try await buildValidated(request, inspection: refreshed, onEvent: onEvent)
         }
-        return try await buildInspected(request, using: selected, onEvent: onEvent)
     }
 
-    private func buildInspected(
+    private func buildValidated(
         _ request: BuildRequest,
-        using environment: LocalBuildEnvironment,
+        inspection: PackageInspection,
         onEvent: SwiftlyKitEvent.Handler?
     ) async throws -> BuildResult {
 
+        let environment = inspection.environment
         try request.validate()
         try validateEnvironment(environment)
 
@@ -48,18 +85,11 @@ extension SwiftPM {
         
         await report(.building, detail: "Building \(request.product.name).", to: onEvent)
         
-        let description = try await packageDescription(
-            using: environment,
-            scratchStorage: request.scratchStorage,
-            onEvent: onEvent
-        )
-        
-        guard description.products.contains(request.product)
+        guard inspection.products.contains(request.product)
         else { throw SwiftPMError.executableNotFound(request.product.name) }
         
-        let roots = try await sourceRoots(environment, scratchDirectory, onEvent)
         let stability = try await Self.startSourceStability(
-            roots: roots,
+            roots: inspection.sourceRoots,
             scratchDirectory: scratchDirectory.url
         )
         defer { stability.cancel() }
