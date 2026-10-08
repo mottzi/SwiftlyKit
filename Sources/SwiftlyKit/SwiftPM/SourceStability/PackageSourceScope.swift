@@ -1,12 +1,8 @@
 import Foundation
 
-/// Canonical roots and inclusion rules for one package-source observation.
-/// Exclusion paths use the same canonical form as observed roots.
-/// Recreated scopes resolve the current symlink targets.
-/// A scope is intentionally cheap to recreate. Callers that observe a package
-/// for a period of time can retain the scope used to start their monitor, while
-/// snapshot captures should create a fresh scope so that changing symlinked
-/// roots are resolved again.
+/// Canonical source roots and exclusions for one package observation.
+/// New scopes resolve the current symbolic-link targets.
+/// Snapshots create new scopes. Monitors retain their initial scope.
 struct PackageSourceScope: Sendable {
 
     let roots: [URL]
@@ -20,12 +16,9 @@ struct PackageSourceScope: Sendable {
         self.excludedRoots = try Self.canonicalURLs(excludedRoots)
     }
 
-    /// Whether a canonical path is inside an observed root after exclusions.
-    /// This check does not read the filesystem.
-    /// Returns false for paths outside all observed roots.
-    /// A more deeply nested observed root takes precedence over an exclusion,
-    /// which allows resolved dependency roots under package scratch storage to
-    /// remain observable.
+    /// Returns true for a canonical path within a source root after exclusions.
+    /// A deeper source root overrides an enclosing exclusion.
+    /// Does not read the filesystem.
     func includes(_ url: URL) -> Bool {
         let rootDepth = deepestContainingRoot(url, in: roots)
         guard rootDepth >= 0 else { return false }
@@ -52,52 +45,22 @@ struct PackageSourceScope: Sendable {
     /// Stream count does not grow with the number of dependency checkouts.
     var eventStreamGroups: [EventStreamGroup] {
 
-        let outer = roots.filter { root in
-            !roots.contains { other in
-                other != root && root.pathComponents.starts(with: other.pathComponents)
-            }
-        }
+        let outer = Self.outermostURLs(roots)
         let nested = roots.filter { !outer.contains($0) }
         return [outer, nested].filter { !$0.isEmpty }.map { watchedRoots in
             let candidates = Array(Set(watchedRoots.flatMap(eventExclusions)))
                 .filter { candidate in
                     !watchedRoots.contains { $0.pathComponents.starts(with: candidate.pathComponents) }
                 }
-            let exclusions = candidates.filter { candidate in
-                !candidates.contains { other in
-                    other != candidate && candidate.pathComponents.starts(with: other.pathComponents)
-                }
-            }.sorted { first, second in
+            let exclusions = Self.outermostURLs(candidates).sorted { first, second in
                 if first.pathComponents.count != second.pathComponents.count {
                     return first.pathComponents.count < second.pathComponents.count
                 }
                 return first.path(percentEncoded: false) < second.path(percentEncoded: false)
             }
-            // FSEvents accepts at most eight exclusions. The callback filters every omitted path.
+            // native streams accept at most eight exclusions, and the callback filters every omitted path
             return EventStreamGroup(watchRoots: watchRoots(for: watchedRoots), exclusions: Array(exclusions.prefix(8)))
         }
-    }
-
-    /// Coalesces sibling checkouts without changing the semantic roots or inclusion rules.
-    /// WatchRoot otherwise allocates ancestor watches repeatedly for every checkout.
-    private func watchRoots(for roots: [URL]) -> [URL] {
-
-        let outer = roots.filter { root in
-            !roots.contains { other in
-                other != root && root.pathComponents.starts(with: other.pathComponents)
-            }
-        }
-        let siblings = Dictionary(grouping: outer) { $0.deletingLastPathComponent().path(percentEncoded: false) }
-        let anchors = siblings.flatMap { path, children in
-            let parent = URL(filePath: path, directoryHint: .isDirectory)
-            let hasObservedAncestor = self.roots.contains { parent.pathComponents.starts(with: $0.pathComponents) }
-            return children.count > 1 && hasObservedAncestor ? [parent] : children
-        }
-        return anchors.filter { anchor in
-            !anchors.contains { other in
-                other != anchor && anchor.pathComponents.starts(with: other.pathComponents)
-            }
-        }.sorted { $0.path(percentEncoded: false) < $1.path(percentEncoded: false) }
     }
 
     /// A moved or replaced watch ancestor invalidates every semantic root beneath it.
@@ -112,11 +75,7 @@ struct PackageSourceScope: Sendable {
             + excludedRoots.filter {
                 $0 != root && $0.pathComponents.starts(with: root.pathComponents)
             }
-        return Array(Set(candidates)).filter { candidate in
-            !candidates.contains { other in
-                other != candidate && candidate.pathComponents.starts(with: other.pathComponents)
-            }
-        }
+        return Self.outermostURLs(Array(Set(candidates)))
     }
 
     /// Whether a child at this relative path should be traversed or hashed.
@@ -128,14 +87,21 @@ struct PackageSourceScope: Sendable {
 
 extension PackageSourceScope {
 
-    struct EventStreamGroup: Sendable {
-        let watchRoots: [URL]
-        let exclusions: [URL]
+    /// Coalesces sibling checkouts without changing the semantic roots or inclusion rules.
+    /// WatchRoot otherwise allocates ancestor watches repeatedly for every checkout.
+    private func watchRoots(for roots: [URL]) -> [URL] {
+
+        let outer = Self.outermostURLs(roots)
+        let siblings = Dictionary(grouping: outer) { $0.deletingLastPathComponent().path(percentEncoded: false) }
+        let anchors = siblings.flatMap { path, children in
+            let parent = URL(filePath: path, directoryHint: .isDirectory)
+            let hasObservedAncestor = self.roots.contains { parent.pathComponents.starts(with: $0.pathComponents) }
+            return children.count > 1 && hasObservedAncestor ? [parent] : children
+        }
+        return Self.outermostURLs(anchors).sorted {
+            $0.path(percentEncoded: false) < $1.path(percentEncoded: false)
+        }
     }
-
-}
-
-extension PackageSourceScope {
 
     private func deepestContainingRoot(_ url: URL, in roots: [URL]) -> Int {
 
@@ -149,10 +115,33 @@ extension PackageSourceScope {
 
 extension PackageSourceScope {
 
+    private static func outermostURLs(_ urls: [URL]) -> [URL] {
+
+        urls.filter { url in
+            !urls.contains { other in
+                other != url && url.pathComponents.starts(with: other.pathComponents)
+            }
+        }
+    }
+
     private static func canonicalURLs(_ urls: [URL]) throws -> [URL] {
         Array(Set(try urls.map(CanonicalFileURL.resolve)))
             .sorted { $0.path(percentEncoded: false) < $1.path(percentEncoded: false) }
     }
+
+}
+
+extension PackageSourceScope {
+
+    /// Native watch roots and exclusions for one source event stream.
+    struct EventStreamGroup: Sendable {
+        let watchRoots: [URL]
+        let exclusions: [URL]
+    }
+
+}
+
+extension PackageSourceScope {
 
     private static let ignoredTopLevelNames: Set<String> = [".build", ".git", ".swiftpm"]
 
