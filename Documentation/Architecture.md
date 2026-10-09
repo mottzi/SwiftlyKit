@@ -1,13 +1,13 @@
-# SwiftlyKit architecture
+# Triple architecture
 
-SwiftlyKit exposes one public facade with a convenience API and a staged
+Triple exposes one public facade with a convenience API and a staged
 workflow. Each facade captures one immutable `EnvironmentStorage` choice. Both
 routes use the same internal workflow modules:
 `EnvironmentAssessor`, `EnvironmentPreparer`, `EnvironmentRemover`, and `SwiftPM`.
 
 ```mermaid
 flowchart LR
-    Consumer --> Facade[SwiftlyKit + EnvironmentStorage]
+    Consumer --> Facade[Triple + EnvironmentStorage]
     Facade -->|inspect host readiness| Preflight[HostPreflight]
     Facade -->|request Command Line Tools installer| Requester[HostCLTRequest]
     Requester --> Preflight
@@ -40,7 +40,7 @@ flowchart LR
 
 ## Public workflows
 
-The static convenience API, `SwiftlyKit.build`, creates a `SwiftlyKit` value with
+The static convenience API, `Triple.build`, creates a `Triple` value with
 its `environmentStorage` choice, captures compatible assessments, prepares one
 selected environment, inspects the complete package graph, selects a product,
 and builds it. Preparation and package work hold separate coordination leases.
@@ -57,7 +57,7 @@ observes installed environment state, and retains the target and selected
 official release and the facade's `EnvironmentStorage` namespace. Passing that
 assessment to `prepare` authorizes only its `requiredComponents`. Preparation
 returns the immutable `LocalBuildEnvironment` capability, including that
-namespace, on success. If a caller supplies `recordRemovalPlan`, SwiftlyKit
+namespace, on success. If a caller supplies `recordRemovalPlan`, Triple
 calls it with a cumulative plan before each authorized toolchain or SDK
 installation command.
 The callback can persist that plan across failure, cancellation, and abrupt
@@ -82,7 +82,7 @@ uses that namespace to observe live installed state, refuses active or default
 toolchains and uninspectable SDK registry state, and preflights the complete
 scope before issuing commands. Unrelated SDK registrations do not block an exact
 removal. Full removal removes the SDK before its paired toolchain; absent
-targets are no-ops. SwiftlyKit stays stateless: callers decide when to remove a
+targets are no-ops. Triple stays stateless: callers decide when to remove a
 generated or explicitly constructed plan. Manual plan factories default to
 `.standard` and accept a custom namespace through `in:`.
 Manual SDK plans use only the exact registry identifier. Full-environment plans
@@ -120,7 +120,8 @@ returns when macOS accepts the request; it cannot observe license acceptance or
 installation completion. The consumer retries readiness inspection or
 assessment after the user finishes the system interaction.
 
-Production facades share one installed-tools reader/writer lease at
+Production facades retain the pre-rebrand coordination namespace so Triple and
+existing SwiftlyKit clients share one installed-tools reader/writer lease at
 `~/Library/Application Support/SwiftlyKit/Coordination/v1/mutation.lock`.
 Assessment, installed-only preparation, root configuration, and package work
 hold shared access. Authorized installation and environment removal hold
@@ -158,7 +159,7 @@ Failure to prepare or open the lock produces `mutationCoordinationFailed`.
 Reentrant mutation through the same asynchronous task context also produces
 `mutationCoordinationFailed` instead of waiting for its own active lease. A
 detached task does not inherit that context. An awaited event handler or removal
-plan recorder must not await another mutating SwiftlyKit operation, directly or
+plan recorder must not await another mutating Triple operation, directly or
 through detached work.
 
 The installed-tools lease remains user-wide even for a custom environment root.
@@ -181,17 +182,17 @@ The Command Line Tools installation request does not use this coordinator. It
 starts machine-level system interaction and returns before installation
 finishes, so concurrent consumers can submit duplicate requests.
 
-The kernel lock is advisory. It coordinates cooperating SwiftlyKit processes for
+The kernel lock is advisory. It coordinates cooperating Triple processes for
 the same user environment, but an independently launched `swift` or `swiftly`
 command and direct filesystem mutation do not acquire it. SwiftPM has its own
 scratch-directory lock, and Swiftly 1.1.3 has a separate install/uninstall lock;
-neither spans SwiftlyKit's complete workflow. Consumers that mix those direct
-operations with SwiftlyKit must serialize them at a higher level or keep their
+neither spans Triple's complete workflow. Consumers that mix those direct
+operations with Triple must serialize them at a higher level or keep their
 state disjoint.
 
 The lease does not freeze package sources. `PackageSourceStability` provides a
 separate build-scoped guarantee. SwiftPM first returns the complete resolved
-package graph without automatic resolution. SwiftlyKit starts recursive FSEvents
+package graph without automatic resolution. Triple starts recursive FSEvents
 observation, captures deterministic source evidence, compiles, discovers and
 verifies the selected executable and its exact linked runtime resources,
 captures the evidence again, and drains the event stream. A lasting
@@ -219,7 +220,7 @@ The module does not build from an immutable copy, retain fingerprints, or create
 durable artifact provenance.
 
 Abrupt owner termination can also leave an already launched tool process alive.
-`O_CLOEXEC` ensures that child does not retain SwiftlyKit's lease, which provides
+`O_CLOEXEC` ensures that child does not retain Triple's lease, which provides
 deterministic crash recovery but cannot prove that the orphan stopped mutating
 external state. A consumer that knows an external tool survived must stop it or
 wait for it before retrying. Durable orphan detection and coordination with
@@ -236,8 +237,8 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
 
 ## Implementation map
 
-- `SwiftlyKit.swift` is the public facade, convenience API orchestrator, and interface
-  that maps internal failures to `SwiftlyKitError`.
+- `Triple.swift` is the public facade, convenience API orchestrator, and interface
+  that maps internal failures to `TripleError`.
 - `MutationGate.swift` combines installed-tools reader/writer admission with
   persistent hierarchical filesystem claims. It hides canonical path identity,
   overlap exclusion, lock ordering, and cancellation from public callers.
@@ -326,7 +327,7 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   means only that macOS accepted the request.
 - `HostReadiness` reports unsupported hosts and unavailable developer tools
   without package work. Operations that cannot continue translate those values
-  to `SwiftlyKitError`; the installer requester branches on them directly.
+  to `TripleError`; the installer requester branches on them directly.
 - Assessment derives its values from one captured `Package.swift` and nearest
   `.swift-version` state and the facade's immutable `EnvironmentStorage` choice.
   Preparation compares the same inputs byte-for-byte before any mutation.
@@ -337,7 +338,7 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   environments, and removal.
 - A custom environment root must be an absolute, dedicated local directory. It
   is disjoint from package sources, the effective SwiftPM scratch directory,
-  explicit SwiftPM shared storage, and export destinations. SwiftlyKit may
+  explicit SwiftPM shared storage, and export destinations. Triple may
   create and populate it, but never deletes it wholesale or removes Swiftly.
 - Standard bootstrap uses the official current-user installation path. Custom
   bootstrap verifies the official downloaded package's signature and Apple
@@ -359,12 +360,12 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   toolchain or SDK mutation. The cumulative plan covers resources observed
   absent immediately before that attempt. The recorder is write-ahead, so a
   caller can recover the plan after ordinary failure, cancellation, or process
-  termination; SwiftlyKit never removes resources automatically.
+  termination; Triple never removes resources automatically.
 - Read-only assessment treats a missing custom SDK registry as empty and does
   not create it. Preparation can create it only after the assessment authorizes
   SDK installation.
 - Removal-plan recorders and event handlers must not await another mutating
-  SwiftlyKit operation, including removal, directly or through detached work.
+  Triple operation, including removal, directly or through detached work.
 - Environment removal uses exact stable versions and SDK identifiers, performs
   one complete preflight before the first destructive command, refuses active or
   default toolchains and uninspectable SDK registry state, removes only the exact
@@ -395,14 +396,14 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   arguments never reach Swiftly or selected non-SwiftPM tools.
 - One immutable shared-storage configuration reaches the same SwiftPM commands.
   Explicit cache, configuration, and security directories remain caller-owned;
-  SwiftlyKit cleanup removes only selected scratch storage. Standard locations
+  Triple cleanup removes only selected scratch storage. Standard locations
   remain implicit, and shared-storage arguments never reach Swiftly or selected
   non-SwiftPM tools.
 - `EnvironmentStorage` controls durable Swiftly state, binaries, toolchains,
   and Static Linux SDKs. SwiftPM scratch and shared storage remain separate
   choices; the feature does not create a private `HOME` or full process sandbox.
 - SDK selection resolves only after the retained directory is verified. If
-  another process wins atomic link creation, SwiftlyKit verifies and reuses that
+  another process wins atomic link creation, Triple verifies and reuses that
   exact selection; conflicting filesystem state is never accepted.
 - Root configuration and build commands disable automatic dependency resolution.
   Full inspection and staged builds resolve only with explicit
@@ -412,7 +413,7 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   selection use the same `ExecutableProducts.select` behavior in staged and
   convenience workflows.
 - Internal SwiftPM failures are classified structurally before becoming public
-  `SwiftlyKitError` values. Collected subprocess output and surfaced diagnostics
+  `TripleError` values. Collected subprocess output and surfaced diagnostics
   are bounded.
 - A public `BuildResult` identifies the final executable, its export name,
   its exact verified runtime resource bundles in stable name order, and their
@@ -433,7 +434,7 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   package graph from its initial snapshot through compilation and complete
   build-output discovery and verification. A reverted mutation also rejects the
   result.
-- Stripping operates only on a SwiftlyKit-owned executable and never changes
+- Stripping operates only on a Triple-owned executable and never changes
   SwiftPM's produced executable or runtime resources in build storage.
 - Build-storage output returns a `BuildResult` with required resource bundles as
   siblings. Its directory can contain unrelated SwiftPM output. The executable

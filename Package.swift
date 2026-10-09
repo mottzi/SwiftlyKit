@@ -3,14 +3,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "SwiftlyKit",
+    name: "Triple",
     platforms: [
         .macOS(.v13)
     ],
     products: [
         .library(
-            name: "SwiftlyKit",
-            targets: ["SwiftlyKit"]
+            name: "Triple",
+            targets: ["Triple"]
         )
     ],
     dependencies: [
@@ -21,16 +21,16 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "SwiftlyKit",
+            name: "Triple",
             dependencies: [
                 .product(name: "Subprocess", package: "swift-subprocess")
             ]
         ),
         .testTarget(
-            name: "SwiftlyKitTests",
+            name: "TripleTests",
             dependencies: [
-                "SwiftlyKit",
-                "SwiftlyKitCoordinationFixture"
+                "Triple",
+                "TripleCoordinationFixture"
             ],
             resources: [
                 .copy("Fixtures/CrossCompilationPackage"),
@@ -38,8 +38,8 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "SwiftlyKitCoordinationFixture",
-            dependencies: ["SwiftlyKit"],
+            name: "TripleCoordinationFixture",
+            dependencies: ["Triple"],
             path: "Tests/Fixtures/Coordination"
         )
     ],

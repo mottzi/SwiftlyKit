@@ -1,12 +1,12 @@
-# SwiftlyKit
+# Triple
 
-SwiftlyKit cross-compiles a local Swift package on Apple silicon macOS into a
+Triple cross-compiles a local Swift package on Apple silicon macOS into a
 verified, statically linked ARM64 or x86-64 Linux Musl executable. It selects an
 official Swift toolchain and matching Static Linux SDK, runs SwiftPM, and returns
 the executable with its required resource bundles.
 
-SwiftlyKit is a library for macOS apps and developer tools. If you want a
-terminal command, use [SwiftlyKitCLI](https://github.com/mottzi/SwiftlyKitCLI).
+Triple is a library for macOS apps and developer tools. If you want a
+terminal command, use [TripleCLI](https://github.com/mottzi/TripleCLI).
 
 ## Requirements
 
@@ -15,13 +15,13 @@ terminal command, use [SwiftlyKitCLI](https://github.com/mottzi/SwiftlyKitCLI).
 - An unsandboxed app or command-line tool
 - A trusted local Swift package to build
 
-SwiftlyKit also needs Swiftly 1.0 or later. It can install Swiftly, the selected
+Triple also needs Swiftly 1.0 or later. It can install Swiftly, the selected
 toolchain, and the matching SDK when the caller authorizes preparation. It does
 not install Xcode or change the active developer directory.
 
 Builds explicitly use SwiftPM's native build engine so executable and resource
 verification use a consistent output layout. Swift 6.4 supports this engine but
-marks it deprecated. SwiftlyKit does not yet support the default Swift Build
+marks it deprecated. Triple does not yet support the default Swift Build
 engine's resource metadata layout.
 
 ## Installation
@@ -29,14 +29,17 @@ engine's resource metadata layout.
 In Xcode, select **File > Add Package Dependencies** and enter:
 
 ```text
-https://github.com/mottzi/SwiftlyKit.git
+https://github.com/mottzi/Triple.git
 ```
 
-These examples use the `0.6.0` API. Export uses one method and an
-explicit destination policy. The previous replacement Boolean and `into:`
-overload have been removed without compatibility aliases.
+Add the `Triple` library to your target from a revision that contains this
+rebrand. Existing version tags, including `0.6.0`, export the `SwiftlyKit` module
+and cannot satisfy `import Triple`. The repository rename and rebrand commit
+must be published before remote consumers can resolve the dependency.
 
-Select version `0.6.0` or later and add the `SwiftlyKit` library to your target.
+The example below follows `main` after that publication. Pin the published
+rebrand commit for a reproducible dependency, or use a new release tag that
+exports `Triple`. Export uses one method and an explicit destination policy.
 
 For a Swift package, add the package and product dependencies:
 
@@ -50,20 +53,32 @@ let package = Package(
     platforms: [.macOS(.v13)],
     dependencies: [
         .package(
-            url: "https://github.com/mottzi/SwiftlyKit.git",
-            from: "0.6.0"
+            url: "https://github.com/mottzi/Triple.git",
+            branch: "main"
         )
     ],
     targets: [
         .executableTarget(
             name: "YourTarget",
             dependencies: [
-                .product(name: "SwiftlyKit", package: "SwiftlyKit")
+                .product(name: "Triple", package: "Triple")
             ]
         )
     ]
 )
 ```
+
+## Migrating from SwiftlyKit
+
+Update the library product and imports to `Triple`, the facade to `Triple`,
+and the event and error types to `TripleEvent` and `TripleError`. The CLI command
+is `triple`. Swiftly remains the external toolchain manager.
+
+Triple retains the existing `SwiftlyKit` cache and coordination directories.
+This preserves cached release metadata during network outages, cached root
+manifests, and locking with previously installed clients. Scratch SDK selections
+and temporary output names use `.triple`. The internal manifest identity uses
+`TRIPLE_HOST_CACHE_CONTEXT`; callers cannot override the old or new key.
 
 ## Quick start
 
@@ -71,10 +86,10 @@ Pass the exact package root that contains `Package.swift`:
 
 ```swift
 import Foundation
-import SwiftlyKit
+import Triple
 
 let packageRoot = URL(filePath: "/path/to/package")
-let result = try await SwiftlyKit.build(packageRoot)
+let result = try await Triple.build(packageRoot)
 
 print(result.executable.path)
 ```
@@ -86,7 +101,7 @@ default package traits, and does not strip the executable.
 Select a product, target, or toolchain when the defaults do not fit:
 
 ```swift
-let result = try await SwiftlyKit.build(
+let result = try await Triple.build(
     packageRoot,
     product: "MyTool",
     for: .linux(.arm64),
@@ -103,7 +118,7 @@ SwiftPM build storage:
 
 ```swift
 let destination = URL(filePath: "/path/to/output/MyTool")
-let result = try await SwiftlyKit.build(
+let result = try await Triple.build(
     packageRoot,
     product: "MyTool",
     output: .export(to: destination),
@@ -114,12 +129,12 @@ let result = try await SwiftlyKit.build(
 You can also export an existing build result without rebuilding:
 
 ```swift
-let built = try await SwiftlyKit.build(packageRoot, product: "MyTool", strip: true)
+let built = try await Triple.build(packageRoot, product: "MyTool", strip: true)
 let result = try await built.export(to: destination)
 ```
 
 The destination's parent directory must exist. Both paths stage and validate the
-complete directory before exporting it. SwiftlyKit refuses to replace an
+complete directory before exporting it. Triple refuses to replace an
 existing destination unless you select `policy: .replaceIfPresent`. This policy
 also creates the directory when the destination is missing.
 
@@ -132,8 +147,8 @@ let exported = try await built.export(
 )
 ```
 
-The folder must exist and still be empty when SwiftlyKit commits the export.
-SwiftlyKit preserves its contents if another process adds a file first.
+The folder must exist and still be empty when Triple commits the export.
+Triple preserves its contents if another process adds a file first.
 
 `BuildResult.export` and `BuildOutput.export` share `ExportDestinationPolicy`:
 
@@ -155,7 +170,7 @@ SwiftPM build storage can share its directory with unrelated build output.
 changed the filename in build storage.
 
 > [!IMPORTANT]
-> `SwiftlyKit.build(_:)` authorizes SwiftlyKit to install missing environment
+> `Triple.build(_:)` authorizes Triple to install missing environment
 > components and update Swiftly before installing a missing toolchain. It may
 > also resolve package dependencies and update `Package.resolved`. Use the staged
 > workflow when your app must inspect or approve those changes first.
@@ -166,7 +181,7 @@ Both workflows use the same build and verification pipeline.
 
 | Workflow | Use it when |
 | --- | --- |
-| `SwiftlyKit.build(_:)` | One call may prepare the environment, resolve dependencies, and build. |
+| `Triple.build(_:)` | One call may prepare the environment, resolve dependencies, and build. |
 | Staged API | The caller must inspect requirements, ask for approval, select a product, or control dependency resolution. |
 
 ## Staged workflow
@@ -177,7 +192,7 @@ toolchain, SDK, SwiftPM configuration, and storage selection.
 ### 1. Assess without changing the system
 
 ```swift
-let kit = SwiftlyKit()
+let kit = Triple()
 let assessment = try await kit.assess(
     packageRoot,
     for: .linux(.arm64)
@@ -281,7 +296,7 @@ The convenience call and `BuildRequest` share these build choices:
 | `jobs` | `nil` | Uses SwiftPM's default concurrency. A positive value sets a limit. |
 | `scratchStorage` | `.packageDefault` | Uses `.build` or an explicit SwiftPM scratch directory. |
 | `output` | `.buildStorage` | Keeps output in build storage or exports a runnable directory. |
-| `strip` | `false` | Strips a SwiftlyKit-owned copy, then verifies it again. |
+| `strip` | `false` | Strips a Triple-owned copy, then verifies it again. |
 
 Use `BuildTarget.allCases`, `LinuxArchitecture.allCases`, and
 `BuildConfiguration.allCases` to list supported choices in your app.
@@ -300,7 +315,7 @@ recorder, and an event handler.
 
 `.exact(SwiftVersion(...))` selects one official stable release. `SwiftVersion`
 also accepts `"6.3"` or `"6.3.3"` and normalizes a two-component version to a
-patch version of zero. SwiftlyKit does not select snapshots, development
+patch version of zero. Triple does not select snapshots, development
 branches, custom SDKs, or arbitrary Swiftly selectors.
 
 Release eligibility covers the package's Swift tools version and Linux target
@@ -335,7 +350,7 @@ let result = try await kit.build(BuildRequest(product), using: inspection.enviro
 Inspection defaults to `.requireResolved`; `.resolveIfNeeded` explicitly permits
 dependency resolution. `environment.hostSDKVersion` reports the selected host SDK.
 Subsequent operations bind that SDK per process and reassess removed or replaced
-SDKs through fresh package inspection. SwiftlyKit never changes the global `xcode-select` setting.
+SDKs through fresh package inspection. Triple never changes the global `xcode-select` setting.
 
 When no installed host context can inspect the package, unpinned Automatic can
 advance to a newer assessed official Swift release and matching Linux SDK.
@@ -367,7 +382,7 @@ let environment = try await kit.prepare(
 )
 ```
 
-`.sensitive` values are redacted from events produced by SwiftlyKit. A package
+`.sensitive` values are redacted from events produced by Triple. A package
 manifest, plugin, cache, or external tool can still read or store them. Keep
 long-lived secrets in a credential store.
 
@@ -382,15 +397,15 @@ Use `.packageDefaults`, `.none`, or `.all` for common trait policies.
 | `SwiftPMSharedStorage` | Selects SwiftPM cache, configuration, and security directories shared across packages. |
 
 Custom directories must be absolute local paths. An environment root must not
-overlap the package, scratch storage, or export destination. SwiftlyKit can
+overlap the package, scratch storage, or export destination. Triple can
 create a custom environment root but never deletes the root or Swiftly itself.
 It ignores inherited `SWIFTLY_*` variables. A custom root does not create a
 private `HOME` or move SwiftPM scratch, cache, configuration, or security files.
 
 `BuildOutput.export` accepts `.retain`, `.clean`, or `.reset` for cleanup. `.clean`
 removes compiled output and keeps dependency state. `.reset` removes the complete
-effective scratch directory. SwiftlyKit starts cleanup only after it exports
-the runnable directory. If cleanup then fails, SwiftlyKit throws
+effective scratch directory. Triple starts cleanup only after it exports
+the runnable directory. If cleanup then fails, Triple throws
 `postBuildCleanupFailed` and leaves the exported directory available.
 
 For cleanup outside a build, use `cleanBuildArtifacts(in:using:)` or
@@ -402,7 +417,7 @@ unrelated files.
 Pass one asynchronous event handler to any mutating operation:
 
 ```swift
-let onEvent: SwiftlyKitEvent.Handler = { event in
+let onEvent: TripleEvent.Handler = { event in
     switch event {
     case .progress(let progress):
         print(progress.detail)
@@ -425,20 +440,20 @@ let environment = try await kit.prepare(
 )
 ```
 
-SwiftlyKit awaits the handler for each event and does not retain an event log.
+Triple awaits the handler for each event and does not retain an event log.
 Use `progress.operation` for application state. `progress.detail` and command
 details are diagnostic text and can change between releases. Do not start
-another mutating SwiftlyKit operation from an event handler.
+another mutating Triple operation from an event handler.
 
-A command event arrives before SwiftlyKit tries to start that command. Output
+A command event arrives before Triple tries to start that command. Output
 events preserve their standard output or standard error stream. A progress event
 announces an attempted activity, not its completion. The operation's return or
-error is the terminal result. SwiftlyKit reports no percentage when the delegated
+error is the terminal result. Triple reports no percentage when the delegated
 tool cannot supply one.
 
 ## Verification and runtime output
 
-Before returning a `BuildResult`, SwiftlyKit checks that the executable:
+Before returning a `BuildResult`, Triple checks that the executable:
 
 - is a regular executable file
 - is a little-endian ELF64 file for the requested architecture
@@ -446,19 +461,19 @@ Before returning a `BuildResult`, SwiftlyKit checks that the executable:
 - has no dynamic interpreter
 - declares no required dynamic libraries
 
-SwiftlyKit also identifies and validates the product's required `.resources`
+Triple also identifies and validates the product's required `.resources`
 directories. Resource trees may contain regular files and directories. They may
 not contain links, sockets, devices, FIFOs, or other special entries. The package
 and all resolved dependencies must support the selected Linux Musl target.
 
-During compilation, SwiftlyKit monitors the root package and resolved dependency
+During compilation, Triple monitors the root package and resolved dependency
 sources. It withholds the result if relevant files change. This check detects a
 change during one build. It does not build from an immutable copy or produce
 durable provenance.
 
 Monitoring excludes top-level `.build`, `.git`, and `.swiftpm` directories and
 the selected scratch directory. It accepts at most 200,000 files and symbolic
-links and 8 GiB of regular-file contents. SwiftlyKit throws
+links and 8 GiB of regular-file contents. Triple throws
 `packageSourceStabilityUnavailable` when it cannot establish or repeat the
 observation. Monitoring ends before stripping, export, and cleanup.
 
@@ -467,15 +482,15 @@ observation. Monitoring ends before stripping, export, and cleanup.
 An interactive app can check the host before asking for a package:
 
 ```swift
-switch try await SwiftlyKit.hostReadiness() {
+switch try await Triple.hostReadiness() {
 case .ready:
     break
 
 case .developerToolsUnavailable:
-    try await SwiftlyKit.requestCommandLineToolsInstallation()
+    try await Triple.requestCommandLineToolsInstallation()
 
 case .unsupportedHost:
-    print("SwiftlyKit requires Apple silicon and macOS 13 or later.")
+    print("Triple requires Apple silicon and macOS 13 or later.")
 }
 ```
 
@@ -496,12 +511,12 @@ let environment = try await kit.prepare(
 )
 
 let plan = try await removalPlanStore.load()
-try await SwiftlyKit.remove(plan)
+try await Triple.remove(plan)
 ```
 
 `EnvironmentRemovalPlan` is `Codable`. Removal checks current Swiftly state,
 treats an absent target as success, and refuses active or default toolchains.
-SwiftlyKit does not store plans or remove installed components automatically.
+Triple does not store plans or remove installed components automatically.
 It awaits the recorder before each toolchain or SDK installation command. If the
 recorder throws, that installation does not start. A plan can name a component
 that the failed installation never created, so treat it as a recovery request,
@@ -509,16 +524,16 @@ not proof of ownership.
 
 ## Errors, cancellation, and trust
 
-SwiftlyKit reports operational failures as `SwiftlyKitError`, which conforms to
+Triple reports operational failures as `TripleError`, which conforms to
 `LocalizedError`. Handle task cancellation separately:
 
 ```swift
 do {
-    let result = try await SwiftlyKit.build(packageRoot)
+    let result = try await Triple.build(packageRoot)
     print(result.executable.path)
 } catch is CancellationError {
     print("Build cancelled.")
-} catch let error as SwiftlyKitError {
+} catch let error as TripleError {
     print(error.localizedDescription)
 }
 ```
@@ -536,28 +551,28 @@ Other errors that commonly need a distinct response include
 and `unsupportedHost`.
 
 Only one preparation, removal, dependency resolution, build, export, or
-cleanup runs at a time for cooperating SwiftlyKit processes owned by one macOS
+cleanup runs at a time for cooperating Triple processes owned by one macOS
 user. Cancel the calling task to terminate its subprocess group and discard
 transient export files. Direct `swift` and `swiftly` commands do not join
 this coordination. Do not use them to modify the same installation, package, storage, SDK, or output
-while SwiftlyKit is working. A tool launched by SwiftlyKit can survive if its
+while Triple is working. A tool launched by Triple can survive if its
 parent process ends abruptly. Stop that tool or wait for it before retrying.
 
-SwiftlyKit is not a package sandbox. SwiftPM evaluates `Package.swift` and may
+Triple is not a package sandbox. SwiftPM evaluates `Package.swift` and may
 run plugins with the current user's permissions. Build only packages you trust.
-SwiftlyKit does not run tests, sign or deploy the executable, modify shell
+Triple does not run tests, sign or deploy the executable, modify shell
 profiles, select a default toolchain, or keep build history.
 
 ## Main types
 
 | Area | Types |
 | --- | --- |
-| Workflow | `SwiftlyKit`, `EnvironmentChoices`, `EnvironmentAssessment`, `LocalBuildEnvironment` |
+| Workflow | `Triple`, `EnvironmentChoices`, `EnvironmentAssessment`, `LocalBuildEnvironment` |
 | Products and builds | `ExecutableProducts`, `ExecutableProduct`, `BuildRequest`, `BuildResult` |
 | Build choices | `BuildOutput`, `BuildCleanup`, `BuildTarget`, `LinuxArchitecture` |
 | Toolchains and storage | `ToolchainSelection`, `SwiftVersion`, `EnvironmentStorage`, `SwiftPMScratchStorage`, `SwiftPMSharedStorage` |
 | SwiftPM configuration | `SwiftPMEnvironment`, `SwiftPMTraits` |
-| Events and recovery | `SwiftlyKitEvent`, `CommandInvocation`, `EnvironmentRemovalPlan`, `SwiftlyKitError` |
+| Events and recovery | `TripleEvent`, `CommandInvocation`, `EnvironmentRemovalPlan`, `TripleError` |
 
 ## Development
 
@@ -570,7 +585,7 @@ swift test
 Run the real-system acceptance tests on a prepared host:
 
 ```sh
-SWIFTLYKIT_RUN_ACCEPTANCE=1 swift test --filter AcceptanceTests
+TRIPLE_RUN_ACCEPTANCE=1 swift test --filter AcceptanceTests
 ```
 
 Acceptance tests never authorize installation. They require compatible Swiftly,
@@ -580,4 +595,4 @@ See [Architecture](Documentation/Architecture.md) for the internal design.
 
 ## License
 
-SwiftlyKit is available under the MIT License. See [LICENSE](LICENSE).
+Triple is available under the MIT License. See [LICENSE](LICENSE).
