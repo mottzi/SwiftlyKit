@@ -32,14 +32,15 @@ In Xcode, select **File > Add Package Dependencies** and enter:
 https://github.com/mottzi/Triple.git
 ```
 
-Add the `Triple` library to your target from a revision that contains this
-rebrand. Existing version tags, including `0.6.0`, export the `SwiftlyKit` module
-and cannot satisfy `import Triple`. The repository rename and rebrand commit
-must be published before remote consumers can resolve the dependency.
+The repository is published as `mottzi/Triple`. Add the `Triple` library to your
+target using the rebrand revision
+[`99c216dda112be33f7359d3fd5bf8d0334f20498`](https://github.com/mottzi/Triple/commit/99c216dda112be33f7359d3fd5bf8d0334f20498).
+Existing version tags, including `0.6.0`, export the `SwiftlyKit` module and
+cannot satisfy `import Triple`.
 
-The example below follows `main` after that publication. Pin the published
-rebrand commit for a reproducible dependency, or use a new release tag that
-exports `Triple`. Export uses one method and an explicit destination policy.
+The example below pins that published revision. You can also follow `main` or
+use a future release tag that exports `Triple`. Export uses one method and an
+explicit destination policy.
 
 For a Swift package, add the package and product dependencies:
 
@@ -54,7 +55,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/mottzi/Triple.git",
-            branch: "main"
+            revision: "99c216dda112be33f7359d3fd5bf8d0334f20498"
         )
     ],
     targets: [
