@@ -16,7 +16,9 @@ struct SwiftPMBuildOutputTests {
                 in: directory
             )
 
-            let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            let output = try SwiftPMBuildOutput.inspect(
+                product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+            )
             #expect(output.resourceBundles == [bundle])
         }
     }
@@ -31,7 +33,9 @@ struct SwiftPMBuildOutputTests {
                 in: directory
             )
 
-            let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            let output = try SwiftPMBuildOutput.inspect(
+                product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+            )
 
             #expect(output.executable == directory.appending(path: "Tool"))
             #expect(output.resourceBundles.isEmpty)
@@ -54,7 +58,9 @@ struct SwiftPMBuildOutputTests {
                 in: directory
             )
 
-            let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            let output = try SwiftPMBuildOutput.inspect(
+                product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+            )
             #expect(output.resourceBundles.map(\.lastPathComponent) == [
                 "Package_First.resources",
                 "Package_Second.resources"
@@ -72,7 +78,9 @@ struct SwiftPMBuildOutputTests {
             let linkFile = productDirectory.appending(path: "Objects.LinkFileList")
             try Data("/external/Tool.build/main.swift.o\n".utf8).write(to: linkFile)
 
-            let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            let output = try SwiftPMBuildOutput.inspect(
+                product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+            )
 
             #expect(output.resourceBundles.isEmpty)
         }
@@ -88,7 +96,9 @@ struct SwiftPMBuildOutputTests {
             try Data().write(to: productDirectory.appending(path: "Objects.LinkFileList"))
 
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
         }
     }
@@ -105,7 +115,9 @@ struct SwiftPMBuildOutputTests {
                 in: directory
             )
 
-            let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            let output = try SwiftPMBuildOutput.inspect(
+                product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+            )
             #expect(output.resourceBundles.isEmpty)
         }
     }
@@ -125,7 +137,9 @@ struct SwiftPMBuildOutputTests {
                 in: directory
             )
 
-            let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            let output = try SwiftPMBuildOutput.inspect(
+                product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+            )
             #expect(output.resourceBundles == [bundle])
         }
     }
@@ -141,7 +155,9 @@ struct SwiftPMBuildOutputTests {
             )
             try createLinkMetadata(product: "Tool", modules: [("Assets", bundle.lastPathComponent)], in: directory)
 
-            let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            let output = try SwiftPMBuildOutput.inspect(
+                product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+            )
             #expect(output.resourceBundles == [bundle])
         }
     }
@@ -162,7 +178,9 @@ struct SwiftPMBuildOutputTests {
             try createLinkMetadata(product: "Tool", modules: [("Metadata", bundle.lastPathComponent)], in: directory)
 
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
         }
     }
@@ -174,7 +192,9 @@ struct SwiftPMBuildOutputTests {
             _ = try createBundle(named: "Package_Assets.resources", in: directory)
 
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
         }
     }
@@ -191,7 +211,9 @@ struct SwiftPMBuildOutputTests {
             )
 
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
         }
     }
@@ -218,17 +240,23 @@ struct SwiftPMBuildOutputTests {
             """
             try Data(ambiguousSource.utf8).write(to: accessor)
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
 
             try Data([0xff]).write(to: accessor)
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
 
             try Data(#"let path = "/tmp/Package_Assets.resources""#.utf8).write(to: accessor)
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
 
             try FileManager.default.removeItem(at: accessor)
@@ -237,7 +265,9 @@ struct SwiftPMBuildOutputTests {
             defer { try? FileManager.default.removeItem(at: outside) }
             try FileManager.default.createSymbolicLink(at: accessor, withDestinationURL: outside)
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
         }
     }
@@ -253,7 +283,9 @@ struct SwiftPMBuildOutputTests {
 
             try Data([0xff]).write(to: linkFile)
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
 
             let escapingObject = directory
@@ -261,7 +293,9 @@ struct SwiftPMBuildOutputTests {
                 .appending(path: "Outside.build/resource_bundle_accessor.swift.o")
             try Data(escapingObject.path(percentEncoded: false).utf8).write(to: linkFile)
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
 
             try FileManager.default.removeItem(at: linkFile)
@@ -270,7 +304,9 @@ struct SwiftPMBuildOutputTests {
             defer { try? FileManager.default.removeItem(at: outside) }
             try FileManager.default.createSymbolicLink(at: linkFile, withDestinationURL: outside)
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
         }
     }
@@ -293,13 +329,17 @@ struct SwiftPMBuildOutputTests {
                 withDestinationURL: file
             )
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
 
             try FileManager.default.removeItem(at: bundle.appending(path: "linked.txt"))
             try FileManager.default.linkItem(at: file, to: bundle.appending(path: "hard-linked.txt"))
             #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
-                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+                try SwiftPMBuildOutput.inspect(
+                    product: "Tool", in: directory, scratchDirectory: directory, configuration: .release
+                )
             }
         }
     }

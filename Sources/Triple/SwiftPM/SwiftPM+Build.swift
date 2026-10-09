@@ -154,7 +154,9 @@ extension SwiftPM {
         do {
             output = try SwiftPMBuildOutput.inspect(
                 product: request.product.name,
-                in: binaryDirectoryURL
+                in: binaryDirectoryURL,
+                scratchDirectory: scratchDirectory.url,
+                configuration: request.configuration
             )
         } catch let error as SwiftPMError {
             throw error
@@ -330,9 +332,6 @@ extension SwiftPM {
         }
 
         var arguments = [
-            // Resource verification relies on the native engine's per-product link metadata.
-            // Swift 6.4 defaults to Swift Build, which uses a different output layout.
-            "--build-system", "native",
             "--disable-automatic-resolution",
             "--swift-sdks-path", sdkSearchDirectory.path(percentEncoded: false),
             "--swift-sdk", environment.target.architecture.swiftSDKSelector,

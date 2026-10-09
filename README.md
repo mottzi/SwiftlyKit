@@ -19,10 +19,9 @@ Triple also needs Swiftly 1.0 or later. It can install Swiftly, the selected
 toolchain, and the matching SDK when the caller authorizes preparation. It does
 not install Xcode or change the active developer directory.
 
-Builds explicitly use SwiftPM's native build engine so executable and resource
-verification use a consistent output layout. Swift 6.4 supports this engine but
-marks it deprecated. Triple does not yet support the default Swift Build
-engine's resource metadata layout.
+Builds use the selected toolchain's default SwiftPM build system. Triple verifies
+resources from native link metadata on older toolchains and from the selected
+product's Swift Build project model on Swift 6.4.
 
 ## Installation
 

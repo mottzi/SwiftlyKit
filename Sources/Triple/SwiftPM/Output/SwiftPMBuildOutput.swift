@@ -8,28 +8,42 @@ struct SwiftPMBuildOutput {
 
     /// Finds the selected executable and verifies its exact linked resources in a SwiftPM binary directory.
     /// Returns an executable-only output when no resource candidates exist.
-    /// The method does not read private SwiftPM link metadata when the directory has no resource bundle candidates.
-    static func inspect(product: String, in binaryDirectory: URL) throws -> SwiftPMBuildOutput {
+    static func inspect(
+        product: String,
+        in binaryDirectory: URL,
+        scratchDirectory: URL,
+        configuration: BuildConfiguration
+    ) throws -> SwiftPMBuildOutput {
 
         let directory = binaryDirectory.standardizedFileURL
         let executable = directory.appending(path: product)
         let candidates = try resourceCandidates(in: directory)
 
-        guard !candidates.isEmpty else {
-            return SwiftPMBuildOutput(executable: executable, resourceBundles: [])
-        }
+        let swiftBuildProducts = scratchDirectory.appending(path: "out/Products", directoryHint: .isDirectory)
+        let names: Set<String>
+        if directory.deletingLastPathComponent().resolvingSymlinksInPath().pathComponents
+            == swiftBuildProducts.resolvingSymlinksInPath().pathComponents {
+            names = try swiftBuildBundleNames(
+                product: product,
+                configuration: configuration,
+                scratchDirectory: scratchDirectory
+            )
+        } else {
+            guard !candidates.isEmpty else {
+                return SwiftPMBuildOutput(executable: executable, resourceBundles: [])
+            }
+            let linkFile = directory
+                .appending(path: "\(product).product", directoryHint: .isDirectory)
+                .appending(path: "Objects.LinkFileList")
+            try RuntimeResourceTreeValidator.validateRegularFile(linkFile, containedIn: directory)
 
-        let linkFile = directory
-            .appending(path: "\(product).product", directoryHint: .isDirectory)
-            .appending(path: "Objects.LinkFileList")
-        try RuntimeResourceTreeValidator.validateRegularFile(linkFile, containedIn: directory)
-
-        let linkedAccessors = try accessorSources(linkedBy: linkFile, in: directory)
-
-        var names = Set<String>()
-        for accessor in linkedAccessors {
-            let name = try bundleName(in: accessor, binaryDirectory: directory)
-            guard names.insert(name).inserted else { throw SwiftPMError.runtimeResourceVerificationFailed }
+            let linkedAccessors = try accessorSources(linkedBy: linkFile, in: directory)
+            var linkedNames = Set<String>()
+            for accessor in linkedAccessors {
+                let name = try bundleName(in: accessor, binaryDirectory: directory)
+                guard linkedNames.insert(name).inserted else { throw SwiftPMError.runtimeResourceVerificationFailed }
+            }
+            names = linkedNames
         }
 
         let bundles = try names.sorted().compactMap { name -> URL? in
@@ -147,10 +161,17 @@ extension SwiftPMBuildOutput {
 
     private static func isPrivacyMetadataBundle(_ bundle: URL) throws -> Bool {
 
-        let contents = try FileManager.default.contentsOfDirectory(
+        var contents = try FileManager.default.contentsOfDirectory(
             at: bundle,
             includingPropertiesForKeys: [.isRegularFileKey]
         )
+        // Swift Build generates bundle metadata even for a privacy-only resource target.
+        if bundle.pathExtension == "bundle" {
+            contents = try contents.filter { entry in
+                guard entry.lastPathComponent == "Info.plist" else { return true }
+                return try entry.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile != true
+            }
+        }
         guard contents.count == 1,
               let manifest = contents.first,
               manifest.lastPathComponent == "PrivacyInfo.xcprivacy"

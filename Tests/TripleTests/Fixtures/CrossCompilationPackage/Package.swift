@@ -15,6 +15,9 @@ let package = Package(
             name: "CrossCompilationFixture",
             dependencies: [
                 .product(name: "ResourceDependency", package: "ResourceDependency")
+            ],
+            resources: [
+                .copy("root-message.txt")
             ]
         )
     ]

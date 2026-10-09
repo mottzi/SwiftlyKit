@@ -14,9 +14,9 @@ struct CrossCompilationAcceptanceTests {
         arguments: [
             SwiftVersion(major: 6, minor: 3, patch: 3),
             SwiftVersion(major: 6, minor: 4, patch: 0)
-        ]
+        ], BuildConfiguration.allCases
     )
-    func packageBuildsBothArchitectures(swiftVersion: SwiftVersion) async throws {
+    func packageBuildsBothArchitectures(swiftVersion: SwiftVersion, configuration: BuildConfiguration) async throws {
 
         let resourceRoot = try #require(Bundle.module.resourceURL)
         let packageRoot = resourceRoot.appending(
@@ -54,7 +54,7 @@ struct CrossCompilationAcceptanceTests {
                 let result = try await kit.build(
                     BuildRequest(
                         product,
-                        configuration: .release,
+                        configuration: configuration,
                         scratchStorage: .directory(scratchDirectory),
                         output: .export(to: export)
                     ),
@@ -63,22 +63,25 @@ struct CrossCompilationAcceptanceTests {
 
                 #expect(FileManager.default.isExecutableFile(atPath: result.executable.path(percentEncoded: false)))
                 #expect(result.executable == export.appending(path: "CrossCompilationFixture"))
-                let bundleName = "ResourceDependency_ResourceDependency.resources"
-                #expect(result.resourceBundles == [
-                    export.appending(
-                        path: bundleName,
-                        directoryHint: .isDirectory
-                    )
-                ])
+                let resourceExtension = swiftVersion.minor >= 4 ? "bundle" : "resources"
+                let bundleName = "ResourceDependency_ResourceDependency.\(resourceExtension)"
+                let rootBundleName = "CrossCompilationFixture_CrossCompilationFixture.\(resourceExtension)"
+                #expect(result.resourceBundles.map(\.lastPathComponent) == [rootBundleName, bundleName])
                 #expect(result.directory == export)
                 #expect(Set(try FileManager.default.contentsOfDirectory(atPath: export.path())) == [
                     "CrossCompilationFixture",
-                    bundleName
+                    bundleName,
+                    rootBundleName
                 ])
+                // Exported resources must remain usable after the original build storage is gone.
+                try FileManager.default.removeItem(at: scratchDirectory)
                 let message = export.appending(
                     path: "\(bundleName)/message.txt"
                 )
                 #expect(try String(contentsOf: message, encoding: .utf8).contains("Triple cross-compilation fixture"))
+                #expect(try String(
+                    contentsOf: export.appending(path: "\(rootBundleName)/root-message.txt"), encoding: .utf8
+                ).contains("Triple executable resource fixture"))
             }
         }
     }
