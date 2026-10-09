@@ -93,11 +93,11 @@ struct SwiftPMBuildOutputTests {
         }
     }
 
-    @Test("A linked privacy-only bundle remains part of the runnable output")
-    func privacyResources() throws {
+    @Test("A linked privacy-only bundle is omitted from the runnable output", arguments: ["resources", "bundle"])
+    func privacyResources(extensionName: String) throws {
 
         try withTemporaryDirectory(prefix: "Triple-BuildOutput") { directory in
-            let bundle = try createBundle(named: "Package_Metadata.resources", in: directory)
+            let bundle = try createBundle(named: "Package_Metadata.\(extensionName)", in: directory)
             try Data("privacy".utf8).write(to: bundle.appending(path: "PrivacyInfo.xcprivacy"))
             try createLinkMetadata(
                 product: "Tool",
@@ -106,7 +106,64 @@ struct SwiftPMBuildOutputTests {
             )
 
             let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            #expect(output.resourceBundles.isEmpty)
+        }
+    }
+
+    @Test("Privacy metadata mixed with runtime resources retains the bundle", arguments: ["resources", "bundle"])
+    func mixedPrivacyResources(extensionName: String) throws {
+
+        try withTemporaryDirectory(prefix: "Triple-BuildOutput") { directory in
+            let bundle = try createBundle(named: "Package_Mixed.\(extensionName)", in: directory)
+            try Data("privacy".utf8).write(to: bundle.appending(path: "PrivacyInfo.xcprivacy"))
+            try Data("required asset".utf8).write(to: bundle.appending(path: "asset.txt"))
+            let metadata = try createBundle(named: "Package_Metadata.\(extensionName)", in: directory)
+            try Data("privacy".utf8).write(to: metadata.appending(path: "PrivacyInfo.xcprivacy"))
+            try createLinkMetadata(
+                product: "Tool",
+                modules: [("Mixed", bundle.lastPathComponent), ("Metadata", metadata.lastPathComponent)],
+                in: directory
+            )
+
+            let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
             #expect(output.resourceBundles == [bundle])
+        }
+    }
+
+    @Test("A directory named PrivacyInfo.xcprivacy remains a runtime resource")
+    func privacyNamedDirectory() throws {
+
+        try withTemporaryDirectory(prefix: "Triple-BuildOutput") { directory in
+            let bundle = try createBundle(named: "Package_Assets.resources", in: directory)
+            try FileManager.default.createDirectory(
+                at: bundle.appending(path: "PrivacyInfo.xcprivacy"),
+                withIntermediateDirectories: false
+            )
+            try createLinkMetadata(product: "Tool", modules: [("Assets", bundle.lastPathComponent)], in: directory)
+
+            let output = try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            #expect(output.resourceBundles == [bundle])
+        }
+    }
+
+    @Test("Privacy-only bundle validation rejects symbolic links and hard links", arguments: [false, true])
+    func unsafePrivacyResources(hardLink: Bool) throws {
+
+        try withTemporaryDirectory(prefix: "Triple-BuildOutput") { directory in
+            let bundle = try createBundle(named: "Package_Metadata.resources", in: directory)
+            let source = directory.appending(path: "PrivacyInfo.xcprivacy")
+            try Data("privacy".utf8).write(to: source)
+            let manifest = bundle.appending(path: "PrivacyInfo.xcprivacy")
+            if hardLink {
+                try FileManager.default.linkItem(at: source, to: manifest)
+            } else {
+                try FileManager.default.createSymbolicLink(at: manifest, withDestinationURL: source)
+            }
+            try createLinkMetadata(product: "Tool", modules: [("Metadata", bundle.lastPathComponent)], in: directory)
+
+            #expect(throws: SwiftPMError.runtimeResourceVerificationFailed) {
+                try SwiftPMBuildOutput.inspect(product: "Tool", in: directory)
+            }
         }
     }
 

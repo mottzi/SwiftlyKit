@@ -464,8 +464,11 @@ Before returning a `BuildResult`, Triple checks that the executable:
 
 Triple also identifies and validates the product's required `.resources`
 directories. Resource trees may contain regular files and directories. They may
-not contain links, sockets, devices, FIFOs, or other special entries. The package
-and all resolved dependencies must support the selected Linux Musl target.
+not contain links, sockets, devices, FIFOs, or other special entries. A verified
+bundle containing only the regular file `PrivacyInfo.xcprivacy` is omitted from
+`BuildResult.resourceBundles` and exports. SwiftPM can still produce that bundle
+in build storage. Bundles containing other resources remain part of the result.
+The package and all resolved dependencies must support the selected Linux Musl target.
 
 During compilation, Triple monitors the root package and resolved dependency
 sources. It withholds the result if relevant files change. This check detects a

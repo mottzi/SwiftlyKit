@@ -704,8 +704,8 @@ struct SwiftPMTests {
         }
     }
 
-    @Test("Build storage retains linked privacy-only resource bundles")
-    func privacyMetadataResources() async throws {
+    @Test("Build results and exports omit linked privacy-only resource bundles", arguments: [false, true])
+    func privacyMetadataResources(inlineExport: Bool) async throws {
 
         try await withTemporaryDirectory(prefix: "Triple-SwiftPM") { directory in
             let executable = directory.appending(path: "Tool")
@@ -729,12 +729,25 @@ struct SwiftPMTests {
                 validateEnvironment: { _ in }
             )
 
+            let export = directory.appending(path: "Exported", directoryHint: .isDirectory)
             let result = try await swiftPM.build(
-                BuildRequest(ExecutableProduct(name: "Tool")),
+                BuildRequest(
+                    ExecutableProduct(name: "Tool"),
+                    output: inlineExport ? .export(to: export) : .buildStorage
+                ),
                 using: buildEnvironment(in: directory)
             )
-            #expect(result.executable == executable)
-            #expect(result.resourceBundles.map(\.pathComponents) == [resources.pathComponents])
+            #expect(result.executable == (inlineExport ? export.appending(path: "Tool") : executable))
+            #expect(result.resourceBundles.isEmpty)
+            let exported: BuildResult
+            if inlineExport {
+                exported = result
+            } else {
+                exported = try await result.export(to: export)
+            }
+            #expect(exported.resourceBundles.isEmpty)
+            #expect(try FileManager.default.contentsOfDirectory(atPath: export.path()) == ["Tool"])
+            #expect(try Data(contentsOf: resources.appending(path: "PrivacyInfo.xcprivacy")) == Data("privacy metadata".utf8))
         }
     }
 

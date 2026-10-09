@@ -421,8 +421,10 @@ and [`uninstall`](https://github.com/swiftlang/swiftly/blob/8e759540b22a1d58e592
   ELF64 file for the requested architecture. Stripped results are verified again.
 - Runtime resource ownership comes only from the selected product's final link
   file and the linked modules' generated resource accessors. Unrelated stale
-  sibling bundles are ignored. Missing, escaping, symbolic-link, malformed, or
-  ambiguous metadata fails closed.
+  sibling bundles are ignored. After tree validation, bundles containing only
+  the regular file `PrivacyInfo.xcprivacy` are omitted from the result and export.
+  Mixed, nested, and empty bundles remain runtime resources. Missing, escaping,
+  symbolic-link, malformed, or ambiguous metadata fails closed.
 - Private link and accessor inspection starts only when the binary directory
   contains a `.resources` candidate. With no candidates, the output is treated
   as resource-free. Detecting removal of every linked bundle would require

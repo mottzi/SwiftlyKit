@@ -32,9 +32,10 @@ struct SwiftPMBuildOutput {
             guard names.insert(name).inserted else { throw SwiftPMError.runtimeResourceVerificationFailed }
         }
 
-        let bundles = try names.sorted().map { name in
+        let bundles = try names.sorted().compactMap { name -> URL? in
             guard let bundle = candidates[name] else { throw SwiftPMError.runtimeResourceVerificationFailed }
             try RuntimeResourceTreeValidator.validateBundle(bundle, in: directory)
+            guard try !isPrivacyMetadataBundle(bundle) else { return nil }
             return bundle
         }
 
@@ -142,6 +143,21 @@ extension SwiftPMBuildOutput {
         else { throw SwiftPMError.runtimeResourceVerificationFailed }
 
         return name
+    }
+
+    private static func isPrivacyMetadataBundle(_ bundle: URL) throws -> Bool {
+
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: bundle,
+            includingPropertiesForKeys: [.isRegularFileKey]
+        )
+        guard contents.count == 1,
+              let manifest = contents.first,
+              manifest.lastPathComponent == "PrivacyInfo.xcprivacy"
+        else { return false }
+
+        let values = try manifest.resourceValues(forKeys: [.isRegularFileKey])
+        return values.isRegularFile == true
     }
 
 }
