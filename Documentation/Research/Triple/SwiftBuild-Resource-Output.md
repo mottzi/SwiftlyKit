@@ -178,7 +178,9 @@ now ignores a regular `Info.plist` in a `.bundle` after tree validation, but kee
 bundles with any other runtime content.
 [Generated resource Info.plist setting](https://github.com/swiftlang/swift-package-manager/blob/18da3eb1e770679f6910890fbd52e95af53f67d2/Sources/SwiftBuildSupport/PackagePIFProjectBuilder.swift#L225-L238)
 
-The exported executables were verified as ELF files, but were not executed on
-Linux. No Linux runtime is available in this workspace. The app still pins a
-published Triple revision; its pin must be updated when this library change is
-published.
+The initial 9 October checks verified the exported executables as ELF files
+without executing them on Linux. The follow-up on 10 October ran Swift 6.3.3 and
+6.4.0 release exports after their original scratch storage was removed. Both
+executable and dependency resources loaded successfully on native x86_64 Linux
+and ARM64 Linux through QEMU user-mode emulation. Commands and output are recorded
+in [`Linux-resource-execution.md`](Linux-resource-execution.md).

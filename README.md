@@ -32,14 +32,15 @@ https://github.com/mottzi/Triple.git
 ```
 
 The repository is published as `mottzi/Triple`. Add the `Triple` library to your
-target using the rebrand revision
-[`99c216dda112be33f7359d3fd5bf8d0334f20498`](https://github.com/mottzi/Triple/commit/99c216dda112be33f7359d3fd5bf8d0334f20498).
+target using the published revision
+[`513be38e4dcb137c7cd19cb76a101d387fd12c4c`](https://github.com/mottzi/Triple/commit/513be38e4dcb137c7cd19cb76a101d387fd12c4c),
+which includes the rebrand and Swift Build resource support.
 Existing version tags, including `0.6.0`, export the `SwiftlyKit` module and
 cannot satisfy `import Triple`.
 
-The example below pins that published revision. You can also follow `main` or
-use a future release tag that exports `Triple`. Export uses one method and an
-explicit destination policy.
+The example below pins that published revision. The first planned Triple release
+is `0.7.0`; use this revision until that tag is published. You can also follow
+`main`. Export uses one method and an explicit destination policy.
 
 For a Swift package, add the package and product dependencies:
 
@@ -54,7 +55,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/mottzi/Triple.git",
-            revision: "99c216dda112be33f7359d3fd5bf8d0334f20498"
+            revision: "513be38e4dcb137c7cd19cb76a101d387fd12c4c"
         )
     ],
     targets: [
