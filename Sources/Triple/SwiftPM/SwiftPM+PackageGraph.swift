@@ -30,7 +30,7 @@ extension SwiftPM {
         guard result.succeeded else {
             let diagnostic = Self.boundedDiagnostic(result)
             if Self.indicatesRequiredResolution(diagnostic) { throw SwiftPMError.dependencyResolutionRequired }
-            throw SwiftPMError.commandFailed(operation: .inspectingPackage, diagnostic: diagnostic)
+            throw Self.commandFailure(operation: .inspectingPackage, result: result)
         }
 
         guard let data = result.standardOutput.data(using: .utf8),

@@ -2,6 +2,7 @@ import Foundation
 
 enum SwiftPMError: Error, Equatable {
     case commandFailed(operation: Operation, diagnostic: String)
+    case hostCompilerFailed(operation: Operation, diagnostic: String)
     case sdkSearchPathPreparationFailed(String)
     case malformedPackageDescription
     case dependencyResolutionRequired
@@ -68,7 +69,8 @@ extension SwiftPMError {
             case .postBuildCleanupFailed(let output, let diagnostic):
                 .postBuildCleanupFailed(output: output, detail: diagnostic)
 
-            case .commandFailed(let operation, let diagnostic):
+            case .commandFailed(let operation, let diagnostic),
+                 .hostCompilerFailed(let operation, let diagnostic):
                 switch operation {
                     case .building: .buildFailed(diagnostic)
                     case .inspectingPackage: .packageInspectionFailed(diagnostic)
@@ -82,7 +84,7 @@ extension SwiftPMError {
 
     var cleanupDiagnostic: String {
         switch self {
-            case .commandFailed(_, let diagnostic): diagnostic
+            case .commandFailed(_, let diagnostic), .hostCompilerFailed(_, let diagnostic): diagnostic
             default: "An unexpected cleanup error occurred."
         }
     }

@@ -46,10 +46,7 @@ extension SwiftPM {
         let result = try await runner.run(resolutionCommand, onEvent: onEvent)
 
         guard result.succeeded else {
-            throw SwiftPMError.commandFailed(
-                operation: .resolvingDependencies,
-                diagnostic: Self.boundedDiagnostic(result)
-            )
+            throw Self.commandFailure(operation: .resolvingDependencies, result: result)
         }
     }
 

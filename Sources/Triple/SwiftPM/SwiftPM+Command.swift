@@ -2,6 +2,21 @@ import Foundation
 
 extension SwiftPM {
 
+    /// Classifies recovery from captured output while retaining a bounded caller-facing diagnostic.
+    static func commandFailure(operation: SwiftPMError.Operation, result: SubprocessResult) -> SwiftPMError {
+        let diagnostic = boundedDiagnostic(result)
+        if operation == .inspectingPackage || operation == .resolvingDependencies {
+            let output = result.combinedOutput.lowercased()
+            if output.contains("compile command failed due to signal")
+                || output.contains("failed to build module 'foundation'")
+                || output.contains("failed to build module 'darwin'")
+                || output.contains("sdk is not supported by the compiler") {
+                return .hostCompilerFailed(operation: operation, diagnostic: diagnostic)
+            }
+        }
+        return .commandFailed(operation: operation, diagnostic: diagnostic)
+    }
+
     /// Returns one bounded diagnostic from a subprocess result.
     static func boundedDiagnostic(_ result: SubprocessResult) -> String {
         let diagnostic = (result.standardError + "\n" + result.standardOutput)

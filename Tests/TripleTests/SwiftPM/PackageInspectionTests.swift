@@ -211,6 +211,65 @@ struct PackageInspectionTests {
         }
     }
 
+    @Test("Cold dependency compiler failures recover even when fetch logs hide the marker", arguments: [false, true])
+    func longDependencyCompilerFailureRecovers(duringResolution: Bool) async throws {
+        try await withTemporaryDirectory(prefix: "Triple-host-test") { directory in
+            let active = try makeSDK(in: directory, version: "27.0")
+            let older = try makeSDK(in: directory, version: "26.5")
+            let failure = SubprocessResult.failure(standardError:
+                String(repeating: "Fetching https://example.com/dependency.git\n", count: 400)
+                + "error: 'dependency': Invalid manifest\nerror: compile command failed due to signal 11\n"
+                + String(repeating: "compiler stack frame\n", count: 400)
+            )
+            #expect(!SwiftPM.boundedDiagnostic(failure).contains("compile command failed due to signal"))
+            var results: [SubprocessResult] = [.success(output: Self.packageJSON)]
+            if duringResolution { results.append(.failure(standardError: "automatic resolution is disabled")) }
+            results += [failure, .success(output: Self.packageJSON), .success(output: Self.graphJSON)]
+            let runner = RecordingSubprocessRunner(results: results)
+            let environment = Self.environment(in: directory, sdk: active)
+            let inspection = try await Self.swiftPM(runner: runner, alternatives: [older]).inspectPackage(
+                using: environment,
+                dependencies: .resolveIfNeeded
+            )
+
+            #expect(inspection.environment.swiftVersion == environment.swiftVersion)
+            #expect(inspection.environment.hostSDK == older)
+            #expect(inspection.products.map(\.name) == ["Tool"])
+            let commands = await runner.commands
+            #expect(commands.count == (duringResolution ? 5 : 4))
+            #expect(commands[duringResolution ? 2 : 1].arguments.contains(duringResolution ? "resolve" : "show-dependencies"))
+            #expect(commands.suffix(2).allSatisfy { $0.environment?["SDKROOT"] == older.directory.path(percentEncoded: false) })
+            #expect(commands.allSatisfy { $0.arguments.last == "+6.3.3" })
+        }
+    }
+
+    @Test("Long ordinary dependency failures retain bounded diagnostics without SDK retry", arguments: [false, true])
+    func longOrdinaryDependencyFailure(duringResolution: Bool) async throws {
+        try await withTemporaryDirectory(prefix: "Triple-host-test") { directory in
+            let active = try makeSDK(in: directory, version: "27.0")
+            let older = try makeSDK(in: directory, version: "26.5")
+            let failure = SubprocessResult.failure(standardError:
+                String(repeating: "Fetching https://example.com/dependency.git\n", count: 400)
+                + "Dependency/Package.swift: error: cannot find 'missingDeclaration' in scope"
+            )
+            let diagnostic = SwiftPM.boundedDiagnostic(failure)
+            #expect(diagnostic.count <= 16_384)
+            #expect(diagnostic.contains("missingDeclaration"))
+            var results: [SubprocessResult] = [.success(output: Self.packageJSON)]
+            if duringResolution { results.append(.failure(standardError: "automatic resolution is disabled")) }
+            results.append(failure)
+            let runner = RecordingSubprocessRunner(results: results)
+            let operation: SwiftPMError.Operation = duringResolution ? .resolvingDependencies : .inspectingPackage
+            await #expect(throws: SwiftPMError.commandFailed(operation: operation, diagnostic: diagnostic)) {
+                try await Self.swiftPM(runner: runner, alternatives: [older]).inspectPackage(
+                    using: Self.environment(in: directory, sdk: active),
+                    dependencies: .resolveIfNeeded
+                )
+            }
+            #expect(await runner.commands.count == (duringResolution ? 3 : 2))
+        }
+    }
+
     @Test("Removed SDKs trigger real reinspection with a fresh installed context")
     func removedSDKReassesses() async throws {
         try await withTemporaryDirectory(prefix: "Triple-host-test") { directory in
@@ -284,13 +343,15 @@ struct PackageInspectionTests {
         }
     }
 
-    @Test("SDK recovery exhaustion includes compiler and SDK context and never yields readiness")
-    func exhaustedRecovery() async throws {
+    @Test("SDK recovery exhaustion includes bounded compiler and SDK context and never yields readiness", arguments: [false, true])
+    func exhaustedRecovery(withLongOutput: Bool) async throws {
         try await withTemporaryDirectory(prefix: "Triple-host-test") { directory in
             let sdk = try makeSDK(in: directory, version: "27.0")
-            let runner = RecordingSubprocessRunner(results: [
-                .failure(standardError: "compile command failed due to signal 11\nerror: unknown argument: '-new-flag'")
-            ])
+            let output = "error: unknown argument: '-new-flag'\n"
+                + (withLongOutput ? String(repeating: "Fetching dependency\n", count: 900) : "")
+                + "compile command failed due to signal 11\n"
+                + (withLongOutput ? String(repeating: "compiler stack frame\n", count: 400) : "")
+            let runner = RecordingSubprocessRunner(results: [.failure(standardError: output)])
             do {
                 _ = try await Self.swiftPM(runner: runner, alternatives: []).inspectPackage(
                     using: Self.environment(in: directory, sdk: sdk)
@@ -302,6 +363,8 @@ struct PackageInspectionTests {
                 #expect(diagnostic.contains(sdk.directory.path(percentEncoded: false)))
                 #expect(diagnostic.contains("unknown argument"))
                 #expect(diagnostic.contains("any installed macOS SDK"))
+                #expect(diagnostic.count < 17_000)
+                #expect(diagnostic.contains("diagnostic truncated") == withLongOutput)
             }
         }
     }

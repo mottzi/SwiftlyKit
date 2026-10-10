@@ -135,13 +135,8 @@ extension SwiftPM {
 
     private static func isHostCompilerFailure(_ error: SwiftPMError) -> Bool {
 
-        guard case .commandFailed(let operation, let diagnostic) = error else { return false }
-        guard operation == .inspectingPackage || operation == .resolvingDependencies else { return false }
-        let text = diagnostic.lowercased()
-        return text.contains("compile command failed due to signal")
-            || text.contains("failed to build module 'foundation'")
-            || text.contains("failed to build module 'darwin'")
-            || text.contains("sdk is not supported by the compiler")
+        guard case .hostCompilerFailed = error else { return false }
+        return true
     }
 
     private static func hostDiagnostic(_ error: SwiftPMError, environment: LocalBuildEnvironment) -> String {

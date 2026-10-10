@@ -39,6 +39,14 @@ struct SwiftPMTests {
                 .commandFailed(operation: .resolvingDependencies, diagnostic: "unresolved"),
                 .dependencyResolutionFailed("unresolved")
             ),
+            (
+                .hostCompilerFailed(operation: .inspectingPackage, diagnostic: "compiler crash"),
+                .packageInspectionFailed("compiler crash")
+            ),
+            (
+                .hostCompilerFailed(operation: .resolvingDependencies, diagnostic: "compiler crash"),
+                .dependencyResolutionFailed("compiler crash")
+            ),
             (.commandFailed(operation: .stripping, diagnostic: "objcopy failed"), .stripFailed("objcopy failed")),
             (
                 .commandFailed(operation: .cleaningBuildArtifacts, diagnostic: "clean failed"),

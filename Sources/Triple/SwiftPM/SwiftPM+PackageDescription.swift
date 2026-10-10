@@ -57,7 +57,7 @@ extension SwiftPM {
         )
 
         guard result.succeeded
-        else { throw SwiftPMError.commandFailed(operation: .inspectingPackage, diagnostic: Self.boundedDiagnostic(result)) }
+        else { throw Self.commandFailure(operation: .inspectingPackage, result: result) }
 
         guard let data = result.standardOutput.data(using: .utf8)
         else { throw SwiftPMError.malformedPackageDescription }
