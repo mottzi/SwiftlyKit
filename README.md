@@ -19,7 +19,7 @@ Build only packages you trust. SwiftPM evaluates manifests and can run plugins w
 
 ## Install
 
-Version `0.7.0` is prepared but not yet published. The version requirement below will work after publication. Older tags export the `SwiftlyKit` module.
+Use version `0.7.0` or later. Older tags export the `SwiftlyKit` module.
 
 In Xcode, add `https://github.com/mottzi/Triple.git` as a package dependency, select a version starting at `0.7.0`, and add the `Triple` product to your target.
 
